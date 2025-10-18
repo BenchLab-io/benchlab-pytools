@@ -1,0 +1,90 @@
+[
+  {
+    "dial_uid": "35002F000650564139323920",
+    "dial_name": "Dial 1",
+    "benchlab_port": "COM16",
+    "benchlab_uid": "2C003D001457435735363620",
+    "sensor": "Ambient_Temp",
+    "min": 20.0,
+    "max": 40.0,
+    "backlight": [
+      100,
+      100,
+      100
+    ],
+    "easing_dial": [
+      50,
+      5
+    ],
+    "easing_backlight": [
+      50,
+      5
+    ]
+  },
+  {
+    "dial_uid": "890024000650564139323920",
+    "dial_name": "Dial 2",
+    "benchlab_port": "COM17",
+    "benchlab_uid": "unknown",
+    "sensor": "Ambient_Temp",
+    "min": 20.0,
+    "max": 40.0,
+    "backlight": [
+      100,
+      100,
+      100
+    ],
+    "easing_dial": [
+      50,
+      5
+    ],
+    "easing_backlight": [
+      50,
+      5
+    ]
+  },
+  {
+    "dial_uid": "4A0038000650564139323920",
+    "dial_name": "Dial 3",
+    "benchlab_port": "COM17",
+    "benchlab_uid": "26001F001357435735363620",
+    "sensor": "Humidity",
+    "min": 25.0,
+    "max": 40.0,
+    "backlight": [
+      100,
+      100,
+      100
+    ],
+    "easing_dial": [
+      50,
+      5
+    ],
+    "easing_backlight": [
+      50,
+      5
+    ]
+  },
+  {
+    "dial_uid": "4A0027000650564139323920",
+    "dial_name": "Dial 4",
+    "benchlab_port": "COM17",
+    "benchlab_uid": "26001F001357435735363620",
+    "sensor": "Humidity",
+    "min": 25.0,
+    "max": 35.0,
+    "backlight": [
+      100,
+      100,
+      100
+    ],
+    "easing_dial": [
+      50,
+      5
+    ],
+    "easing_backlight": [
+      50,
+      5
+    ]
+  }
+]

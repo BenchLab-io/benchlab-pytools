@@ -1,0 +1,3 @@
+pyusb
+libusb1 -> need to manually install libusb1
+
