@@ -1,8 +1,8 @@
-# BENCHLAB Link
+# BENCHLAB PyTools
 
 ## Overview
 
-BENCHLAB Link is the main entry point for interacting with BENCHLAB telemetry devices.  
+BENCHLAB PyTools is the main entry point for interacting with BENCHLAB telemetry devices using Python.  
 It provides a modular launcher to start different modes of operation, including:
 
 - Interactive terminal TUI
@@ -30,7 +30,7 @@ The launcher can operate in interactive mode or via command-line flags.
 
 ## Installation
 
-BENCHLAB Link relies on Python 3.8+ and optional modules for each mode.  
+BENCHLAB PyTools relies on Python 3.8+ and optional modules for each mode.  
 
 Install core dependencies:
 
@@ -71,7 +71,7 @@ Run directly using flags:
 ```
 python benchlab.py -tui
 python benchlab.py -logfleet
-python benchlab.py -mqtt [broker]
+python benchlab.py -mqtt
 python benchlab.py -graph
 python benchlab.py -vu
 python benchlab.py -vuconfig
