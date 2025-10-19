@@ -1,0 +1,4 @@
+fastapi==0.111.1
+uvicorn[standard]==0.24.0
+pyserial>=3.5
+python-dotenv==1.1.1

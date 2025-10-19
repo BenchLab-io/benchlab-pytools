@@ -3,28 +3,48 @@ import curses
 
 def get_parser():
     parser = argparse.ArgumentParser(description="BENCHLAB Telemetry")
-    parser.add_argument("-tui", action="store_true", help="enable TUI (default)")
+
+    parser.add_argument("-fastapi", action="store_true", 
+                        help="Launch FastAPI telemetry API server")
+    parser.add_argument("-graph", action="store_true",
+                        help="Launch GUI graphing mode")
     parser.add_argument("-i", "--interval", type=float, default=1.0,
                         help="TUI or logging refresh interval in seconds")
     parser.add_argument("-logfleet", "--logfleet", action="store_true",
                         help="Run without TUI, log any or all devices")
     parser.add_argument("-mqtt", nargs="?", const="localhost",
                         help="MQTT publisher to localhost mosquitto")
-    parser.add_argument("-graph", action="store_true",
-                        help="Launch GUI graphing mode")
+    parser.add_argument("-tui", action="store_true", 
+                        help="enable TUI (default)")
     parser.add_argument("-vu", action="store_true",
                         help="Launch VU analog dials")
     parser.add_argument("-vuconfig", action="store_true",
                         help="Launch VU configuration interface")
-    parser.add_argument("-wigidash", action="store_true",
-                    help="Connect to WigiDash")
+    #parser.add_argument("-wigidash", action="store_true",
+    #                   help="Connect to WigiDash")
+
     return parser
 
 def launch_mode():
     parser = get_parser()
     args = parser.parse_args()
 
-    if args.logfleet:
+    if args.fastapi:
+        try:
+            from benchlab.fastapi.telemetry_api import run_server
+            run_server()
+        except ModuleNotFoundError:
+            print("FastAPI / Uvicorn not available in this build.")
+
+    elif args.graph:
+        try:
+            from benchlab.graph.runner import run_graph_mode
+            run_graph_mode()
+        except ModuleNotFoundError:
+            print("Graph module not available in this build.")
+            return
+
+    elif args.logfleet:
         try:
             from benchlab.csv_log.csv_logger import run_csv_logger
             run_csv_logger(args.interval)
@@ -39,14 +59,6 @@ def launch_mode():
             run_mqtt_mode(broker)
         except ModuleNotFoundError:
             print("MQTT module not available in this build.")
-            return
-
-    elif args.graph:
-        try:
-            from benchlab.graph.runner import run_graph_mode
-            run_graph_mode()
-        except ModuleNotFoundError:
-            print("Graph module not available in this build.")
             return
 
     elif args.vu:
@@ -65,12 +77,12 @@ def launch_mode():
             print("VU configuration not available in this build.")
             return
 
-    elif args.wigidash:
-        try:
-            from benchlab.wigidash.run_wigi import run_wigidash
-            run_wigidash()
-        except ModuleNotFoundError:
-            print("WigiDash module not available in this build.")
+    #elif args.wigidash:
+    #    try:
+    #        from benchlab.wigidash.run_wigi import run_wigidash
+    #        run_wigidash()
+    #    except ModuleNotFoundError:
+    #        print("WigiDash module not available in this build.")
 
     else:  # default: TUI
         try:
