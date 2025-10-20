@@ -8,8 +8,9 @@ It provides a modular launcher to start different modes of operation, including:
 - Interactive terminal TUI
 - CSV logging for offline analysis
 - Fast api server
-- MQTT publishing for remote dashboards
 - GUI graphing
+- HWiNFO custom sensors
+- MQTT publishing for remote dashboards
 - VU analog-style dials and configuration
 
 The launcher can operate in interactive mode or via command-line flags.
@@ -20,11 +21,12 @@ The launcher can operate in interactive mode or via command-line flags.
 
 | Mode | Flag | Description | Notes |
 |------|------|------------|-------|
-| TUI | -tui | Interactive terminal UI | Displays a live TUI for monitoring multiple devices. |
 | CSV Logging | -logfleet | Logs device data to CSV | Supports single-device and fleet logging. |
 | Fast API | -fastapi | Access device telemetry through API calls | Supports multi-device |
-| MQTT Publisher | -mqtt | Publishes telemetry to MQTT broker | Can connect to localhost or a remote broker. |
 | Graph | -graph | GUI graphing interface | Visualizes telemetry trends in real time. |
+| HWiNFO | -hwinfo | HWiNFO export | Export telemetry as HWiNFO custom sensors |
+| MQTT Publisher | -mqtt | Publishes telemetry to MQTT broker | Can connect to localhost or a remote broker. |
+| TUI | -tui | Interactive terminal UI | Displays a live TUI for monitoring multiple devices. |
 | VU Dials | -vu | Analog-style VU dials | Visual monitoring of device metrics. |
 | VU Config | -vuconfig | VU configuration interface | Customize VU dials and settings interactively. |
 
@@ -71,6 +73,7 @@ Run directly using flags:
 ```
 python benchlab.py -fastapi
 python benchlab.py -graph
+python benchlab.py -hwinfo
 python benchlab.py -logfleet
 python benchlab.py -mqtt
 python benchlab.py -vu
@@ -138,6 +141,7 @@ Displays detailed mode descriptions and exits.
   - [CSV Logger](../csv_log/README.md)
   - [FASTAPI](../fastapi/README.md)
   - [Graph](../graph/README.md)
+  - [HWiNFO](../hwinfo/README.md)
   - [MQTT](../mqtt/README.md)
   - [VU](../vu/README.md)
   - [TUI](../tui/README.md)
