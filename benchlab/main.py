@@ -8,6 +8,8 @@ def get_parser():
                         help="Launch FastAPI telemetry API server")
     parser.add_argument("-graph", action="store_true",
                         help="Launch GUI graphing mode")
+    parser.add_argument("-hwinfo", action="store_true",
+                        help="Export sensors to HWiNFO custom sensors")
     parser.add_argument("-i", "--interval", type=float, default=1.0,
                         help="TUI or logging refresh interval in seconds")
     parser.add_argument("-logfleet", "--logfleet", action="store_true",
@@ -42,6 +44,14 @@ def launch_mode():
             run_graph_mode()
         except ModuleNotFoundError:
             print("Graph module not available in this build.")
+            return
+
+    elif args.hwinfo:
+        try:
+            from benchlab.hwinfo.hwinfo_export import export_all_devices
+            export_all_devices(update_interval=args.interval)
+        except ModuleNotFoundError:
+            print("HWiNFO export module not available in this build.")
             return
 
     elif args.logfleet:

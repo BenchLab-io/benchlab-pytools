@@ -17,18 +17,22 @@ if not logger.handlers:
 
 # --- Modes configuration ---
 MODES = {
-    "CSV":  {"flag": "-logfleet", "reqs": ["csv_log"],  "desc": "CSV logging",
-             "info": "Logs data from one or multiple devices into CSV files for offline analysis. Supports single device and fleet logging."},
-    "FastAPI":   {"flag": "-fastapi", "reqs": ["fastapi"], "desc": "Fast API server",
-                  "info": "Launches a FastAPI server to access device telemetry."},
-    "MQTT":      {"flag": "-mqtt", "reqs": ["mqtt"], "desc": "MQTT publisher",
-                  "info": "Publishes telemetry data to an MQTT broker, allowing integration with external dashboards."},
-    "VU":        {"flag": "-vu", "reqs": ["vu"], "desc": "VU analog dials",
-                  "info": "Displays analog-style VU dials for visual monitoring of device metrics."},
-    "VU Config": {"flag": "-vuconfig", "reqs": ["vu"], "desc": "VU configuration UI",
-                  "info": "Interactive configuration interface for customizing VU dials and settings."},
-    "TUI":       {"flag": "-tui", "reqs": ["tui"], "desc": "Interactive terminal UI",
-                  "info": "Displays a live TUI for monitoring connected devices and telemetry. Supports multiple devices."},
+    "CSV":          {"flag": "-logfleet", "reqs": ["csv_log"],  "desc": "CSV logging",
+                        "info": "Logs data from one or multiple devices into CSV files for offline analysis. Supports single device and fleet logging."},
+    "FastAPI":      {"flag": "-fastapi", "reqs": ["fastapi"], "desc": "Fast API server",
+                        "info": "Launches a FastAPI server to access device telemetry."},
+    "Graph":        {"flag": "-graph", "reqs": ["graph"], "desc": "DearPyGui graphing",
+                        "info": "Monitor a specific sensor using a graph gui"},
+    "HWiNFO":       {"flag": "-hwinfo", "reqs": ["hwinfo"], "desc": "HWiNFO Custom Sensors",
+                        "info": "Export all BENCHLAB devices to HWiNFO as custom sensors"},
+    "MQTT":         {"flag": "-mqtt", "reqs": ["mqtt"], "desc": "MQTT publisher",
+                        "info": "Publishes telemetry data to an MQTT broker, allowing integration with external dashboards."},
+    "VU":           {"flag": "-vu", "reqs": ["vu"], "desc": "VU analog dials",
+                        "info": "Displays analog-style VU dials for visual monitoring of device metrics."},
+    "VU Config":    {"flag": "-vuconfig", "reqs": ["vu"], "desc": "VU configuration UI",
+                        "info": "Interactive configuration interface for customizing VU dials and settings."},
+    "TUI":          {"flag": "-tui", "reqs": ["tui"], "desc": "Interactive terminal UI",
+                        "info": "Displays a live TUI for monitoring connected devices and telemetry. Supports multiple devices."},
 }
 
 def clear_screen():
