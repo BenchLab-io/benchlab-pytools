@@ -200,66 +200,106 @@ class VUTUI:
     def draw_tab1(self):
         self.stdscr.clear()
         self.h, self.w = self.stdscr.getmaxyx()
-        y = 4  # start content
+        y_start = 4
+        footer_height = 1
+        y = y_start
 
-        # Header
+        # --- Header ---
         self.stdscr.attron(curses.color_pair(7))
         self.stdscr.addstr(0, 0, " BENCHLAB VU CONFIGURATION ".center(self.w))
         self.stdscr.attroff(curses.color_pair(7))
 
         self.draw_tabs()
 
-        # VU Server Config
+        # --- VU Server Config ---
         self.stdscr.addstr(y, 2, "VU Server Config:", curses.A_UNDERLINE)
         y += 1
         keys = list(self.server_cfg.keys())
         key_col_width = max((len(k) for k in keys), default=0) + 2
-
         for k, v in self.server_cfg.items():
-            self.stdscr.addstr(y, 4, f"{k}: ")
-            self.stdscr.addstr(y, 4 + key_col_width, f"{v}")
+            try:
+                self.stdscr.addstr(y, 4, f"{k}: ")
+                self.stdscr.addstr(y, 4 + key_col_width, f"{v}")
+            except curses.error:
+                break
             y += 1
         y += 1
 
-        # Benchlab devices
+        # --- Benchlab devices ---
         self.stdscr.addstr(y, 2, "Available Benchlab Devices:", curses.A_UNDERLINE)
         y += 1
         for b in self.benchlabs:
-            self.stdscr.addstr(y, 4, f"{b['uid']} - {b['port']}")
+            try:
+                self.stdscr.addstr(y, 4, f"{b['uid']} - {b['port']}")
+            except curses.error:
+                break
             y += 1
         y += 1
 
-        # VU Dials
+        # --- VU Dials ---
         self.stdscr.addstr(y, 2, "Available VU Dials:", curses.A_UNDERLINE)
         y += 1
         if self.vu_server_running:
             for uid, name in self.vu_dials:
-                self.stdscr.addstr(y, 4, f"{uid} - {name}")
+                try:
+                    self.stdscr.addstr(y, 4, f"{uid} - {name}")
+                except curses.error:
+                    break
                 y += 1
         else:
-            self.stdscr.addstr(y, 4, "N/A: VU server is not running!", curses.color_pair(3))
+            try:
+                self.stdscr.addstr(y, 4, "N/A: VU server is not running!", curses.color_pair(3))
+            except curses.error:
+                pass
             y += 1
         y += 1
 
-        # VU Dial Config
+        # --- VU Dial Config Table ---
         self.stdscr.addstr(y, 2, "VU Dial Config:", curses.A_UNDERLINE)
         y += 1
-        for dial in self.dial_cfg:
-            self.stdscr.addstr(y, 4, f"UID: {dial.get('dial_uid','')}")
-            y += 1
-            self.stdscr.addstr(y, 6, f"Name: {dial.get('dial_name','')}")
-            y += 1
-            self.stdscr.addstr(y, 6, f"Sensor: {dial.get('sensor','')}  Min/Max: {dial.get('min','')}/{dial.get('max','')}")
-            y += 1
-            self.stdscr.addstr(y, 6, f"Benchlab: Port {dial.get('benchlab_port','')}")
-            y += 1
-            self.stdscr.addstr(y, 6, f"Backlight: {dial.get('backlight','')}")
-            y += 1
-            self.stdscr.addstr(y, 6, f"Easing: Dial {dial.get('easing_dial','')}  Backlight {dial.get('easing_backlight','')}")
-            y += 2
 
-        # Footer
+        if not self.dial_cfg:
+            try:
+                self.stdscr.addstr(y, 4, "No VU dials configured", curses.color_pair(3))
+            except curses.error:
+                pass
+            y += 1
+        else:
+            # Table headers
+            headers = ["UID", "Name", "Sensor", "Min/Max", "Benchlab", "Backlight", "Easing"]
+            col_widths = [24, 10, 10, 11, 12, 15, 10]  # widths for alignment only
+            x = 4
+            for i, h in enumerate(headers):
+                try:
+                    self.stdscr.addstr(y, x, h, curses.A_UNDERLINE)
+                except curses.error:
+                    pass
+                x += col_widths[i] + 1
+            y += 1
+
+            # Table rows
+            for dial in self.dial_cfg:
+                x = 4
+                row = [
+                    str(dial.get("dial_uid", "")),
+                    str(dial.get("dial_name", "")),
+                    str(dial.get("sensor", "")),
+                    f"{dial.get('min', '')}/{dial.get('max', '')}",
+                    str(dial.get("benchlab_port", "")),
+                    str(dial.get("backlight", "")),
+                    f"{dial.get('easing_dial', '')}",
+                ]
+                for i, cell in enumerate(row):
+                    try:
+                        self.stdscr.addstr(y, x, cell.ljust(col_widths[i]))
+                    except curses.error:
+                        pass
+                    x += col_widths[i] + 1
+                y += 1
+
+        # --- Footer with Provisioning ---
         self.stdscr.addstr(self.h-1, 0, "TAB: Switch tabs | r: Reload | p: Provision new devices | q: Quit")
+
 
     def handle_tab1_input(self, key):
         if key in (ord('r'), ord('R')):
