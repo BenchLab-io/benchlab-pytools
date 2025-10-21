@@ -191,14 +191,14 @@ def device_thread(device, cfg, publish_interval=1):
 
                 # Send initial info payload
                 info_payload = {"uid": uid, "com_port": port, "firmware": device.get("firmware")}
-                topic_info = f"clients/client_uuid/links/balena_uuid/benchlabs/{uid}/info"
+                topic_info = f"clients/client_uuid/links/link_uuid/benchlabs/{uid}/info"
                 mqtt_publish(client, topic_info, info_payload, qos=qos)
 
             # Read sensors and publish telemetry
             try:
                 sensors = read_sensors(ser)
                 payload = map_sensors_to_payload(sensors, time.time())
-                topic_telemetry = f"clients/client_uuid/links/balena_uuid/benchlabs/{uid}/telemetry"
+                topic_telemetry = f"clients/client_uuid/links/link_uuid/benchlabs/{uid}/telemetry"
                 result = mqtt_publish(client, topic_telemetry, payload, qos=qos)
 
                 if result and payload:  # only log if a payload was actually sent
