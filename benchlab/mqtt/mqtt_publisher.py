@@ -197,7 +197,7 @@ def device_thread(device, cfg, publish_interval=1):
             # Read sensors and publish telemetry
             try:
                 sensors = read_sensors(ser)
-                payload = map_sensors_to_payload(sensors, time.time())
+                payload = map_sensors_to_payload(sensors, int(time.time() * 1000))
                 topic_telemetry = f"clients/client_uuid/links/link_uuid/benchlabs/{uid}/telemetry"
                 result = mqtt_publish(client, topic_telemetry, payload, qos=qos)
 
