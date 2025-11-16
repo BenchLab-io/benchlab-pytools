@@ -7,8 +7,10 @@ It provides a modular launcher to start different modes of operation, including:
 
 - Interactive terminal TUI
 - CSV logging for offline analysis
-- MQTT publishing for remote dashboards
+- Fast api server
 - GUI graphing
+- HWiNFO custom sensors
+- MQTT publishing for remote dashboards
 - VU analog-style dials and configuration
 
 The launcher can operate in interactive mode or via command-line flags.
@@ -19,10 +21,12 @@ The launcher can operate in interactive mode or via command-line flags.
 
 | Mode | Flag | Description | Notes |
 |------|------|------------|-------|
-| TUI | -tui | Interactive terminal UI | Displays a live TUI for monitoring multiple devices. |
 | CSV Logging | -logfleet | Logs device data to CSV | Supports single-device and fleet logging. |
-| MQTT Publisher | -mqtt | Publishes telemetry to MQTT broker | Can connect to localhost or a remote broker. |
+| Fast API | -fastapi | Access device telemetry through API calls | Supports multi-device |
 | Graph | -graph | GUI graphing interface | Visualizes telemetry trends in real time. |
+| HWiNFO | -hwinfo | HWiNFO export | Export telemetry as HWiNFO custom sensors |
+| MQTT Publisher | -mqtt | Publishes telemetry to MQTT broker | Can connect to localhost or a remote broker. |
+| TUI | -tui | Interactive terminal UI | Displays a live TUI for monitoring multiple devices. |
 | VU Dials | -vu | Analog-style VU dials | Visual monitoring of device metrics. |
 | VU Config | -vuconfig | VU configuration interface | Customize VU dials and settings interactively. |
 
@@ -35,16 +39,14 @@ BENCHLAB PyTools relies on Python 3.8+ and optional modules for each mode.
 Install core dependencies:
 
 ```
-pip install -r requirements_core.txt
+pip install -r requirements.txt
 ```
 
 Optional mode-specific dependencies are in:
 
-- `requirements_tui.txt`
-- `requirements_csv_log.txt`
-- `requirements_mqtt.txt`
-- `requirements_graph.txt`
-- `requirements_vu.txt`
+- `/fastapi/requirements.txt`
+- `/tests/requirements.txt`
+- `/vu/requirements.txt`
 
 The launcher will attempt to install missing requirements for selected modes automatically.
 
@@ -69,12 +71,14 @@ python benchlab.py
 Run directly using flags:
 
 ```
-python benchlab.py -tui
+python benchlab.py -fastapi
+python benchlab.py -graph
+python benchlab.py -hwinfo
 python benchlab.py -logfleet
 python benchlab.py -mqtt
-python benchlab.py -graph
 python benchlab.py -vu
 python benchlab.py -vuconfig
+python benchlab.py -tui
 ```
 
 ### Info Mode
@@ -95,7 +99,7 @@ Displays detailed mode descriptions and exits.
    - If `all` is selected, launcher installs dependencies for all available modules.
 
 2. **Dependency Installation**
-   - Checks for `requirements_<tag>.txt` per mode.
+   - Checks for `/*/requirements.txt` per mode.
    - Silently skips missing requirement files.
    - Installs via pip if present.
 
@@ -134,8 +138,11 @@ Displays detailed mode descriptions and exits.
 
 - [BENCHLAB core modules](https://github.com/<your-org>/benchlab/tree/main/benchlab/core)  
 - Individual module READMEs:
-  - [TUI](../tui/README.md)
   - [CSV Logger](../csv_log/README.md)
-  - [MQTT Publisher](../mqtt/README.md)
+  - [FASTAPI](../fastapi/README.md)
   - [Graph](../graph/README.md)
+  - [HWiNFO](../hwinfo/README.md)
+  - [MQTT](../mqtt/README.md)
   - [VU](../vu/README.md)
+  - [TUI](../tui/README.md)
+

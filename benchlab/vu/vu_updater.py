@@ -112,7 +112,7 @@ class VUClient:
         try:
             url = f"{self.server_url}/api/v0/dial/{dial_uid}/set"
             params = {"value": value, "key": self.api_key}
-            r = requests.get(url, params=params, timeout=2)
+            r = requests.get(url, params=params, timeout=10)
             r.raise_for_status()
         except requests.RequestException as e:
             logger.error(f"Failed to update {dial_uid}: {e}")
@@ -121,7 +121,7 @@ class VUClient:
         try:
             url = f"{self.server_url}/api/v0/dial/{dial_uid}/backlight"
             params = {"key": self.api_key, "red": rgb[0], "green": rgb[1], "blue": rgb[2]}
-            r = requests.get(url, params=params, timeout=2)
+            r = requests.get(url, params=params, timeout=10)
             r.raise_for_status()
         except requests.RequestException as e:
             logger.error(f"Failed to update backlight for {dial_uid}: {e}")
@@ -130,7 +130,7 @@ class VUClient:
         try:
             url = f"{self.server_url}/api/v0/dial/{dial_uid}/name"
             params = {"key": self.api_key, "name": name}
-            r = requests.get(url, params=params, timeout=2)
+            r = requests.get(url, params=params, timeout=10)
             r.raise_for_status()
         except requests.RequestException as e:
             logger.error(f"Failed to update name {dial_uid}: {e}")
@@ -143,7 +143,7 @@ class VUClient:
             url = f"{self.server_url}/api/v0/dial/{dial_uid}/image/set"
             files = {"imgfile": open(logo_path, "rb")}
             params = {"key": self.api_key, "force": int(force)}
-            r = requests.post(url, files=files, params=params, timeout=5)
+            r = requests.post(url, files=files, params=params, timeout=10)
             r.raise_for_status()
             resp = r.json()
             if resp.get("status") == "ok":
@@ -157,7 +157,7 @@ class VUClient:
         try:
             url = f"{self.server_url}/api/v0/dial/{dial_uid}/easing/dial"
             params = {"key": self.api_key, "period": period, "step": step}
-            r = requests.get(url, params=params, timeout=2)
+            r = requests.get(url, params=params, timeout=10)
             r.raise_for_status()
         except requests.RequestException as e:
             logger.error(f"Failed to set dial easing for {dial_uid}: {e}")
@@ -166,7 +166,7 @@ class VUClient:
         try:
             url = f"{self.server_url}/api/v0/dial/{dial_uid}/easing/backlight"
             params = {"key": self.api_key, "period": period, "step": step}
-            r = requests.get(url, params=params, timeout=2)
+            r = requests.get(url, params=params, timeout=10)
             r.raise_for_status()
         except requests.RequestException as e:
             logger.error(f"Failed to set backlight easing for {dial_uid}: {e}")
@@ -176,7 +176,7 @@ class VUClient:
         try:
             url = f"{self.server_url}/api/v0/dial/{dial_uid}/image/crc"
             headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
-            r = requests.get(url, headers=headers, timeout=2)
+            r = requests.get(url, headers=headers, timeout=10)
             r.raise_for_status()
             data = r.json()
             return data.get("crc", "").upper()

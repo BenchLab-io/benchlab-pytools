@@ -2,16 +2,18 @@
 MQTT client for BENCHLAB telemetry
 """
 
-import os
+import configparser
 import json
-import time
-import serial
-import threading
 import logging
-import sys
+import os
 import paho.mqtt.client as mqtt
-from benchlab.core.serial_io import get_fleet_info, open_serial_connection, read_sensors
+import serial
+import sys
+import threading
+import time
+
 from benchlab.core.sensor_translation import translate_sensor_struct
+from benchlab.core.serial_io import get_fleet_info, open_serial_connection, read_sensors
 
 MQTTV5_REASON_CODES = {
     0:  "Success",
@@ -59,7 +61,23 @@ logger.addHandler(handler)
 # Graceful shutdown flag
 stop_event = threading.Event()
 
+def load_local_config(filename="mqtt.config"):
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(script_dir, filename)
+    cfg = configparser.ConfigParser()
+    if os.path.exists(path):
+        cfg.read(path)
+        try:
+            poll_rate = float(cfg.get("settings", "poll_rate", fallback="1"))
+        except ValueError:
+            poll_rate = 1
+    else:
+        poll_rate = 1  # default if file missing
+    return poll_rate
+
 def load_mqtt_config():
+    poll_rate = load_local_config()
+
     return {
         "broker": os.getenv("MQTT_BROKER", "localhost"),
         "port": int(os.getenv("MQTT_PORT", 1883)),
@@ -69,6 +87,7 @@ def load_mqtt_config():
         "protocol": os.getenv("MQTT_PROTOCOL",mqtt.MQTTv311),
         "qos": int(os.getenv("MQTT_QOS", 0)),
         "path": os.getenv("MQTT_PATH"),
+        "poll_rate": float(os.getenv("MQTT_POLL_RATE", poll_rate))
     }
 
 def map_sensors_to_payload(sensor_struct, timestamp):
@@ -267,13 +286,16 @@ def run_mqtt_mode(broker_type="localhost"):
         return
 
     cfg = load_mqtt_config()
+    poll_rate = cfg["poll_rate"]
+
     logger.info("MQTT mode: %s, sending to %s:%s", broker_type, cfg['broker'], cfg['port'])
+    logger.info("Using poll_rate = %s seconds", cfg["poll_rate"])
 
     threads = []
     for device in fleet:
         t = threading.Thread(
             target=device_thread, 
-            args=(device, cfg, 1), 
+            args=(device, cfg, cfg["poll_rate"]), 
             daemon=True
         )
         t.start()
