@@ -33,6 +33,8 @@ MODES = {
                         "info": "Interactive configuration interface for customizing VU dials and settings."},
     "TUI":          {"flag": "-tui", "reqs": ["tui"], "desc": "Interactive terminal UI",
                         "info": "Displays a live TUI for monitoring connected devices and telemetry. Supports multiple devices."},
+    "WigiDash":      {"flag": "-wigidash", "reqs": ["tui"], "desc": "WigiDash display support",
+                        "info": "Displays telemetry on a WigiDash device. Supports multiple benchlabs and displays."}
 }
 
 def clear_screen():

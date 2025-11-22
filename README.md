@@ -12,6 +12,7 @@ It provides a modular launcher to start different modes of operation, including:
 - HWiNFO custom sensors
 - MQTT publishing for remote dashboards
 - VU analog-style dials and configuration
+- WigiDash support for telemetry & graph
 
 The launcher can operate in interactive mode or via command-line flags.
 
@@ -29,6 +30,7 @@ The launcher can operate in interactive mode or via command-line flags.
 | TUI | -tui | Interactive terminal UI | Displays a live TUI for monitoring multiple devices. |
 | VU Dials | -vu | Analog-style VU dials | Visual monitoring of device metrics. |
 | VU Config | -vuconfig | VU configuration interface | Customize VU dials and settings interactively. |
+| WigiDash | -wigidash | PC Command Panel | Display BENCHLAB telemetry on separate panel. |
 
 ---
 
@@ -78,6 +80,7 @@ python benchlab.py -logfleet
 python benchlab.py -mqtt
 python benchlab.py -vu
 python benchlab.py -vuconfig
+python benchlab.py -wigidash
 python benchlab.py -tui
 ```
 
@@ -144,5 +147,5 @@ Displays detailed mode descriptions and exits.
   - [HWiNFO](../hwinfo/README.md)
   - [MQTT](../mqtt/README.md)
   - [VU](../vu/README.md)
+  - [WIGIDASH](../wigidash/README.md)
   - [TUI](../tui/README.md)
-

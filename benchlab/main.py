@@ -22,8 +22,8 @@ def get_parser():
                         help="Launch VU analog dials")
     parser.add_argument("-vuconfig", action="store_true",
                         help="Launch VU configuration interface")
-    #parser.add_argument("-wigidash", action="store_true",
-    #                   help="Connect to WigiDash")
+    parser.add_argument("-wigidash", action="store_true",
+                       help="Connect to WigiDash")
 
     return parser
 
@@ -87,12 +87,12 @@ def launch_mode():
             print("VU configuration not available in this build.")
             return
 
-    #elif args.wigidash:
-    #    try:
-    #        from benchlab.wigidash.run_wigi import run_wigidash
-    #        run_wigidash()
-    #    except ModuleNotFoundError:
-    #        print("WigiDash module not available in this build.")
+    elif args.wigidash:
+        try:
+            from benchlab.wigidash.wigidash_launcher import run_wigidash_main
+            run_wigidash_main()
+        except ModuleNotFoundError:
+            print("WigiDash module not available in this build.")
 
     else:  # default: TUI
         try:
