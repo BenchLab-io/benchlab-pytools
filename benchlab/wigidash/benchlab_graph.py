@@ -234,7 +234,7 @@ class BenchlabGraph:
         if self.wigi.device_info:
             info_parts.append(f"Vendor ID: 0x{self.wigi.device_info.get('VendorId',0):03X}")
             info_parts.append(f"Product ID: 0x{self.wigi.device_info.get('ProductId',0):03X}")
-            info_parts.append(f"FW Version: 0x{self.wigi.device_info.get('FwVersion',0):02X}")
+            info_parts.append(f"FW: 0x{self.wigi.device_info.get('FwVersion',0):02X}")
         info_parts.append(f"UID: {self.wigi.uid or 'N/A'}")
         info_line = " | ".join(info_parts)
 

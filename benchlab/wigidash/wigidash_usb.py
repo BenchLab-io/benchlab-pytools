@@ -1,13 +1,20 @@
 # wigidash_usb.py
 
 import logging
+import os
 import sys
 import usb.core
 import usb.util
 
 from benchlab.wigidash.benchlab_utils import get_logger
 
+is_linux = sys.platform.startswith("linux")
+if is_linux and os.geteuid() != 0:
+    print("ERROR: WigiDash USB access on Linux requires root privileges. Please run with sudo.")
+    sys.exit(1)
+
 logger = get_logger("WigidashUsb")
+
 
 class USBDevice:
     def __init__(self, vendor_id, product_id):
