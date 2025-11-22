@@ -1,7 +1,7 @@
 # benchlab/core/sensor_translation.py
 
 from .structures import SENSOR_VIN_NUM
-from .utils import format_temp
+from .utils import format_chip_temp, format_temp
 
 def translate_sensor_struct(sensor_struct):
     """Return a flat dict of interpreted sensor values suitable for CSV, graphs, MQTT, etc."""
@@ -50,7 +50,7 @@ def translate_sensor_struct(sensor_struct):
     data["Vref"] = sensor_struct.Vref / 1000
 
     # Temperature
-    data["Chip_Temp"] = format_temp(sensor_struct.Tchip)
+    data["Chip_Temp"] = format_chip_temp(sensor_struct.Tchip)
     data["Ambient_Temp"] = format_temp(sensor_struct.Tamb)
     data["Humidity"] = sensor_struct.Hum / 10
     for i, t in enumerate(sensor_struct.Ts):
