@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 
+import logging
+import os
+import subprocess
 import sys
+
 
 # --- Enforce Python version ---
 REQUIRED_MAJOR = 3
@@ -8,16 +12,11 @@ REQUIRED_MINOR = 13
 
 if sys.version_info[:2] != (REQUIRED_MAJOR, REQUIRED_MINOR):
     sys.stderr.write(
-        f"ERROR: This script requires Python {REQUIRED_MAJOR}.{REQUIRED_MINOR}, "
+        f"ERROR: BENCHLAB PyTools only supports Python {REQUIRED_MAJOR}.{REQUIRED_MINOR}, "
         f"but you are running Python {sys.version_info.major}.{sys.version_info.minor}\n"
     )
     sys.exit(1)
 
-
-import os
-import subprocess
-import logging
-from benchlab.main import get_parser, launch_mode, main
 
 # --- Logger setup ---
 logger = logging.getLogger("benchlab.launcher")
@@ -27,6 +26,36 @@ if not logger.handlers:
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+
+
+# --- Prompt to install core requirements ---
+def install_core_requirements():
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    req_file = os.path.join(base_dir, "requirements.txt")
+    if os.path.isfile(req_file):
+        print(f"\nCore requirements found at:\n  {req_file}")
+        choice = input("Install core requirements now? [Y/n]: ").strip().lower()
+        if choice in ("", "y", "yes"):
+            logger.info("Installing core requirements...")
+            try:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", req_file])
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Failed to install core requirements: {e}")
+                sys.exit(1)
+        else:
+            logger.info("User skipped installing core requirements.")
+    else:
+        logger.warning(f"No requirements.txt found at {req_file}")
+
+# --- Only import benchlab after core requirements ---
+install_core_requirements()
+
+try:
+    from benchlab.main import get_parser, launch_mode, main
+except ModuleNotFoundError as e:
+    logger.error(f"Missing module: {e}. Make sure you installed the core requirements first.")
+    sys.exit(1)
+
 
 # --- Modes configuration ---
 MODES = {
@@ -50,6 +79,8 @@ MODES = {
                         "info": "Displays telemetry on a WigiDash device. Supports multiple benchlabs and displays."}
 }
 
+
+# --- Utilities ---
 def clear_screen():
     os.system("cls" if os.name == "nt" else "clear")
 
@@ -124,6 +155,7 @@ def install_requirements(mods):
                 sys.exit(1)
 
 
+# --- Interactive launcher ---
 def interactive_menu():
     try:
         while True:
@@ -179,6 +211,7 @@ def interactive_menu():
         sys.exit(0)
 
 
+# --- Main ---
 if __name__ == "__main__":
     try:
         if len(sys.argv) == 1:
