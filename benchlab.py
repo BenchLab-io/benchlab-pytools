@@ -1,6 +1,19 @@
 #!/usr/bin/env python3
 
 import sys
+
+# --- Enforce Python version ---
+REQUIRED_MAJOR = 3
+REQUIRED_MINOR = 13
+
+if sys.version_info[:2] != (REQUIRED_MAJOR, REQUIRED_MINOR):
+    sys.stderr.write(
+        f"ERROR: This script requires Python {REQUIRED_MAJOR}.{REQUIRED_MINOR}, "
+        f"but you are running Python {sys.version_info.major}.{sys.version_info.minor}\n"
+    )
+    sys.exit(1)
+
+
 import os
 import subprocess
 import logging
@@ -33,7 +46,7 @@ MODES = {
                         "info": "Interactive configuration interface for customizing VU dials and settings."},
     "TUI":          {"flag": "-tui", "reqs": ["tui"], "desc": "Interactive terminal UI",
                         "info": "Displays a live TUI for monitoring connected devices and telemetry. Supports multiple devices."},
-    "WigiDash":      {"flag": "-wigidash", "reqs": ["tui"], "desc": "WigiDash display support",
+    "WigiDash":      {"flag": "-wigidash", "reqs": ["wigidash"], "desc": "WigiDash display support",
                         "info": "Displays telemetry on a WigiDash device. Supports multiple benchlabs and displays."}
 }
 
@@ -48,22 +61,68 @@ def show_info():
         print(f"   {MODES[m]['info']}\n")
     input("Press Enter to return to menu or exit...")
 
+def prompt_yes_no(msg, default=True):
+    suffix = " [Y/n]: " if default else " [y/N]: "
+    while True:
+        choice = input(msg + suffix).strip().lower()
+        if not choice:
+            return default
+        if choice in ("y", "yes"):
+            return True
+        if choice in ("n", "no"):
+            return False
+        print("Please enter Y or N.")
+
+
 def install_requirements(mods):
-    """Install requirements.txt from each tool folder for selected mods."""
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    """Install requirements.txt for selected modules, with Y/N prompt and content preview."""
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    BENCHLAB_DIR = os.path.join(BASE_DIR, "benchlab")
+
     for m in mods:
         for tag in MODES[m]["reqs"]:
-            tool_dir = os.path.join(base_dir, "..", tag)  # assumes subfolders like benchlab/csv_log, benchlab/fastapi
+            tool_dir = os.path.join(BENCHLAB_DIR, tag)
             req_file = os.path.join(tool_dir, "requirements.txt")
-            if os.path.exists(req_file):
-                logger.info(f"Installing requirements for {m} ({req_file})...")
-                try:
-                    subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", req_file])
-                except subprocess.CalledProcessError as e:
-                    logger.error(f"Failed to install {req_file}: {e}")
-                    sys.exit(1)
-            else:
-                logger.info(f"No requirements.txt found for {m} at {req_file}, skipping.")
+
+            if not os.path.isfile(req_file):
+                logger.warning(
+                    f"{m}: requirements.txt NOT FOUND\n"
+                    f"Expected at: {req_file}"
+                )
+                continue
+
+            # Print path
+            print(f"\n{m} requirements found:")
+            print(f"  {req_file}\n")
+
+            # Print contents
+            try:
+                with open(req_file, "r", encoding="utf-8") as f:
+                    contents = f.read().strip()
+                    if contents:
+                        print("Contents:\n")
+                        print(contents)
+                        print("\n")
+                    else:
+                        print("Requirements file is empty.\n")
+            except Exception as e:
+                logger.warning(f"Could not read {req_file}: {e}")
+
+            # Prompt for installation
+            if not prompt_yes_no("Install these requirements?", default=True):
+                logger.info(f"{m}: user skipped dependency install.")
+                continue
+
+            # Install via pip
+            logger.info(f"Installing requirements for {m}...")
+            try:
+                subprocess.check_call(
+                    [sys.executable, "-m", "pip", "install", "-r", req_file]
+                )
+            except subprocess.CalledProcessError as e:
+                logger.error(f"{m}: dependency installation failed.")
+                sys.exit(1)
+
 
 def interactive_menu():
     try:
