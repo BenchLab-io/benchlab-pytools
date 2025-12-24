@@ -13,9 +13,8 @@ from benchlab.tui.__init__ import __version__
 from benchlab.core import serial_io
 from benchlab.core.sensor_translation import translate_sensor_struct
 
-# --- Silence serial_io logger to prevent rogue output ---
-logging.getLogger("benchlab.core.serial_io").handlers.clear()
-logging.getLogger("benchlab.core.serial_io").addHandler(logging.NullHandler())
+# Disable serial_io logging globally
+logging.getLogger("benchlab.core.serial_io").disabled = True
 
 fleet_cache = []
 active_device = None
