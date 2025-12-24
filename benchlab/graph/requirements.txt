@@ -1,1 +1,2 @@
 dearpygui>=2.1.1
+pyserial>=3.5

@@ -1,0 +1,2 @@
+pyserial>=3.5
+windows-curses>=2.4.1; platform_system=="Windows"
