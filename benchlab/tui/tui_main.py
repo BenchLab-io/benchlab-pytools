@@ -13,18 +13,6 @@ from benchlab.tui.__init__ import __version__
 from benchlab.core import serial_io
 from benchlab.core.sensor_translation import translate_sensor_struct
 
-# Silence benchlab.core.serial_io
-class NullLogger:
-    def __getattr__(self, name):
-        return lambda *args, **kwargs: None
-
-serial_io_logger_name = "benchlab.core.serial_io"
-logger = logging.getLogger(serial_io_logger_name)
-logger.__class__ = NullLogger
-logger.handlers.clear()
-logger.propagate = False
-
-
 # Setup fleet and device
 fleet_cache = []
 active_device = None
@@ -230,5 +218,8 @@ def tui_main(stdscr, _unused, args):
         except curses.error:
             pass
 
+        # Double-clear to remove any stray logger output from serial_io on Linux
+        stdscr.erase()
         stdscr.refresh()
-        time.sleep(0.1)
+        stdscr.erase()
+        stdscr.refresh(
