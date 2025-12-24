@@ -222,4 +222,4 @@ def tui_main(stdscr, _unused, args):
         stdscr.erase()
         stdscr.refresh()
         stdscr.erase()
-        stdscr.refresh(
+        stdscr.refresh()
