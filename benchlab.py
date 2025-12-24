@@ -4,8 +4,6 @@ import logging
 import os
 import subprocess
 import sys
-from importlib import metadata
-from packaging.requirements import Requirement
 
 
 # --- Enforce Python version ---
@@ -28,6 +26,60 @@ if not logger.handlers:
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+
+
+# --- Utilities ---
+def clear_screen():
+    os.system("cls" if os.name == "nt" else "clear")
+
+
+def prompt_yes_no(msg, default=True):
+    suffix = " [Y/n]: " if default else " [y/N]: "
+    while True:
+        choice = input(msg + suffix).strip().lower()
+        if not choice:
+            return default
+        if choice in ("y", "yes"):
+            return True
+        if choice in ("n", "no"):
+            return False
+        print("Please enter Y or N.")
+
+
+# --- Core requirements installer (NO packaging imports yet) ---
+def install_core_requirements():
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    req_file = os.path.join(base_dir, "requirements.txt")
+
+    if not os.path.isfile(req_file):
+        logger.warning(f"No core requirements.txt found at {req_file}")
+        return
+
+    logger.info("Checking core requirements...")
+
+    try:
+        subprocess.check_call(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                "-r",
+                req_file,
+            ]
+        )
+    except subprocess.CalledProcessError:
+        logger.error("Core dependency installation failed.")
+        sys.exit(1)
+
+
+# --- Ensure core deps BEFORE importing packaging ---
+install_core_requirements()
+
+from importlib import metadata
+from packaging.requirements import Requirement
+from packaging.version import Version
 
 
 # --- Dependency helpers ---
@@ -59,8 +111,10 @@ def requirements_satisfied(req_file):
             continue
 
         try:
-            installed_version = metadata.version(req.name)
-            if req.specifier and installed_version not in req.specifier:
+            installed_version = Version(metadata.version(req.name))
+            if req.specifier and not req.specifier.contains(
+                installed_version, prereleases=True
+            ):
                 missing.append(f"{req} (installed: {installed_version})")
         except metadata.PackageNotFoundError:
             missing.append(str(req))
@@ -101,25 +155,9 @@ def install_requirements_file(req_file, label):
         return False
 
 
-# --- Core requirements ---
-def install_core_requirements():
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    req_file = os.path.join(base_dir, "requirements.txt")
-
-    if not os.path.isfile(req_file):
-        logger.warning(f"No core requirements.txt found at {req_file}")
-        return
-
-    if not install_requirements_file(req_file, "Core"):
-        logger.error("Core requirements missing. Cannot continue.")
-        sys.exit(1)
-
-
-# --- Only import benchlab after core requirements ---
-install_core_requirements()
-
+# --- Import benchlab only after core deps ---
 try:
-    from benchlab.main import get_parser, launch_mode, main
+    from benchlab.main import get_parser, launch_mode, main as benchlab_main
 except ModuleNotFoundError as e:
     logger.error(f"Missing module: {e}. Make sure core requirements are installed.")
     sys.exit(1)
@@ -184,24 +222,6 @@ MODES = {
 }
 
 
-# --- Utilities ---
-def clear_screen():
-    os.system("cls" if os.name == "nt" else "clear")
-
-
-def prompt_yes_no(msg, default=True):
-    suffix = " [Y/n]: " if default else " [y/N]: "
-    while True:
-        choice = input(msg + suffix).strip().lower()
-        if not choice:
-            return default
-        if choice in ("y", "yes"):
-            return True
-        if choice in ("n", "no"):
-            return False
-        print("Please enter Y or N.")
-
-
 def show_info():
     clear_screen()
     print("=== BENCHLAB PyTools Info ===\n")
@@ -219,6 +239,13 @@ def print_banner():
 ██╔══██╗██╔══╝  ██║╚██╗██║██║     ██╔══██║██║     ██╔══██║██╔══██╗
 ██████╔╝███████╗██║ ╚████║╚██████╗██║  ██║███████╗██║  ██║██████╔╝
 ╚═════╝ ╚══════╝╚═╝  ╚═══╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═════╝
+
+        ██████╗ ██╗   ██╗████████╗ ██████╗  ██████╗ ██╗     ███████╗
+        ██╔══██╗╚██╗ ██╔╝╚══██╔══╝██╔═══██╗██╔═══██╗██║     ██╔════╝
+        ██████╔╝ ╚████╔╝    ██║   ██║   ██║██║   ██║██║     ███████╗
+        ██╔═══╝   ╚██╔╝     ██║   ██║   ██║██║   ██║██║     ╚════██║
+        ██║        ██║      ██║   ╚██████╔╝╚██████╔╝███████╗███████║
+        ╚═╝        ╚═╝      ╚═╝    ╚═════╝  ╚═════╝ ╚══════╝╚══════╝
 """)
 
 
@@ -300,7 +327,7 @@ if __name__ == "__main__":
         elif sys.argv[1].lower() in ("-info", "--info"):
             show_info()
         else:
-            main()
+            benchlab_main()
     except Exception as e:
         logger.error(f"[BENCHLAB PYTOOLS ERROR] {e}", exc_info=True)
         sys.exit(1)
