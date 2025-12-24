@@ -84,11 +84,13 @@ try:
     from importlib import metadata
     from packaging.requirements import Requirement
     from packaging.version import Version
+    from packaging.markers import Marker
 except ModuleNotFoundError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "packaging"])
     from importlib import metadata
     from packaging.requirements import Requirement
     from packaging.version import Version
+    from packaging.markers import Marker
 
 
 # --- Dependency helpers ---
@@ -106,12 +108,20 @@ def requirements_satisfied(req_file):
         except Exception:
             missing.append(line)
             continue
+
+        # Skip if marker doesn't match current environment
+        if req.marker is not None:
+            marker = Marker(str(req.marker))
+            if not marker.evaluate():  # Only evaluate against current system
+                continue
+
         try:
             installed_version = Version(metadata.version(req.name))
             if req.specifier and not req.specifier.contains(installed_version, prereleases=True):
                 missing.append(f"{req} (installed: {installed_version})")
         except metadata.PackageNotFoundError:
             missing.append(str(req))
+
     return not missing, missing
 
 
