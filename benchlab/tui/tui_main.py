@@ -4,6 +4,7 @@ Curses-based TUI for BENCHLAB telemetry
 
 import curses
 import io
+import logging
 import sys
 import time
 
@@ -11,6 +12,10 @@ import time
 from benchlab.tui.__init__ import __version__
 from benchlab.core import serial_io
 from benchlab.core.sensor_translation import translate_sensor_struct
+
+# --- Silence serial_io logger to prevent rogue output ---
+logging.getLogger("benchlab.core.serial_io").handlers.clear()
+logging.getLogger("benchlab.core.serial_io").addHandler(logging.NullHandler())
 
 fleet_cache = []
 active_device = None
@@ -40,21 +45,9 @@ def tui_main(stdscr, _unused, args):
 
     global fleet_cache, active_device, active_device_info, active_device_index, last_active_device, ser, connected
 
-    # --- Capture any rogue output from serial_io.get_fleet_info() ---
-    stdout_backup = sys.stdout
-    stderr_backup = sys.stderr
-    log_capture = io.StringIO()
-    sys.stdout = log_capture
-    sys.stderr = log_capture
-
     # Initialize fleet cache
     detected_fleet = serial_io.get_fleet_info()
-
-    sys.stdout = stdout_backup
-    sys.stderr = stderr_backup
-
     fleet_cache = sorted(detected_fleet, key=lambda d: d["port"])
-    logger_text = log_capture.getvalue().strip().replace("\n", " ")[:80]  # truncate if needed
 
     while True:
         stdscr.erase()
@@ -134,7 +127,7 @@ def tui_main(stdscr, _unused, args):
 
             bottom_text = f"Active device: {active_device_info['port'] if active_device_info else 'None'}"
             stdscr.addstr(height - 2, 2, bottom_text[:width-4])
-            stdscr.addstr(height - 1, 2, logger_text[:width-4])
+
         # --- Device tab ---
         elif current_tab == 1:
             stdscr.addstr(4, 2, "## BENCHLAB Connection ##")
