@@ -4,6 +4,8 @@ import logging
 import os
 import subprocess
 import sys
+from importlib import metadata
+from packaging.requirements import Requirement
 
 
 # --- Enforce Python version ---
@@ -28,24 +30,90 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 
-# --- Prompt to install core requirements ---
+# --- Dependency helpers ---
+def requirements_satisfied(req_file):
+    """
+    Check whether all requirements in req_file are installed
+    and satisfy version constraints.
+
+    Returns:
+        (ok: bool, missing: list[str])
+    """
+    missing = []
+
+    try:
+        with open(req_file, "r", encoding="utf-8") as f:
+            lines = [
+                l.strip()
+                for l in f
+                if l.strip() and not l.startswith("#")
+            ]
+    except OSError:
+        return True, []
+
+    for line in lines:
+        try:
+            req = Requirement(line)
+        except Exception:
+            missing.append(line)
+            continue
+
+        try:
+            installed_version = metadata.version(req.name)
+            if req.specifier and installed_version not in req.specifier:
+                missing.append(f"{req} (installed: {installed_version})")
+        except metadata.PackageNotFoundError:
+            missing.append(str(req))
+
+    return not missing, missing
+
+
+def install_requirements_file(req_file, label):
+    ok, missing = requirements_satisfied(req_file)
+
+    if ok:
+        logger.info(f"{label}: requirements already satisfied.")
+        return True
+
+    print(f"\n{label} missing dependencies:\n")
+    for dep in missing:
+        print(f"  - {dep}")
+
+    if not prompt_yes_no("\nInstall missing requirements?", default=True):
+        return False
+
+    logger.info(f"Installing {label} requirements...")
+    try:
+        subprocess.check_call(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                "-r",
+                req_file,
+            ]
+        )
+        return True
+    except subprocess.CalledProcessError:
+        logger.error(f"{label}: dependency installation failed.")
+        return False
+
+
+# --- Core requirements ---
 def install_core_requirements():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     req_file = os.path.join(base_dir, "requirements.txt")
-    if os.path.isfile(req_file):
-        print(f"\nCore requirements found at:\n  {req_file}")
-        choice = input("Install core requirements now? [Y/n]: ").strip().lower()
-        if choice in ("", "y", "yes"):
-            logger.info("Installing core requirements...")
-            try:
-                subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", req_file])
-            except subprocess.CalledProcessError as e:
-                logger.error(f"Failed to install core requirements: {e}")
-                sys.exit(1)
-        else:
-            logger.info("User skipped installing core requirements.")
-    else:
-        logger.warning(f"No requirements.txt found at {req_file}")
+
+    if not os.path.isfile(req_file):
+        logger.warning(f"No core requirements.txt found at {req_file}")
+        return
+
+    if not install_requirements_file(req_file, "Core"):
+        logger.error("Core requirements missing. Cannot continue.")
+        sys.exit(1)
+
 
 # --- Only import benchlab after core requirements ---
 install_core_requirements()
@@ -53,30 +121,66 @@ install_core_requirements()
 try:
     from benchlab.main import get_parser, launch_mode, main
 except ModuleNotFoundError as e:
-    logger.error(f"Missing module: {e}. Make sure you installed the core requirements first.")
+    logger.error(f"Missing module: {e}. Make sure core requirements are installed.")
     sys.exit(1)
 
 
 # --- Modes configuration ---
 MODES = {
-    "CSV":          {"flag": "-logfleet", "reqs": ["csv_log"],  "desc": "CSV logging",
-                        "info": "Logs data from one or multiple devices into CSV files for offline analysis. Supports single device and fleet logging."},
-    "FastAPI":      {"flag": "-fastapi", "reqs": ["fastapi"], "desc": "Fast API server",
-                        "info": "Launches a FastAPI server to access device telemetry."},
-    "Graph":        {"flag": "-graph", "reqs": ["graph"], "desc": "DearPyGui graphing",
-                        "info": "Monitor a specific sensor using a graph gui"},
-    "HWiNFO":       {"flag": "-hwinfo", "reqs": ["hwinfo"], "desc": "HWiNFO Custom Sensors",
-                        "info": "Export all BENCHLAB devices to HWiNFO as custom sensors"},
-    "MQTT":         {"flag": "-mqtt", "reqs": ["mqtt"], "desc": "MQTT publisher",
-                        "info": "Publishes telemetry data to an MQTT broker, allowing integration with external dashboards."},
-    "VU":           {"flag": "-vu", "reqs": ["vu"], "desc": "VU analog dials",
-                        "info": "Displays analog-style VU dials for visual monitoring of device metrics."},
-    "VU Config":    {"flag": "-vuconfig", "reqs": ["vu"], "desc": "VU configuration UI",
-                        "info": "Interactive configuration interface for customizing VU dials and settings."},
-    "TUI":          {"flag": "-tui", "reqs": ["tui"], "desc": "Interactive terminal UI",
-                        "info": "Displays a live TUI for monitoring connected devices and telemetry. Supports multiple devices."},
-    "WigiDash":      {"flag": "-wigidash", "reqs": ["wigidash"], "desc": "WigiDash display support",
-                        "info": "Displays telemetry on a WigiDash device. Supports multiple benchlabs and displays."}
+    "CSV": {
+        "flag": "-logfleet",
+        "reqs": ["csv_log"],
+        "desc": "CSV logging",
+        "info": "Logs data from one or multiple devices into CSV files for offline analysis.",
+    },
+    "FastAPI": {
+        "flag": "-fastapi",
+        "reqs": ["fastapi"],
+        "desc": "Fast API server",
+        "info": "Launches a FastAPI server to access device telemetry.",
+    },
+    "Graph": {
+        "flag": "-graph",
+        "reqs": ["graph"],
+        "desc": "DearPyGui graphing",
+        "info": "Monitor a specific sensor using a graph GUI.",
+    },
+    "HWiNFO": {
+        "flag": "-hwinfo",
+        "reqs": ["hwinfo"],
+        "desc": "HWiNFO Custom Sensors",
+        "info": "Export all BENCHLAB devices to HWiNFO as custom sensors.",
+    },
+    "MQTT": {
+        "flag": "-mqtt",
+        "reqs": ["mqtt"],
+        "desc": "MQTT publisher",
+        "info": "Publishes telemetry data to an MQTT broker.",
+    },
+    "VU": {
+        "flag": "-vu",
+        "reqs": ["vu"],
+        "desc": "VU analog dials",
+        "info": "Displays analog-style VU dials for monitoring.",
+    },
+    "VU Config": {
+        "flag": "-vuconfig",
+        "reqs": ["vu"],
+        "desc": "VU configuration UI",
+        "info": "Interactive configuration interface for VU dials.",
+    },
+    "TUI": {
+        "flag": "-tui",
+        "reqs": ["tui"],
+        "desc": "Interactive terminal UI",
+        "info": "Live TUI for monitoring connected devices.",
+    },
+    "WigiDash": {
+        "flag": "-wigidash",
+        "reqs": ["wigidash"],
+        "desc": "WigiDash display support",
+        "info": "Displays telemetry on a WigiDash device.",
+    },
 }
 
 
@@ -84,13 +188,6 @@ MODES = {
 def clear_screen():
     os.system("cls" if os.name == "nt" else "clear")
 
-def show_info():
-    clear_screen()
-    print("=== BENCHLAB PyTools Info ===\n")
-    for i, m in enumerate(MODES.keys(), 1):
-        print(f"{i}. {m} - {MODES[m]['desc']}")
-        print(f"   {MODES[m]['info']}\n")
-    input("Press Enter to return to menu or exit...")
 
 def prompt_yes_no(msg, default=True):
     suffix = " [Y/n]: " if default else " [y/N]: "
@@ -105,54 +202,40 @@ def prompt_yes_no(msg, default=True):
         print("Please enter Y or N.")
 
 
+def show_info():
+    clear_screen()
+    print("=== BENCHLAB PyTools Info ===\n")
+    for i, m in enumerate(MODES.keys(), 1):
+        print(f"{i}. {m} - {MODES[m]['desc']}")
+        print(f"   {MODES[m]['info']}\n")
+    input("Press Enter to return...")
+
+
+def print_banner():
+    print(r"""
+██████╗ ███████╗███╗   ██╗ ██████╗██╗  ██╗██╗      █████╗ ██████╗
+██╔══██╗██╔════╝████╗  ██║██╔════╝██║  ██║██║     ██╔══██╗██╔══██╗
+██████╔╝█████╗  ██╔██╗ ██║██║     ███████║██║     ███████║██████╔╝
+██╔══██╗██╔══╝  ██║╚██╗██║██║     ██╔══██║██║     ██╔══██║██╔══██╗
+██████╔╝███████╗██║ ╚████║╚██████╗██║  ██║███████╗██║  ██║██████╔╝
+╚═════╝ ╚══════╝╚═╝  ╚═══╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═════╝
+""")
+
+
 def install_requirements(mods):
-    """Install requirements.txt for selected modules, with Y/N prompt and content preview."""
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    BENCHLAB_DIR = os.path.join(BASE_DIR, "benchlab")
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    benchlab_dir = os.path.join(base_dir, "benchlab")
 
     for m in mods:
         for tag in MODES[m]["reqs"]:
-            tool_dir = os.path.join(BENCHLAB_DIR, tag)
-            req_file = os.path.join(tool_dir, "requirements.txt")
+            req_file = os.path.join(benchlab_dir, tag, "requirements.txt")
 
             if not os.path.isfile(req_file):
-                logger.warning(
-                    f"{m}: requirements.txt NOT FOUND\n"
-                    f"Expected at: {req_file}"
-                )
+                logger.warning(f"{m}: no requirements.txt found for {tag}")
                 continue
 
-            # Print path
-            print(f"\n{m} requirements found:")
-            print(f"  {req_file}\n")
-
-            # Print contents
-            try:
-                with open(req_file, "r", encoding="utf-8") as f:
-                    contents = f.read().strip()
-                    if contents:
-                        print("Contents:\n")
-                        print(contents)
-                        print("\n")
-                    else:
-                        print("Requirements file is empty.\n")
-            except Exception as e:
-                logger.warning(f"Could not read {req_file}: {e}")
-
-            # Prompt for installation
-            if not prompt_yes_no("Install these requirements?", default=True):
-                logger.info(f"{m}: user skipped dependency install.")
-                continue
-
-            # Install via pip
-            logger.info(f"Installing requirements for {m}...")
-            try:
-                subprocess.check_call(
-                    [sys.executable, "-m", "pip", "install", "-r", req_file]
-                )
-            except subprocess.CalledProcessError as e:
-                logger.error(f"{m}: dependency installation failed.")
-                sys.exit(1)
+            if not install_requirements_file(req_file, m):
+                logger.warning(f"{m}: dependencies missing, feature may not work.")
 
 
 # --- Interactive launcher ---
@@ -160,54 +243,52 @@ def interactive_menu():
     try:
         while True:
             clear_screen()
+            print_banner()
             print("=== BENCHLAB PyTools Launcher ===\n")
+
             for i, m in enumerate(MODES.keys(), 1):
                 print(f"{i}. {m} - {MODES[m]['desc']}")
-            print("\nSelect features to enable (e.g. 1,3,5 or 'all') or type 'info' for info:")
+
+            print("\nSelect features (e.g. 1,3,5 or 'all') or type 'info':")
             choice = input("> ").strip().lower()
 
             if choice == "info":
                 show_info()
                 continue
-            elif choice == "all":
+
+            if choice == "all":
                 selected = list(MODES.keys())
             else:
                 selected = []
                 for c in choice.split(","):
                     try:
-                        idx = int(c.strip()) - 1
-                        selected.append(list(MODES.keys())[idx])
+                        selected.append(list(MODES.keys())[int(c.strip()) - 1])
                     except (ValueError, IndexError):
                         logger.warning(f"Invalid choice: {c.strip()}")
-                if not selected:
-                    logger.error("No valid selections. Please try again.")
-                    input("Press Enter to continue...")
-                    continue
 
-            # Install requirements for selected modules
-            install_requirements(selected)
-
-            # Ask which function to start
-            clear_screen()
-            print("=== BENCHLAB PyTools Launcher ===\n")
-            for i, m in enumerate(selected, 1):
-                print(f"{i}. {m} - {MODES[m]['desc']}")
-            print("\nWhich function do you want to start?")
-            c = input("> ").strip()
-            try:
-                start = selected[int(c) - 1]
-            except (ValueError, IndexError):
-                logger.error("Invalid choice, please try again.")
-                input("Press Enter to continue...")
+            if not selected:
+                input("No valid selections. Press Enter to continue...")
                 continue
 
-            # Rewrite sys.argv and dispatch to normal main logic
-            flag = MODES[start]["flag"]
-            sys.argv = [sys.argv[0], flag]
+            install_requirements(selected)
+
+            clear_screen()
+            print("Which function do you want to start?\n")
+            for i, m in enumerate(selected, 1):
+                print(f"{i}. {m}")
+
+            try:
+                start = selected[int(input("> ").strip()) - 1]
+            except (ValueError, IndexError):
+                input("Invalid choice. Press Enter to continue...")
+                continue
+
+            sys.argv = [sys.argv[0], MODES[start]["flag"]]
             launch_mode()
-            break  # exit menu after launching
+            break
+
     except KeyboardInterrupt:
-        logger.info("User interrupted the launcher. Exiting...")
+        logger.info("User interrupted launcher.")
         sys.exit(0)
 
 
