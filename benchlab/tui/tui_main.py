@@ -13,11 +13,17 @@ from benchlab.tui.__init__ import __version__
 from benchlab.core import serial_io
 from benchlab.core.sensor_translation import translate_sensor_struct
 
-# Silence serial_io completely
-logger = logging.getLogger("benchlab.core.serial_io")
-logger.disabled = True      # Stop it from handling any messages
-logger.propagate = False    # Don't let messages bubble up to parent loggers
-logger.handlers.clear()     # Remove any handlers that might already be attached
+# Globally silence benchlab.core.serial_io
+serial_logger = logging.getLogger("benchlab.core.serial_io")
+serial_logger.setLevel(logging.CRITICAL + 1)  # Ignore all messages
+serial_logger.propagate = False
+
+# Remove any existing handlers just in case
+for h in serial_logger.handlers[:]:
+    serial_logger.removeHandler(h)
+
+# Add a dummy null handler to prevent any future output
+serial_logger.addHandler(logging.NullHandler())
 
 fleet_cache = []
 active_device = None
