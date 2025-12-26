@@ -1,196 +1,131 @@
 # benchlab_fleet.py
 
-import os
-import sys
-import threading
-import time
 from PIL import Image, ImageDraw, ImageFont
+import os
+import time
 
-from benchlab.core import serial_io
-from benchlab.core.serial_io import open_serial_connection
+from benchlab.wigidash.benchlab_ui import load_fonts, draw_header, draw_footer, bind_button, load_logo, UIButton, UITheme, BUTTON_DEFS
+from benchlab.wigidash.benchlab_utils import display_image, get_logger, KeepAliveManager
 
-from benchlab.wigidash.benchlab_utils import display_image, image_to_rgb565, get_logger, KeepAliveManager
-from benchlab.wigidash.benchlab_telemetry import TelemetryHistory, telemetry_step
-
-
-base_dir = os.path.dirname(os.path.abspath(__file__))
 logger = get_logger("BenchlabFleet")
 
 
 class BenchlabFleetSelect:
-    """Fleet selection page, styled like graph/overview pages."""
-    SCREEN_WIDTH = 1016
-    SCREEN_HEIGHT = 592
-    HEADER_HEIGHT = 60
-    BUTTON_HEIGHT = 60
-    BUTTON_MARGIN = 20
-    START_Y = HEADER_HEIGHT + 20
 
-    COLOR_BG = (41, 39, 38)
-    COLOR_HEADER = (252, 228, 119)
-    COLOR_BUTTON = (60, 60, 60)
-    COLOR_BUTTON_OUTLINE = (200, 200, 200)
-    COLOR_TEXT = (255, 255, 255)
-
-    def __init__(self, wigidash, fleet=None, wigi=None, on_exit=None):
+    def __init__(self, wigidash, fleet_manager=None, wigi=None, on_exit=None):
         self.wigidash = wigidash
         self.wigi = wigi
         self.running = False
         self.selected_port = None
-        self.fleet = fleet if fleet is not None else serial_io.get_fleet_info()
+        self.manager = fleet_manager
         self.on_exit = on_exit
+        self.last_tap_time = 0
         self.keepalive = KeepAliveManager(self.wigidash)
 
-        font_header_path = os.path.join(base_dir, "assets", "Inter-Bold.ttf")
-        font_button_path = os.path.join(base_dir, "assets", "Inter.ttf")
-        logo_path = os.path.join(base_dir, "assets", "benchlab.png")
+        # Fonts and logo from central UI
+        self.ui_fonts = load_fonts()
+        self.ui_logo = load_logo()
 
-        try:
-            self.font_header = ImageFont.truetype(font_header_path, 30)
-            self.font_button = ImageFont.truetype(font_button_path, 18)
-        except Exception:
-            self.font_header = self.font_button = ImageFont.load_default()
-            logger.warning(f"Default font loaded due to missing assets.")
+        # Build fleet cache
+        self.fleet_cache = []
+        if self.manager:
+            for port, info in self.manager.benchlab_devices.items():
+                self.fleet_cache.append({
+                    "port": port,
+                    "uid": info.get("uid", "?"),
+                    "firmware": info.get("firmware", "?"),
+                    "in_use": info.get("in_use", False)
+                })
+        self.fleet = self.fleet_cache.copy()
 
-        try:
-            logo_img = Image.open(logo_path).convert("RGBA")
-            logo_img.thumbnail((60, 60), Image.Resampling.LANCZOS)
-            self.logo = logo_img
-        except Exception as e:
-            logger.warning("Logo load error: %s", e)
-            self.logo = None
+        # Footer buttons (centralized)
+        self.footer_btns = [
+            bind_button(UIButton.SHUTDOWN, self.manager.graceful_shutdown if self.manager else None)
+        ]
+        self.footer_hitboxes = []
 
+        # Fleet button layout
+        self.button_height = 60
+        self.button_margin = 20
+        self.header_height = 60
+        self.start_y = self.header_height + 20
 
     # -------------------------------
-    # Page Handling
+    # Page Lifecycle
     # -------------------------------
-
     def start(self):
         logger.info("Starting FleetSelect page")
         self.running = True
+        self.start_time = int(time.monotonic() * 1000)
 
-    def stop(self):
-        logger.info("Stopping FleetSelect page")
-        self.running = False
-
-        # Stop screen keepalive
-        if self.keepalive:
-            self.keepalive.stop()
-            self.keepalive = None
-
-        # Clear screen if desired
-        if self.wigidash:
-            try:
-                self.wigidash.clear_page(0)
-            except Exception as e:
-                logger.warning(f"Error clearing fleet page display: {e}")
-
-        # Call on_exit callback if defined
-        if self.on_exit:
-            try:
-                self.on_exit()
-            except Exception as e:
-                logger.warning(f"Error in on_exit callback: {e}")
 
     # -------------------------------
-    # Telemetry Handling
+    # Touch Handling
     # -------------------------------
-
-    def start_telemetry(self):
-        """Start the background telemetry thread, stoppable via self.telemetry_running."""
-        if getattr(self, "telemetry_thread", None) and self.telemetry_thread.is_alive():
-            return  # Already running
-
-        self.telemetry_running = True
-
-        def telemetry_loop():
-            logger.info("Telemetry thread started.")
-            while self.telemetry_running:
-                try:
-                    telemetry_step(self.wigi)
-                except Exception as e:
-                    logger.error(f"Telemetry thread error: {e}")
-                time.sleep(0.25)
-
-            logger.info("Telemetry thread stopped.")
-
-        self.telemetry_thread = threading.Thread(target=telemetry_loop, daemon=True)
-        self.telemetry_thread.start()
-
-
-    def stop_telemetry(self):
-        """Stop the background telemetry thread safely."""
-        if getattr(self, "telemetry_thread", None):
-            self.telemetry_running = False
-            self.telemetry_thread.join(timeout=1)
-            self.telemetry_thread = None
-            logger.info("Telemetry stopped.")
-
-
     def check_touch(self, touch):
+        if not getattr(self, "running", False):
+            return
+
+        now = int(time.monotonic() * 1000)
+        if now - getattr(self, "last_touch_time", 0) < 0.1:
+            return
+
         if touch is None or getattr(touch, "Type", 0) == 0:
             return
-        x, y = getattr(touch, "X", 0), getattr(touch, "Y", 0)
-        now = int(time.monotonic() * 1000)
 
+        x, y = getattr(touch, "X", 0), getattr(touch, "Y", 0)
+
+        # Ignore touches immediately after page start
+        if now - getattr(self, "start_time", now) < 500:
+            return
+
+        # Footer buttons
+        for btn in self.footer_hitboxes:
+            if btn["x0"] <= x <= btn["x1"] and btn["y0"] <= y <= btn["y1"]:
+                logger.info(f"Footer button pressed: {btn['text']}")
+                if btn.get("callback"):
+                    btn["callback"]()
+                return
+
+        # Fleet selection buttons
         for idx, dev in enumerate(self.fleet):
-            y0 = self.START_Y + idx*(self.BUTTON_HEIGHT+self.BUTTON_MARGIN)
-            y1 = y0 + self.BUTTON_HEIGHT
-            if 50 <= x <= self.SCREEN_WIDTH-50 and y0 <= y <= y1:
+            y0 = self.start_y + idx*(self.button_height+self.button_margin)
+            y1 = y0 + self.button_height
+            if 50 <= x <= 966 and y0 <= y <= y1:
                 self.selected_port = dev["port"]
+                logger.info(f"Fleet selection done on {self.selected_port}, opening Overview.")
+                if self.manager and self.wigi:
+                    self.manager.start_telemetry(self.selected_port, self.wigi)
+
                 self.running = False
-                self.wigi.selected_com_port = self.selected_port
-                logger.info("Selected Benchlab device on port %s", self.selected_port)
                 break
 
-        self.last_tap_time = now
-
-
+    # -------------------------------
+    # Rendering
+    # -------------------------------
     def render_and_display(self):
         img = self.render()
         display_image(self.wigidash, img)
 
-    def handle_touch(self, touch):
-        if touch is None or getattr(touch, "Type", 0) == 0:
-            return None
-        x, y = getattr(touch, "X", 0), getattr(touch, "Y", 0)
-
-        for idx, dev in enumerate(self.fleet):
-            y0 = self.START_Y + idx*(self.BUTTON_HEIGHT+self.BUTTON_MARGIN)
-            y1 = y0 + self.BUTTON_HEIGHT
-            if y0 <= y <= y1:
-                self.wigi.selected_com_port = dev["port"]
-                return "overview"  # signal launcher to switch page
-        return None
-
     def render(self):
-        img = Image.new("RGB", (self.SCREEN_WIDTH, self.SCREEN_HEIGHT), self.COLOR_BG)
+        img = Image.new("RGB", (1016, 592), (0, 0, 0))
         draw = ImageDraw.Draw(img)
 
-        # Header
-        draw.rectangle([0, 0, self.SCREEN_WIDTH, self.HEADER_HEIGHT], fill=self.COLOR_HEADER)
+        # ---- Header ----
+        draw_header(draw, img, self.ui_fonts, "SELECT BENCHLAB DEVICE", self.ui_logo)
 
-        # Logo left/right
-        if self.logo:
-            logo_y = (self.HEADER_HEIGHT - self.logo.height)//2
-            img.paste(self.logo, (10, logo_y), self.logo)
-            img.paste(self.logo, (self.SCREEN_WIDTH - self.logo.width - 10, logo_y), self.logo)
-
-        # Center title
-        header_text = "SELECT BENCHLAB DEVICE"
-        bbox = draw.textbbox((0,0), header_text, font=self.font_header)
-        title_x = (self.SCREEN_WIDTH - (bbox[2]-bbox[0]))//2
-        title_y = (self.HEADER_HEIGHT - (bbox[3]-bbox[1]))//2
-        draw.text((title_x, title_y), header_text, fill=(0,0,0), font=self.font_header)
-
-        # Fleet buttons
+        # ---- Fleet Buttons ----
         for idx, dev in enumerate(self.fleet):
-            y0 = self.START_Y + idx*(self.BUTTON_HEIGHT+self.BUTTON_MARGIN)
-            y1 = y0 + self.BUTTON_HEIGHT
-            draw.rectangle([50, y0, self.SCREEN_WIDTH-50, y1],
-                           fill=self.COLOR_BUTTON,
-                           outline=self.COLOR_BUTTON_OUTLINE, width=2)
-            draw.text((60, y0+15), f"Port: {dev['port']} | UID: {dev['uid']}",
-                      fill=self.COLOR_TEXT, font=self.font_button)
+            y0 = self.start_y + idx*(self.button_height+self.button_margin)
+            y1 = y0 + self.button_height
+            draw.rectangle([50, y0, 966, y1], fill=(60, 60, 60), outline=(200, 200, 200), width=2)
+            draw.text((60, y0+15),
+                f"Port: {dev['port']} | UID: {dev['uid']}",
+                fill=(255,255,255),
+                font=self.ui_fonts["title"])
+
+        # ---- Footer ----
+        info_text = f"Available BENCHLABs: {len(self.fleet)}"
+        self.footer_hitboxes = draw_footer(draw, self.ui_fonts, info_text, self.footer_btns)
 
         return img

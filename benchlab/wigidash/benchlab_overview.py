@@ -4,76 +4,56 @@ import os
 import signal
 import time
 import threading
+
 from PIL import Image, ImageDraw, ImageFont
 
-from benchlab.wigidash.benchlab_telemetry import TelemetryHistory
+from benchlab.wigidash.benchlab_ui import load_fonts, draw_header, draw_footer, bind_button, load_logo, UIButton, UITheme, BUTTON_DEFS
 from benchlab.wigidash.benchlab_utils import display_image, KeepAliveManager, get_logger, clear_display
 
 logger = get_logger("BenchlabOverview")
 
 class BenchlabOverview:
-    SCREEN_WIDTH = 1016
-    SCREEN_HEIGHT = 592
-    HEADER_HEIGHT = 60
-    FOOTER_HEIGHT = 60
+    SCREEN_WIDTH = UITheme.SCREEN_WIDTH
+    SCREEN_HEIGHT = UITheme.SCREEN_HEIGHT
+    HEADER_HEIGHT = UITheme.HEADER_HEIGHT
+    FOOTER_HEIGHT = UITheme.FOOTER_HEIGHT
+    PADDING = UITheme.PADDING
+    COLOR_SECTION = UITheme.COLOR_SECTION
+    COLOR_TEXT = UITheme.COLOR_TEXT
 
-    COLOR_TITLE = (255, 255, 255)
-    COLOR_LABEL = (200, 200, 200)
-    COLOR_VALUE = (238,238,238)
-    COLOR_SECTION = (252, 228, 119)
-    COLOR_FOOTER = (128, 128, 128)
-    PADDING = 8
-
-    def __init__(self, wigidash, wigi):
+    def __init__(self, wigidash, wigi=None, telemetry_history=None, telemetry_context=None, manager=None):
         if not wigidash or not wigi:
             raise ValueError("wigidash and wigi cannot be None")
 
         # Wigi device & session
         self.wigidash = wigidash
         self.wigi = wigi
+        self.telemetry_history = telemetry_history 
+        self.telemetry_context = telemetry_context
+        self.manager = manager
         self.keepalive = KeepAliveManager(self.wigidash)
         self.running = False
 
+        # Fonts and logo from central UI
+        self.ui_fonts = load_fonts()
+        self.ui_logo = load_logo()
+
         # Device info & telemetry
-        self.sensor_data = getattr(wigi, "sensor_data", {})
+        if self.telemetry_history:
+            # Pull the latest snapshot from the shared telemetry
+            self.sensor_data = self.telemetry_history.latest_snapshot()
+        else:
+            self.sensor_data = {}
         self.device_info = getattr(wigi, "device_info", {})
         self.uid = getattr(wigi, "uid", "N/A")
         self.ser = getattr(wigi, "ser", None)
         self.history = getattr(wigi, "history", None)
-        self.telemetry_thread = None
-        self.telemetry_running = False
 
         # Touch controls
         self.footer_btn_config = None
         self.requested_graph_metrics = None
         self.x1 = self.x2 = self.x3 = 0
         self.col1_width = self.col2_width = self.col3_width = 0
-
-        # Assets
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-
-        font_button_path = os.path.join(base_dir, "assets", "Inter.ttf")
-        font_header_path = os.path.join(base_dir, "assets", "Inter-Bold.ttf")
-        font_text_path = os.path.join(base_dir, "assets", "Inter.ttf")
-        font_title_path = os.path.join(base_dir, "assets", "Inter.ttf")
-        logo_path = os.path.join(base_dir, "assets", "benchlab.png")
-
-        try:
-            self.font_button = ImageFont.truetype(font_button_path, 30)
-            self.font_header = ImageFont.truetype(font_header_path, 30)
-            self.font_text = ImageFont.truetype(font_text_path, 14)
-            self.font_title = ImageFont.truetype(font_title_path, 18)
-        except Exception:
-            self.font_button = self.font_header = self.font_title = self.font_text = ImageFont.load_default()
-            logger.warning("Default font loaded due to missing assets.")
-
-        try:
-            logo_img = Image.open(logo_path).convert("RGBA")
-            logo_img.thumbnail((60, 60), Image.Resampling.LANCZOS)
-            self.logo = logo_img
-        except Exception as e:
-            logger.warning("Logo load error: %s", e)
-            self.logo = None
 
     # -------------------------------
     # Page Handling
@@ -83,17 +63,18 @@ class BenchlabOverview:
         logger.info("Starting Overview page")
         self.running = True
 
-    def stop(self):
-        logger.info("Stopping Overview page")
-        self.running = False
-        #clear_display(self.wigidash, self.SCREEN_WIDTH, self.SCREEN_HEIGHT)
-
-
     # -------------------------------
     # Touch Handling
     # -------------------------------
 
     def check_touch(self, touch):
+        if not getattr(self, "running", False):
+            return
+
+        now = int(time.monotonic() * 1000)
+        if now - getattr(self, "last_touch_time", 0) < 0.1:
+            return
+
         if touch is None or getattr(touch, "Type", 0) == 0:
             return
 
@@ -169,12 +150,6 @@ class BenchlabOverview:
         for btn in self.footer_btn_config:
             if btn["x0"] <= x <= btn["x1"] and btn["y0"] <= y <= btn["y1"]:
                 logger.info(f"Footer button pressed: {btn.get('text','')}")
-
-                try:
-                    self.stop()
-                except Exception as e:
-                    logger.exception(f"Error during Overview shutdown: {e}")
-
                 if btn.get("callback"):
                     btn["callback"]()
 
@@ -191,7 +166,13 @@ class BenchlabOverview:
 
     def render_and_display(self):
         """Main-thread-safe rendering call"""
-        self.sensor_data = getattr(self.wigi, "sensor_data", {})
+        
+        if self.telemetry_history:
+            # Always use the latest sensor data from the shared telemetry history
+            self.sensor_data = self.telemetry_history.latest_snapshot()
+        else:
+            self.sensor_data = {}
+        
         self.device_info = getattr(self.wigi, "device_info", {})
         self.uid = getattr(self.wigi, "uid", "N/A")
         img = self.render_overview()
@@ -220,23 +201,16 @@ class BenchlabOverview:
 
         # ---- Helper: draw rounded card ----
         def rounded_card(x, y, w, h, title):
-            draw.rounded_rectangle([x, y, x+w, y+h], radius=12, outline=(200,200,200), width=1, fill=(15,15,15))
-            draw.text((x+8, y+8), title, fill=self.COLOR_SECTION, font=self.font_title)
+            draw.rounded_rectangle(
+                [x, y, x+w, y+h], radius=12, outline=(200,200,200), width=1, fill=(15,15,15)
+            )
+            draw.text((x+8, y+8),
+                title,
+                fill=self.COLOR_SECTION,
+                font=self.ui_fonts["title"])
 
         # ---- Header ----
-        draw.rectangle([0, 0, self.SCREEN_WIDTH, header_height], fill=self.COLOR_SECTION)
-
-        if self.logo:
-            logo_y = (self.HEADER_HEIGHT - self.logo.height)//2
-            img.paste(self.logo, (10, logo_y), self.logo)
-            img.paste(self.logo, (self.SCREEN_WIDTH - self.logo.width - 10, logo_y), self.logo)
-
-
-        header_text = "BENCHLAB TELEMETRY"
-        bbox = draw.textbbox((0, 0), header_text, font=self.font_header)
-        title_x = (self.SCREEN_WIDTH - (bbox[2]-bbox[0])) // 2
-        title_y = (header_height - (bbox[3]-bbox[1])) // 2
-        draw.text((title_x, title_y), header_text, fill=(0,0,0), font=self.font_header)
+        draw_header(draw, img, self.ui_fonts, "BENCHLAB TELEMETRY", self.ui_logo)
 
         # ---- Top cards ----
         top_y = header_height + padding
@@ -249,7 +223,10 @@ class BenchlabOverview:
         rounded_card(self.x1, top_y, self.col1_width, top_height, "SUMMARY")
         ly = y1 + 28 + title_spacing
         for key in ["SYS_Power","CPU_Power","GPU_Power","MB_Power"]:
-            draw.text((x1+10, ly), f"{key.split('_')[0]}: {data.get(key,0):.1f} W", fill=self.COLOR_VALUE, font=self.font_text)
+            draw.text((x1+10, ly),
+                f"{key.split('_')[0]}: {data.get(key,0):.1f} W",
+                fill=self.COLOR_TEXT,
+                font=self.ui_fonts["text"])
             ly += line_height
 
         # Temperatures
@@ -258,18 +235,26 @@ class BenchlabOverview:
         for key in ["Chip_Temp","Ambient_Temp","Humidity"]:
             val = data.get(key, 0)
             if key == "Humidity":
-                draw.text((x2+10, ly), f"{key}: {val:.1f}%", fill=self.COLOR_VALUE, font=self.font_text)
+                draw.text((x2+10, ly),
+                    f"{key}: {val:.1f}%",
+                    fill=self.COLOR_TEXT,
+                    font=self.ui_fonts["text"])
             else:
-                draw.text((x2+10, ly), f"{key}: {val}°C", fill=self.COLOR_VALUE, font=self.font_text)
+                draw.text((x2+10, ly),
+                    f"{key}: {val}°C",
+                    fill=self.COLOR_TEXT,
+                    font=self.ui_fonts["text"])
             ly += line_height
         for i in range(1,5):
-            draw.text((x2+10, ly), f"S{i}: {data.get(f'Temp_Sensor_{i}','N/A')}", fill=self.COLOR_VALUE, font=self.font_text)
+            draw.text((x2+10, ly),
+                f"S{i}: {data.get(f'Temp_Sensor_{i}','N/A')}",
+                fill=self.COLOR_TEXT,
+                font=self.ui_fonts["text"])
             ly += line_height
 
         # Fans
         rounded_card(self.x3, top_y, self.col3_width, top_height, "FANS")
-        fans = sorted([k.replace("_RPM","") for k in data if k.startswith("Fan") and "_RPM" in k])
-        fans.append("Ext Fan Duty")
+        fans = ["Fan1", "Fan2", "Fan3", "Fan4", "Fan5", "Fan6","Fan7","Fan8","Fan9","Ext Fan Duty"]
         half = (len(fans)+1)//2
         col_spacing = self.col3_width // 2
         for idx, name in enumerate(fans):
@@ -279,9 +264,16 @@ class BenchlabOverview:
                 duty = data.get(f"{name}_Duty",0)
                 rpm = data.get(f"{name}_RPM",0)
                 status = "ON" if data.get(f"{name}_Status",0) else "OFF"
-                draw.text((x_text, ly), f"{name}: {duty}% | {rpm} RPM | {status}", fill=self.COLOR_VALUE, font=self.font_text)
+                draw.text((x_text, ly),
+                    f"{name}: {duty}% | {rpm} RPM | {status}",
+                    fill=self.COLOR_TEXT,
+                    font=self.ui_fonts["text"])
             else:
-                draw.text((x_text, ly), f"{name}: {data.get('FanExtDuty',0)}", fill=self.COLOR_VALUE, font=self.font_text)
+                draw.text((x_text, ly),
+                    f"{name}: {data.get('FanExtDuty',0)}",
+                    fill=self.COLOR_TEXT,
+                    font=self.ui_fonts["text"])
+
 
         # ---- Bottom cards ----
         bottom_y = top_y + top_height + padding
@@ -300,88 +292,65 @@ class BenchlabOverview:
             for r in all_rails:
                 v = data.get(f"{r}_{key_suffix}", 0.0)  # ensure we build the full key
                 unit = "W" if key_suffix=="Power" else ("A" if key_suffix=="Current" else "V")
-                draw.text((x+12, ly), f"{r}: {v:.2f} {unit}", fill=self.COLOR_VALUE, font=self.font_text)
+                draw.text((x+12, ly),
+                    f"{r}: {v:.2f} {unit}",
+                    fill=self.COLOR_TEXT,
+                    font=self.ui_fonts["text"])
                 ly += line_height
 
         # VINs
         x4 = padding+3*(col_width+padding)
         rounded_card(x4, bottom_y, col_width, bottom_height, "VOLTAGE INPUTS")
-        vin_keys = sorted(
-            [k for k in data.keys() if k.startswith("VIN_")],
-            key=lambda x: int(x.split("_")[1])
-        )
-        ly = bottom_y + 28 + title_spacing  # start below the title
-        for idx, k in enumerate(vin_keys):
+        vin_keys = [f"VIN_{i}" for i in range(13)]
+        ly = bottom_y + 28 + title_spacing
+        for k in vin_keys:
             val = data.get(k, 0.0)
-            draw.text((x4+10, ly), f"{k}: {val:.3f} V", fill=self.COLOR_VALUE, font=self.font_text)
+            draw.text((x4+10, ly),
+                f"{k}: {val:.3f} V",
+                fill=self.COLOR_TEXT,
+                font=self.ui_fonts["text"])
             ly += line_height
 
         # Always draw Vdd and Vref
-        draw.text((x4+10, ly), f"Vdd: {data.get('Vdd',0.0):.3f} V", fill=self.COLOR_VALUE, font=self.font_text)
-        draw.text((x4+10, ly + line_height), f"Vref: {data.get('Vref',0.0):.3f} V", fill=self.COLOR_VALUE, font=self.font_text)
+        draw.text((x4+10, ly),
+            f"Vdd: {data.get('Vdd',0.0):.3f} V",
+            fill=self.COLOR_TEXT,
+            font=self.ui_fonts["text"])
+        draw.text((x4+10, ly + line_height),
+            f"Vref: {data.get('Vref',0.0):.3f} V",
+            fill=self.COLOR_TEXT,
+            font=self.ui_fonts["text"])
 
         # ---- Footer ----
-        footer_height = 40
-        y_footer = self.SCREEN_HEIGHT - footer_height
-        btn_width, btn_height = 120, 40
-        btn_spacing = padding  # space between buttons
-
-        # Info box takes all space minus buttons area
-        footer_rect = [padding, y_footer, self.SCREEN_WIDTH - (padding + (btn_width + btn_spacing) * 2), self.SCREEN_HEIGHT - padding]
-        draw.rectangle(footer_rect, outline=(200, 200, 200), fill=(20, 20, 20))
-
-        # --- Footer info text ---
-        info_parts = [f"Port: {self.ser.port if self.ser else 'N/A'}"]
-        if self.device_info:
-            info_parts.append(f"Vendor ID: 0x{self.device_info.get('VendorId',0):03X}")
-            info_parts.append(f"Product ID: 0x{self.device_info.get('ProductId',0):03X}")
-            info_parts.append(f"FW: 0x{self.device_info.get('FwVersion',0):02X}")
-        info_parts.append(f"UID: {self.uid or 'N/A'}")
-        info_line = " | ".join(info_parts)
-
-        # Center text vertically inside footer box
-        text_bbox = self.font_text.getbbox(info_line)
-        text_height = text_bbox[3] - text_bbox[1]
-        text_y = y_footer + (footer_height - text_height) // 2
-        draw.text((padding + 8, text_y), info_line, fill=self.COLOR_VALUE, font=self.font_text)
-
-        # ---- Footer Buttons ----
         btns = [
-            {"text": "Shutdown", "callback": lambda: signal.raise_signal(signal.SIGINT), "color": (255, 99, 71)},
-            {"text": "Select Device", "callback": self.return_to_fleet, "color": (252, 228, 119)},
+            bind_button(UIButton.SHUTDOWN, self.manager.graceful_shutdown),
+            bind_button(UIButton.SELECT_DEVICE, self.return_to_fleet),
         ]
 
-        self.footer_btn_config = []
+        # Safely determine context for port/UID
+        ctx = getattr(self, "telemetry_context", None)
 
-        # Start button placement from the right
-        btn_x = self.SCREEN_WIDTH - padding - btn_width
-        for btn in btns:
-            btn_y = y_footer + (footer_height - btn_height) // 2
-            btn_x1, btn_y1 = btn_x + btn_width, btn_y + btn_height
+        if ctx:
+            port = getattr(ctx, "port", "N/A")
+            uid = getattr(ctx, "uid", "N/A")
+            device_info = getattr(ctx, "device_info", {})
+            vid = device_info.get("VendorId", 0)
+            pid = device_info.get("ProductId", 0)
+            fw = device_info.get("FwVersion", 0)
 
-            # Draw button
-            draw.rectangle([btn_x, btn_y, btn_x1, btn_y1], fill=btn["color"], outline=(200, 200, 200))
+            info_parts = [
+                f"Port: {port}",
+                f"Vendor ID: 0x{vid:02X}",
+                f"Product ID: 0x{pid:02X}",
+                f"FW: 0x{fw:02X}",
+                f"UID: {uid or 'N/A'}"
+            ]
+            info_line = " | ".join(info_parts)
+        else:
+            info_line = "Port: N/A | UID: N/A"
 
-            # Center text inside button
-            text_bbox = self.font_text.getbbox(btn["text"])
-            text_height = text_bbox[3] - text_bbox[1]
-            text_width = text_bbox[2] - text_bbox[0]
-            text_x = btn_x + (btn_width - text_width) // 2
-            text_y = btn_y + (btn_height - text_height) // 2
-            draw.text((text_x, text_y), btn["text"], fill=(0, 0, 0), font=self.font_text)
-
-            # Save button config for touch events
-            self.footer_btn_config.append({
-                "x0": btn_x,
-                "y0": btn_y,
-                "x1": btn_x1,
-                "y1": btn_y1,
-                "callback": btn["callback"],
-                "text": btn["text"]
-            })
-
-            # Move left for next button
-            btn_x -= (btn_width + btn_spacing)
+        # Draw footer using correct fonts
+        self.footer_btn_config = draw_footer(draw, self.ui_fonts, info_line, btns)
 
 
         return img

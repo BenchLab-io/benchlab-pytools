@@ -15,24 +15,38 @@ if is_linux and os.geteuid() != 0:
 
 logger = get_logger("WigidashUsb")
 
+def scan_wigidash(vendor_id=0x28DA, product_id=0xEF01):
+    """
+    Scan for all connected Wigidash USB devices.
+    Returns a list of USBDevice instances (already connected).
+    """
+    devices = []
+    found = usb.core.find(idVendor=vendor_id, idProduct=product_id, find_all=True)
+    for dev in found:
+        try:
+            dev.set_configuration()
+            serial = usb.util.get_string(dev, dev.iSerialNumber)
+            usb_dev = USBDevice(vendor_id, product_id, serial=serial)
+            usb_dev.dev = dev
+            logger.info(f"Wigidash device found and configured: VID:0x{vendor_id:04X}, PID:0x{product_id:04X}, Serial: {serial}")
+            devices.append(usb_dev)
+        except usb.core.USBError as e:
+            logger.warning(f"Failed to configure device {dev}: {e}")
+    return devices
 
 class USBDevice:
-    def __init__(self, vendor_id, product_id):
+    def __init__(self, vendor_id, product_id, serial=None, dev_obj=None):
         self.vendor_id = vendor_id
         self.product_id = product_id
-        self.dev = None
+        self.serial = serial
+        self.dev = dev_obj
 
     def connect(self):
-        """Find and connect to USB device"""
-        logger.info(f"Connecting to USB device VID:0x{self.vendor_id:04X}, PID:0x{self.product_id:04X}")
-        self.dev = usb.core.find(idVendor=self.vendor_id, idProduct=self.product_id)
         if self.dev is None:
-            logger.error(f"USB device not found (VID: 0x{self.vendor_id:04X}, PID: 0x{self.product_id:04X})")
-            raise RuntimeError(f"Device not found (VID: 0x{self.vendor_id:04X}, PID: 0x{self.product_id:04X})")
-        
+            raise RuntimeError("USB device object not attached!")
         try:
             self.dev.set_configuration()
-            logger.info("USB device configuration set successfully")
+            logger.info(f"USB device configured successfully, serial: {self.serial}")
         except usb.core.USBError as e:
             logger.warning(f"USB set_configuration failed (ignored): {e}")
 

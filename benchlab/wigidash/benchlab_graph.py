@@ -1,7 +1,8 @@
 # benchlab_graph.py
 
-from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime
+from PIL import Image, ImageDraw, ImageFont
+
 import io
 import matplotlib
 matplotlib.use("Agg") 
@@ -11,6 +12,7 @@ import os
 import signal
 import time
 
+from benchlab.wigidash.benchlab_ui import load_fonts, draw_header, draw_footer, bind_button, load_logo, UIButton, UITheme, BUTTON_DEFS
 from benchlab.wigidash.benchlab_utils import display_image, get_logger
 
 
@@ -18,17 +20,13 @@ logger = get_logger("BenchlabGraph")
 
 
 class BenchlabGraph:
-    SCREEN_WIDTH = 1016
-    SCREEN_HEIGHT = 592
-    HEADER_HEIGHT = 60
-    FOOTER_HEIGHT = 60
-
-    COLOR_TITLE = (255, 255, 255)
-    COLOR_LABEL = (200, 200, 200)
-    COLOR_VALUE = (238,238,238)
-    COLOR_SECTION = (252, 228, 119)
-    COLOR_FOOTER = (128, 128, 128)
-    PADDING = 8
+    SCREEN_WIDTH = UITheme.SCREEN_WIDTH
+    SCREEN_HEIGHT = UITheme.SCREEN_HEIGHT
+    HEADER_HEIGHT = UITheme.HEADER_HEIGHT
+    FOOTER_HEIGHT = UITheme.FOOTER_HEIGHT
+    PADDING = UITheme.PADDING
+    COLOR_SECTION = UITheme.COLOR_SECTION
+    COLOR_TEXT = UITheme.COLOR_TEXT
 
     NON_PLOT_METRICS = {
         "Fan1_Status", "Fan2_Status", "Fan3_Status", "Fan4_Status",
@@ -36,43 +34,25 @@ class BenchlabGraph:
         "Fan9_Status", "FanExtDuty", "Fans"
     }
 
-    def __init__(self, wigidash, wigi, metrics):
+    def __init__(self, wigidash, wigi, metrics, telemetry_history=None, telemetry_context=None, manager=None):
         self.wigidash = wigidash
         self.wigi = wigi
+        self.metrics = metrics
+        self.history = telemetry_history or wigi.history
+        self.telemetry_context = telemetry_context
+        self.manager = manager
+
         self.last_touch_time = 0
         self.all_metrics = list(wigi.sensor_data.keys())
         self.selected_metrics = metrics.copy()
         self.running = False
-        self.font_header = None
-        self.font_text = None
+
+        self.ui_fonts = load_fonts()
+        self.ui_logo = load_logo()
+
         self.footer_btn_config = []
         self.metric_btn_config = []
 
-        # Assets
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-
-        font_button_path = os.path.join(base_dir, "assets", "Inter.ttf")
-        font_header_path = os.path.join(base_dir, "assets", "Inter-Bold.ttf")
-        font_text_path = os.path.join(base_dir, "assets", "Inter.ttf")
-        font_title_path = os.path.join(base_dir, "assets", "Inter.ttf")
-        logo_path = os.path.join(base_dir, "assets", "benchlab.png")
-
-        try:
-            self.font_button = ImageFont.truetype(font_button_path, 30)
-            self.font_header = ImageFont.truetype(font_header_path, 30)
-            self.font_text = ImageFont.truetype(font_text_path, 14)
-            self.font_title = ImageFont.truetype(font_title_path, 18)
-        except Exception:
-            self.font_button = self.font_header = self.font_title = self.font_text = ImageFont.load_default()
-            logger.warning("Default font loaded due to missing assets.")
-
-        try:
-            logo_img = Image.open(logo_path).convert("RGBA")
-            logo_img.thumbnail((60, 60), Image.Resampling.LANCZOS)
-            self.logo = logo_img
-        except Exception as e:
-            logger.warning("Logo load error: %s", e)
-            self.logo = None
 
     # -------------------------------
     # Page Lifecycle
@@ -82,13 +62,13 @@ class BenchlabGraph:
         self.running = True
         logger.info(f"Graph page started with metrics: {self.selected_metrics}")
 
-    def stop(self):
-        self.running = False
-        logger.info("Graph page stopped")
-
     def return_to_overview(self):
         logger.info("Returning to Overview page")
         self.running = False
+        if self.wigi.overview_page is None:
+            self.wigi.overview_page = self.wigi.create_overview_page()
+        self.wigi.next_page = "overview"
+
 
     # -------------------------------
     # Touch Handling
@@ -98,8 +78,8 @@ class BenchlabGraph:
         if not getattr(self, "running", False):
             return
 
-        now = time.time()
-        if now - getattr(self, "last_touch_time", 0) < 0.5:
+        now = int(time.monotonic() * 1000)
+        if now - getattr(self, "last_touch_time", 0) < 0.1:
             return
 
         if touch is None or getattr(touch, "Type", 0) == 0:
@@ -178,9 +158,11 @@ class BenchlabGraph:
         img = Image.new('RGB', (self.SCREEN_WIDTH, self.SCREEN_HEIGHT), color=(0, 0, 0))
         draw = ImageDraw.Draw(img)
 
-        padding = 8
-        header_height = 60
-        footer_height = 40
+        # Use class attributes from UITheme
+        padding = self.PADDING
+        header_height = self.HEADER_HEIGHT
+        footer_height = self.FOOTER_HEIGHT
+
         title_spacing = 2
         line_height = 18
         data = self.wigi.sensor_data or {}
@@ -199,88 +181,47 @@ class BenchlabGraph:
         # ---- Helper: draw rounded card ----
         def rounded_card(x, y, w, h, title):
             draw.rounded_rectangle([x, y, x+w, y+h], radius=12, outline=(200,200,200), width=1, fill=(15,15,15))
-            draw.text((x+8, y+8), title, fill=self.COLOR_SECTION, font=self.font_title)
+            draw.text((x+8, y+8),
+                title,
+                fill=self.COLOR_SECTION,
+                font=self.ui_fonts["title"])
 
         # ---- Initialize plot_metrics if missing ----
         if not hasattr(self, "plot_metrics"):
             self.plot_metrics = self.selected_metrics.copy()
 
         # ---- Header ----
-        draw.rectangle([0, 0, self.SCREEN_WIDTH, header_height], fill=self.COLOR_SECTION)
-
-        if self.logo:
-            logo_y = (self.HEADER_HEIGHT - self.logo.height)//2
-            img.paste(self.logo, (10, logo_y), self.logo)
-            img.paste(self.logo, (self.SCREEN_WIDTH - self.logo.width - 10, logo_y), self.logo)
-
-        header_text = "BENCHLAB TELEMETRY HISTORY"
-        bbox = draw.textbbox((0, 0), header_text, font=self.font_header)
-        title_x = (self.SCREEN_WIDTH - (bbox[2]-bbox[0])) // 2
-        title_y = (header_height - (bbox[3]-bbox[1])) // 2
-        draw.text((title_x, title_y), header_text, fill=(0,0,0), font=self.font_header)
+        draw_header(draw, img, self.ui_fonts, "BENCHLAB TELEMETRY HISTORY", self.ui_logo)
 
         # ---- Footer ----
-        footer_height = 40
-        y_footer = self.SCREEN_HEIGHT - footer_height
-        btn_width, btn_height = 120, 40
-        btn_spacing = padding  # space between buttons
-
-        # Info box takes all space minus buttons area
-        footer_rect = [padding, y_footer, self.SCREEN_WIDTH - (padding + (btn_width + btn_spacing) * 2), self.SCREEN_HEIGHT - padding]
-        draw.rectangle(footer_rect, outline=(200, 200, 200), fill=(20, 20, 20))
-
-        # --- Footer info text ---
-        info_parts = [f"Port: {self.wigi.ser.port if self.wigi.ser else 'N/A'}"]
-        if self.wigi.device_info:
-            info_parts.append(f"Vendor ID: 0x{self.wigi.device_info.get('VendorId',0):03X}")
-            info_parts.append(f"Product ID: 0x{self.wigi.device_info.get('ProductId',0):03X}")
-            info_parts.append(f"FW: 0x{self.wigi.device_info.get('FwVersion',0):02X}")
-        info_parts.append(f"UID: {self.wigi.uid or 'N/A'}")
-        info_line = " | ".join(info_parts)
-
-        # Center text vertically inside footer box
-        text_bbox = self.font_text.getbbox(info_line)
-        text_height = text_bbox[3] - text_bbox[1]
-        text_y = y_footer + (footer_height - text_height) // 2
-        draw.text((padding + 8, text_y), info_line, fill=self.COLOR_VALUE, font=self.font_text)
-
-        # ---- Footer Buttons ----
         btns = [
-            {"text": "Shutdown", "callback": lambda: signal.raise_signal(signal.SIGINT), "color": (255, 99, 71)},
-            {"text": "Overview", "callback": self.return_to_overview, "color": (252, 228, 119)},
+            bind_button(UIButton.SHUTDOWN, self.manager.graceful_shutdown),
+            bind_button(UIButton.OVERVIEW, self.return_to_overview),
         ]
+        # Safely determine context for port/UID
+        ctx = getattr(self, "telemetry_context", None)
 
-        self.footer_btn_config = []
+        if ctx:
+            port = getattr(ctx, "port", "N/A")
+            uid = getattr(ctx, "uid", "N/A")
+            device_info = getattr(ctx, "device_info", {})
+            vid = device_info.get("VendorId", 0)
+            pid = device_info.get("ProductId", 0)
+            fw = device_info.get("FwVersion", 0)
 
-        # Start button placement from the right
-        btn_x = self.SCREEN_WIDTH - padding - btn_width
-        for btn in btns:
-            btn_y = y_footer + (footer_height - btn_height) // 2
-            btn_x1, btn_y1 = btn_x + btn_width, btn_y + btn_height
+            info_parts = [
+                f"Port: {port}",
+                f"Vendor ID: 0x{vid:02X}",
+                f"Product ID: 0x{pid:02X}",
+                f"FW: 0x{fw:02X}",
+                f"UID: {uid or 'N/A'}"
+            ]
+            info_line = " | ".join(info_parts)
+        else:
+            info_line = "Port: N/A | UID: N/A"
 
-            # Draw button
-            draw.rectangle([btn_x, btn_y, btn_x1, btn_y1], fill=btn["color"], outline=(200, 200, 200))
-
-            # Center text inside button
-            text_bbox = self.font_text.getbbox(btn["text"])
-            text_height = text_bbox[3] - text_bbox[1]
-            text_width = text_bbox[2] - text_bbox[0]
-            text_x = btn_x + (btn_width - text_width) // 2
-            text_y = btn_y + (btn_height - text_height) // 2
-            draw.text((text_x, text_y), btn["text"], fill=(0, 0, 0), font=self.font_text)
-
-            # Save button config for touch events
-            self.footer_btn_config.append({
-                "x0": btn_x,
-                "y0": btn_y,
-                "x1": btn_x1,
-                "y1": btn_y1,
-                "callback": btn["callback"],
-                "text": btn["text"]
-            })
-
-            # Move left for next button
-            btn_x -= (btn_width + btn_spacing)
+        # Draw footer using correct fonts
+        self.footer_btn_config = draw_footer(draw, self.ui_fonts, info_line, btns)
 
         # ---- Left panel: metrics ----
         panel_width = 200
@@ -289,8 +230,13 @@ class BenchlabGraph:
         panel_y = header_height + padding
         self.metric_btn_config = []
 
-        draw.text((panel_x+5, panel_y), "Metrics", font=self.font_title, fill=self.COLOR_SECTION)
-        panel_y += self.font_title.getbbox("Metrics")[3] + 8
+        draw.text((panel_x+5, panel_y), 
+            "Metrics", 
+            fill=self.COLOR_SECTION,
+            font=self.ui_fonts["title"])
+        panel_y += self.ui_fonts["title"].getbbox("Metrics")[3] + 8
+
+        METRIC_BUTTON_COLOR = BUTTON_DEFS.get(UIButton.GRAPH_METRIC, {}).get("color", (0, 0, 0))
 
         # Split numeric metrics into fan pairs and others
         fan_pairs = []
@@ -316,9 +262,12 @@ class BenchlabGraph:
 
             # Left half: Duty
             color = (252, 228, 119) if duty_m in self.plot_metrics else (50,50,50)
-            text_color = (0,0,0) if duty_m in self.plot_metrics else (252,228,119)
+            text_color = BUTTON_DEFS.get(UIButton.GRAPH_METRIC, {}).get("color", (0,0,0)) if duty_m in self.plot_metrics else self.COLOR_TEXT
             draw.rectangle([panel_x, y0, panel_x+half_width, y1], fill=color, outline=(200,200,200))
-            draw.text((panel_x+5, y0+6), duty_m, font=self.font_text, fill=text_color)
+            draw.text((panel_x+5, y0+6), 
+                duty_m, 
+                fill=text_color,
+                font=self.ui_fonts["text"])
             self.metric_btn_config.append({
                 "x0": panel_x, "y0": y0, "x1": panel_x+half_width, "y1": y1,
                 "metric": duty_m
@@ -327,9 +276,12 @@ class BenchlabGraph:
             # Right half: RPM
             x_start = panel_x + half_width + spacing
             color = (252, 228, 119) if rpm_m in self.plot_metrics else (50,50,50)
-            text_color = (0,0,0) if rpm_m in self.plot_metrics else (252,228,119)
+            text_color = BUTTON_DEFS.get(UIButton.GRAPH_METRIC, {}).get("color", (0,0,0)) if rpm_m in self.plot_metrics else self.COLOR_TEXT
             draw.rectangle([x_start, y0, panel_x+panel_width, y1], fill=color, outline=(200,200,200))
-            draw.text((x_start+5, y0+6), rpm_m, font=self.font_text, fill=text_color)
+            draw.text((x_start+5, y0+6), 
+                rpm_m, 
+                fill=text_color,
+                font=self.ui_fonts["text"])
             self.metric_btn_config.append({
                 "x0": x_start, "y0": y0, "x1": panel_x+panel_width, "y1": y1,
                 "metric": rpm_m
@@ -342,9 +294,12 @@ class BenchlabGraph:
             y0 = panel_y
             y1 = y0 + btn_h
             color = (252, 228, 119) if metric in self.plot_metrics else (50,50,50)
-            text_color = (0,0,0) if metric in self.plot_metrics else (252,228,119)
+            text_color = BUTTON_DEFS.get(UIButton.GRAPH_METRIC, {}).get("color", (0,0,0)) if metric in self.plot_metrics else self.COLOR_TEXT
             draw.rectangle([panel_x, y0, panel_x+panel_width, y1], fill=color, outline=(200,200,200))
-            draw.text((panel_x+5, y0+6), metric, font=self.font_text, fill=text_color)
+            draw.text((panel_x+5, y0+6), 
+                metric, 
+                fill=text_color,
+                font=self.ui_fonts["text"])
             self.metric_btn_config.append({
                 "x0": panel_x, "y0": y0, "x1": panel_x+panel_width, "y1": y1,
                 "metric": metric
@@ -370,7 +325,10 @@ class BenchlabGraph:
                 y0 = all_btn_y + i*(all_btn_h + 4)
                 y1 = y0 + all_btn_h
                 draw.rectangle([panel_x, y0, panel_x+panel_width, y1], fill=(100,100,100), outline=(200,200,200))
-                draw.text((panel_x+5, y0+6), btn["text"], font=self.font_text, fill=(255,255,255))
+                draw.text((panel_x+5, y0+6), 
+                    btn["text"], 
+                    font=self.ui_fonts["text"],
+                    fill=(255,255,255))
 
                 def make_callback(suffix):
                     return lambda s=suffix: self.toggle_all_fan_metrics(s)
@@ -397,57 +355,49 @@ class BenchlabGraph:
 
             y_min, y_max = float('inf'), float('-inf')
 
-            # Get all timestamps once
-            timestamps = self.wigi.history.get_history('timestamp')
+            # Get timestamps once
+            timestamps = self.history.get_history('timestamp') or []
 
             for m in self.plot_metrics:
                 if m in BenchlabGraph.NON_PLOT_METRICS:
                     continue
 
-                history = self.wigi.history.get_history(m)
-                if not history:
+                values = self.history.get_history(m) or []
+                if not values:
                     continue
 
-                clean = [
-                    (t, v) for t, v in zip(timestamps[-len(history):], history)
-                    if isinstance(v, (int, float))
-                ]
+                # Align timestamps and values
+                min_len = min(len(timestamps), len(values))
+                ts_aligned = timestamps[-min_len:]
+                vals_aligned = values[-min_len:]
+
+                # Filter numeric data only
+                clean = [(t, v) for t, v in zip(ts_aligned, vals_aligned) if isinstance(v, (int, float))]
                 if not clean:
                     continue
 
                 clean_ts, clean_vals = zip(*clean)
+                x_vals = [datetime.fromtimestamp(t) for t in clean_ts]
 
-                if timestamps and len(timestamps) >= len(history):
-                    ts_plot = timestamps[-len(history):]  # last N timestamps
-                    x_vals = [datetime.fromtimestamp(t) for t in ts_plot]
-                    x_label = "Time"
-                else:
-                    x_vals = range(len(clean_vals))
-                    x_label = "Sample #"
-
-                short_label = (
-                    m.replace("_Power", "")
-                     .replace("_Current", "")
-                     .replace("_Voltage", "")
-                )
-
+                # Plot
+                short_label = m.replace("_Power", "").replace("_Current", "").replace("_Voltage", "")
                 ax.plot(x_vals, clean_vals, label=short_label)
 
                 y_min = min(y_min, min(clean_vals))
                 y_max = max(y_max, max(clean_vals))
 
+            # Configure x-axis as time
             if timestamps:
                 ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
                 ax.xaxis.set_major_locator(mdates.AutoDateLocator())
 
-            # Only set y-limits if we got numeric data
+            # Y-axis limits with padding
             if y_min == float('inf') or y_max == float('-inf'):
                 y_bottom, y_top = 0, 1
             elif y_min == y_max:
-                y_bottom = y_min - 0.1*abs(y_min) if y_min < 0 else 0
-                y_top = y_max + 0.1*abs(y_max) if y_max != 0 else 1
+                y_bottom = 0 if y_min >= 0 else y_min * 0.9
+                y_top = y_max + 0.1 * abs(y_max) if y_max != 0 else 1
             else:
-                # 10% padding on both ends
                 y_bottom = 0 if y_min >= 0 else y_min * 1.1
                 y_top = y_max * 1.1 if y_max != 0 else 1
 
@@ -457,25 +407,10 @@ class BenchlabGraph:
             plt.xticks(rotation=45, ha='right')
             ax.grid(True, color='gray', linestyle='--', linewidth=0.5)
 
-            # X-axis
-            ax.set_xlabel(x_label, color='white')
-
-            # Y-axis (use units if available)
-            units = []
-            for m in self.plot_metrics:
-                u = self.wigi.sensor_units.get(m)
-                if u and u not in units:
-                    units.append(u)
-
-            if len(units) == 0:
-                y_label = "Value"
-            elif len(units) == 1:
-                y_label = units[0]
-            else:
-                # Multiple units — list all of them
-                y_label = ", ".join(units)
-
-            ax.set_ylabel(y_label, color='white')
+            # Labels
+            ax.set_xlabel("Time", color='white')
+            units = list({self.wigi.sensor_units.get(m) for m in self.plot_metrics if self.wigi.sensor_units.get(m)})
+            ax.set_ylabel(units[0] if len(units)==1 else ", ".join(units) if units else "Value", color='white')
 
             # Legend
             legend = ax.legend(
@@ -486,10 +421,10 @@ class BenchlabGraph:
                 facecolor='black',
                 edgecolor='black'
             )
-
             for text in legend.get_texts():
                 text.set_color("white")
 
+            # Convert figure to PIL image
             buf = io.BytesIO()
             fig.tight_layout()
             fig.savefig(buf, format="png", facecolor=fig.get_facecolor())
@@ -498,6 +433,7 @@ class BenchlabGraph:
             graph_img = Image.open(buf).convert("RGB")
             graph_img = graph_img.resize((graph_w, graph_h))
             img.paste(graph_img, (graph_x, graph_y))
+
 
         # ---- Display ----
         display_image(self.wigidash, img)

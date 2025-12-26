@@ -1,5 +1,7 @@
 import argparse
 import curses
+import traceback
+import sys
 
 def get_parser():
     parser = argparse.ArgumentParser(description="BENCHLAB Telemetry")
@@ -84,14 +86,15 @@ def launch_mode():
             from benchlab.vu.vu_tui import launch_vu_config
             launch_vu_config()
         except ModuleNotFoundError:
-            print("VU configuration not available in this build.")
+            print("VU configuration module not available in this build.")
             return
 
     elif args.wigidash:
         try:
-            from benchlab.wigidash.wigidash_launcher import run_wigidash_main
-            run_wigidash_main()
+            from benchlab.wigidash.wigidash_manager import main
+            main()
         except ModuleNotFoundError:
+            traceback.print_exc()
             print("WigiDash module not available in this build.")
 
     else:  # default: TUI
