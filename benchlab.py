@@ -349,7 +349,22 @@ if __name__ == "__main__":
         elif sys.argv[1].lower() in ("-info", "--info"):
             show_info()
         else:
-            benchlab_main()
+            elif sys.argv[1].startswith("-"):
+                flag = sys.argv[1].lower()
+                matched_mode = None
+
+                for name, cfg in MODES.items():
+                    if cfg["flag"] == flag:
+                        matched_mode = name
+                        break
+
+                if matched_mode:
+                    install_requirements([matched_mode])
+                else:
+                    logger.warning(f"Unknown mode flag: {flag}")
+
+                benchlab_main()
+
     except Exception as e:
         logger.error(f"[BENCHLAB PYTOOLS ERROR] {e}", exc_info=True)
         sys.exit(1)
