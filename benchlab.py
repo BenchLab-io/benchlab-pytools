@@ -346,24 +346,29 @@ if __name__ == "__main__":
     try:
         if len(sys.argv) == 1:
             interactive_menu()
+
         elif sys.argv[1].lower() in ("-info", "--info"):
             show_info()
+
+        elif sys.argv[1].startswith("-"):
+            flag = sys.argv[1].lower()
+            matched_mode = None
+
+            for name, cfg in MODES.items():
+                if cfg["flag"] == flag:
+                    matched_mode = name
+                    break
+
+            if matched_mode:
+                install_requirements([matched_mode])
+            else:
+                logger.warning(f"Unknown mode flag: {flag}")
+
+            benchlab_main()
+
         else:
-            elif sys.argv[1].startswith("-"):
-                flag = sys.argv[1].lower()
-                matched_mode = None
-
-                for name, cfg in MODES.items():
-                    if cfg["flag"] == flag:
-                        matched_mode = name
-                        break
-
-                if matched_mode:
-                    install_requirements([matched_mode])
-                else:
-                    logger.warning(f"Unknown mode flag: {flag}")
-
-                benchlab_main()
+            # Fallback (should rarely happen)
+            benchlab_main()
 
     except Exception as e:
         logger.error(f"[BENCHLAB PYTOOLS ERROR] {e}", exc_info=True)
