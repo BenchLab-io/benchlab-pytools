@@ -16,7 +16,7 @@ import os
 # Platform setup
 # -----------------------------------------------------------------------------
 IS_WINDOWS = platform.system() == "Windows"
-PYTHON_CMD = "python" if IS_WINDOWS else "python3"
+PYTHON_CMD = sys.executable
 CREATIONFLAGS = subprocess.CREATE_NEW_PROCESS_GROUP if IS_WINDOWS else 0
 PREEXEC_FN = None if IS_WINDOWS else lambda: signal.signal(signal.SIGINT, signal.SIG_IGN)
 
