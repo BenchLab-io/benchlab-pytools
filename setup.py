@@ -18,7 +18,7 @@ setup(
     author_email="contact@benchlab.io",
     packages=find_packages(),  # Automatically find all subpackages
     python_requires=">=3.10",
-    install_requires=read_requirements("benchlab/requirements.txt"),  # core dependencies
+    install_requires=read_requirements("benchlab/requirements.txt") + ["benchlab-pycore>=0.1.1"],  # core dependencies
     extras_require={
         "fastapi": read_requirements("benchlab/fastapi/requirements.txt"),
         "tests": read_requirements("benchlab/tests/requirements.txt"),

@@ -1,8 +1,7 @@
 # benchlab/vu/sensors.py
 
-from benchlab.core.sensor_translation import translate_sensor_struct
-from benchlab.core.serial_io import read_sensors, get_benchlab_ports, open_serial_connection
-from benchlab.core.structures import SensorStruct
+from benchlab_pycore.core import translate_sensor_struct, read_sensors, SensorStruct
+from benchlab_pycore.core.serial_io import get_benchlab_ports, open_serial_connection
 
 def get_available_sensors():
     """Return a list of human-readable sensor names."""

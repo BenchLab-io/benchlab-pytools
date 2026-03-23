@@ -9,7 +9,7 @@ import sys
 import threading
 from pathlib import Path
 
-from benchlab.core.sensor_translation import translate_sensor_struct
+from benchlab_pycore.core import translate_sensor_struct
 from benchlab.vu import devices
 from benchlab.vu.vu_server_manager import start_vu_server, check_vu_server, terminate_vu_server, forward_logs
 

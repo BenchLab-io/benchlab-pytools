@@ -4,9 +4,8 @@ import winreg
 import time
 import logging
 import atexit
-from benchlab.core.serial_io import get_fleet_info, open_serial_connection, read_sensors
-from benchlab.core.sensor_translation import translate_sensor_struct
-from benchlab.core.structures import FAN_NUM
+from benchlab_pycore.core import read_sensors, translate_sensor_struct, FAN_NUM
+from benchlab_pycore.core.serial_io import get_fleet_info, open_serial_connection
 
 logger = logging.getLogger("hwinfo_export")
 logger.setLevel(logging.INFO)

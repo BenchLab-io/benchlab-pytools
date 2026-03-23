@@ -13,7 +13,7 @@ import sys
 import yaml
 import zlib
 
-from benchlab.core.serial_io import open_serial_connection
+from benchlab_pycore.core.serial_io import open_serial_connection
 from benchlab.vu.sensors import read_sensor_values
 from benchlab.vu.vu_logo_gen import generate_sensor_logo
 from benchlab.vu.vu_server_manager import start_vu_server, check_vu_server, forward_logs, terminate_vu_server

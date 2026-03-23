@@ -58,10 +58,10 @@ def launch_mode():
 
     elif args.logfleet:
         try:
-            from benchlab.csv_log.csv_logger import run_csv_logger
-            run_csv_logger(args.interval)
+            from benchlab.csv_log.csv_logger_enhanced import run_enhanced_csv_logger
+            run_enhanced_csv_logger(args.interval)
         except ModuleNotFoundError:
-            print("CSV logger not available in this build.")
+            print("Enhanced CSV logger not available in this build.")
             return
 
     elif args.mqtt:

@@ -5,7 +5,8 @@ import sys
 import threading
 import time
 
-from benchlab.core.serial_io import open_serial_connection, read_sensors, read_device, read_uid, get_fleet_info
+from benchlab_pycore.core import read_sensors, read_device, read_uid
+from benchlab_pycore.core.serial_io import open_serial_connection, get_fleet_info
 
 from benchlab.wigidash.benchlab_telemetry import TelemetryHistory, telemetry_step, TelemetryContext
 from benchlab.wigidash.benchlab_utils import get_logger, display_image

@@ -2,9 +2,10 @@
 
 import threading
 import time
+from collections import deque
 from dearpygui import dearpygui as dpg
 from benchlab.graph import device, sensors, ui
-from benchlab.core.sensor_translation import translate_sensor_struct
+from benchlab_pycore.core import translate_sensor_struct
 
 class GraphApp:
     def __init__(self):
@@ -27,9 +28,18 @@ class GraphApp:
 
         # Graphing state
         self.selected_sensor = None
+        self.selected_device = None  # Fixed: was missing this variable
         self.graph_x_axis = None
         self.graph_y_axis = None
         self.graph_line = None
+        
+        # Configuration
+        self.sensor_read_interval = 1.0  # Configurable sensor reading interval
+        self.graph_update_interval = 0.2  # Configurable graph update interval
+        self.history_length = 50  # Configurable history length
+        
+        # Statistics
+        self.session_stats = {"min": None, "max": None, "avg": None, "count": 0}
 
     # -----------------------------
     # Device Management
@@ -71,9 +81,17 @@ class GraphApp:
     # -----------------------------
     def update_graph_loop(self):
         import time
+        from collections import deque
 
+        # Use circular buffers for better performance
+        x_data = deque(maxlen=self.history_length)
+        y_data = deque(maxlen=self.history_length)
         t = 0
-        x_data, y_data = [], []
+
+        # Debug: Ensure graph elements exist
+        if not self.graph_line or not dpg.does_item_exist(self.graph_line):
+            print(f"[DEBUG] Graph line not ready: {self.graph_line}")
+            return
 
         # Attach to line_series user data
         user_data = dpg.get_item_user_data(self.graph_line)
@@ -84,12 +102,9 @@ class GraphApp:
         current_sensor = self.selected_sensor
         current_device = self.selected_device
 
-        while dpg.does_item_exist("graph_window") and self.connected:
-            # Skip loop if graph line not ready
-            if not self.graph_line or not dpg.does_item_exist(self.graph_line):
-                time.sleep(0.1)
-                continue
+        print(f"[DEBUG] Starting graph loop for sensor: {current_sensor}")
 
+        while dpg.does_item_exist("##main_plot") and self.connected and self.graph_line:
             # Check if sensor/device changed
             if self.selected_sensor != current_sensor or self.selected_device != current_device:
                 # Reset all data
@@ -98,9 +113,11 @@ class GraphApp:
                 y_data.clear()
                 user_data["x_data"].clear()
                 user_data["y_data"].clear()
+                self.session_stats = {"min": None, "max": None, "avg": None, "count": 0}
 
                 current_sensor = self.selected_sensor
                 current_device = self.selected_device
+                print(f"[DEBUG] Sensor changed to: {current_sensor}")
 
             value = None
             with self.lock:
@@ -112,15 +129,18 @@ class GraphApp:
                 x_data.append(t)
                 y_data.append(value)
 
-                # Keep last N points
-                N = 50
-                x_data = x_data[-N:]
-                y_data = y_data[-N:]
+                # Update session statistics
+                self._update_session_stats(value)
 
-                # Update series
-                user_data["x_data"] = x_data
-                user_data["y_data"] = y_data
-                dpg.set_value(self.graph_line, [x_data, y_data])
+                # Update series using deque data
+                user_data["x_data"] = list(x_data)
+                user_data["y_data"] = list(y_data)
+                
+                # Debug: Print data being sent to graph
+                if len(x_data) > 0:
+                    print(f"[DEBUG] Graph data: x={list(x_data)[-3:]}, y={list(y_data)[-3:]}")
+                
+                dpg.set_value(self.graph_line, [list(x_data), list(y_data)])
 
                 # Adjust Y axis dynamically
                 if y_data:
@@ -132,18 +152,40 @@ class GraphApp:
 
                 margin = (max_y - min_y) * 0.1 if max_y != min_y else 1
 
-                dpg.set_axis_limits(self.graph_y_axis, min_y - margin, max_y + margin)
-                dpg.set_axis_limits(self.graph_x_axis, x_data[0], x_data[-1])
+                # Update axes with bounds checking
+                if x_data:
+                    dpg.set_axis_limits(self.graph_x_axis, float(x_data[0]), float(x_data[-1]))
+                dpg.set_axis_limits(self.graph_y_axis, min_y - margin if min_y is not None else 0, 
+                                  max_y + margin if max_y is not None else 1)
 
-                # Update the individual text items
+                # Update the individual text items with session statistics
+                session_min = self.session_stats["min"]
+                session_max = self.session_stats["max"]
+                session_avg = self.session_stats["avg"]
+                
                 if dpg.does_item_exist("graph_min"):
-                    dpg.set_value("graph_min", f"Min: {min_y:.2f}")
+                    dpg.set_value("graph_min", f"Min: {session_min:.2f}" if session_min is not None else "Min: --")
                 if dpg.does_item_exist("graph_max"):
-                    dpg.set_value("graph_max", f"Max: {max_y:.2f}")
+                    dpg.set_value("graph_max", f"Max: {session_max:.2f}" if session_max is not None else "Max: --")
                 if dpg.does_item_exist("graph_avg"):
-                    dpg.set_value("graph_avg", f"Avg: {avg_y:.2f}")
+                    dpg.set_value("graph_avg", f"Avg: {session_avg:.2f}" if session_avg is not None else "Avg: --")
 
-            time.sleep(0.2)
+            time.sleep(self.graph_update_interval)
+    
+    def _update_session_stats(self, value):
+        """Update session-wide statistics for the selected sensor."""
+        if self.session_stats["min"] is None or value < self.session_stats["min"]:
+            self.session_stats["min"] = value
+        if self.session_stats["max"] is None or value > self.session_stats["max"]:
+            self.session_stats["max"] = value
+        
+        self.session_stats["count"] += 1
+        self.session_stats["avg"] = sum(self.session_stats.get("history", [])) / self.session_stats["count"]
+        
+        # Keep a small history for accurate averaging
+        if "history" not in self.session_stats:
+            self.session_stats["history"] = deque(maxlen=1000)
+        self.session_stats["history"].append(value)
 
     # -----------------------------
     # Main Run Loop
@@ -151,10 +193,10 @@ class GraphApp:
     def run(self):
         """Create and show the GUI."""
         dpg.create_context()
-        dpg.create_viewport(title="BENCHLAB Graphs", width=718, height=588)
+        dpg.create_viewport(title="BENCHLAB Graph Interface", width=1000, height=700)
 
-        # Build main device selection window
-        ui.build_device_window(self)
+        # Build unified main window
+        ui.build_unified_window(self)
 
         dpg.setup_dearpygui()
         dpg.show_viewport()
@@ -162,9 +204,21 @@ class GraphApp:
         # GUI update loop
         while dpg.is_dearpygui_running():
             with self.lock:
-                status_text = f"Device status: {'Connected' if self.connected else 'Disconnected'}"
-                dpg.set_value("device_status", status_text)
-                dpg.set_value("device_uid", f"Device UID: {self.latest_uid}")
-                dpg.set_value("device_fw", f"Firmware: {self.latest_fw}")
+                status_text = f"{'Connected' if self.connected else 'Disconnected'}"
+                status_color = (0, 255, 0) if self.connected else (255, 0, 0)
+                
+                # Update device status
+                if dpg.does_item_exist("device_status"):
+                    dpg.set_value("device_status", status_text)
+                    dpg.configure_item("device_status", color=status_color)
+                
+                # Update device information
+                if dpg.does_item_exist("device_uid"):
+                    dpg.set_value("device_uid", self.latest_uid if self.latest_uid != "?" else "Unknown")
+                if dpg.does_item_exist("device_fw"):
+                    dpg.set_value("device_fw", self.latest_fw if self.latest_fw != "?" else "Unknown")
+
+            # Update current sensor values display
+            ui.update_current_values_display(self)
 
             dpg.render_dearpygui_frame()

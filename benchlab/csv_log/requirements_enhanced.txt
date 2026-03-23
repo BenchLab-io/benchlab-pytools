@@ -1,0 +1,25 @@
+# Enhanced CSV Logger Requirements
+# Core dependencies (same as original)
+pyserial>=3.5
+benchlab-pycore>=0.1.1
+
+# Enhanced features dependencies
+configparser>=5.3.0  # For Python 2.7 compatibility (built-in for Python 3+)
+pathlib>=1.0.1       # For Python 2.7 compatibility (built-in for Python 3.4+)
+
+# Optional dependencies for enhanced features
+# json (built-in)
+# logging (built-in)
+# threading (built-in)
+# time (built-in)
+# datetime (built-in)
+# os (built-in)
+# sys (built-in)
+# argparse (built-in)
+
+# Development and testing dependencies
+pytest>=7.0.0        # For testing
+pytest-cov>=4.0.0    # For coverage reporting
+black>=22.0.0        # For code formatting
+flake8>=5.0.0        # For linting
+mypy>=0.991          # For type checking

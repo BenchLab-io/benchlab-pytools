@@ -27,10 +27,10 @@ mocked_devices = [
 @pytest.fixture(autouse=True)
 def mock_serial_io():
     # Patch serial_io functions for the duration of the test
-    with patch("benchlab.fastapi.telemetry_api.serial_io.find_benchlab_devices", return_value=mocked_devices), \
-         patch("benchlab.fastapi.telemetry_api.serial_io.read_sensors", return_value=MagicMock(**mocked_telemetry)), \
-         patch("benchlab.fastapi.telemetry_api.serial_io.read_device", return_value=mocked_device_info), \
-         patch("benchlab.fastapi.telemetry_api.serial_io.open_serial_connection", return_value=MagicMock()):
+    with patch("benchlab.fastapi.telemetry_api.get_fleet_info", return_value=mocked_devices), \
+         patch("benchlab.fastapi.telemetry_api.read_sensors", return_value=MagicMock(**mocked_telemetry)), \
+         patch("benchlab.fastapi.telemetry_api.read_device", return_value=mocked_device_info), \
+         patch("benchlab.fastapi.telemetry_api.open_serial_connection", return_value=MagicMock()):
         yield
 
 def test_device_info():

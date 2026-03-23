@@ -3,30 +3,30 @@
 import threading
 import time
 from dearpygui import dearpygui as dpg
-from benchlab.core.serial_io import (
-    open_serial_connection,
-    read_sensors,
-    get_benchlab_ports,
-    read_uid,
-    read_device,
-)
+from benchlab_pycore.core import read_sensors, get_benchlab_ports, read_uid, read_device
+from benchlab_pycore.core.serial_io import open_serial_connection
 
 def detect_devices(app):
     """Scan for devices (no port opening) and update combo box."""
-    ports = get_benchlab_ports()  # [{"port": "COM17"}, {"port": "COM18"}]
-    devices = [{"port": p["port"], "uid": "?", "firmware": "?"} for p in ports]
-    devices_sorted = sorted(devices, key=lambda d: d["port"])
+    try:
+        ports = get_benchlab_ports()  # [{"port": "COM17"}, {"port": "COM18"}]
+        devices = [{"port": p["port"], "uid": "?", "firmware": "?"} for p in ports]
+        devices_sorted = sorted(devices, key=lambda d: d["port"])
 
-    with app.lock:
-        app.devices = devices_sorted
-        if app.devices:
-            app.active_device = app.devices[0]
-            device_items = [d["port"] for d in app.devices]
-            dpg.configure_item("##device_combo", items=device_items, default_value=device_items[0])
-            app.start_sensor_thread()
-        else:
-            app.active_device = None
-            dpg.configure_item("##device_combo", items=["<No devices>"], default_value="<No devices>")
+        with app.lock:
+            app.devices = devices_sorted
+            if app.devices:
+                app.active_device = app.devices[0]
+                device_items = [d["port"] for d in app.devices]
+                if dpg.does_item_exist("##device_combo"):
+                    dpg.configure_item("##device_combo", items=device_items, default_value=device_items[0])
+                app.start_sensor_thread()
+            else:
+                app.active_device = None
+                if dpg.does_item_exist("##device_combo"):
+                    dpg.configure_item("##device_combo", items=["<No devices>"], default_value="<No devices>")
+    except Exception as e:
+        print(f"[ERROR] Failed to detect devices: {e}")
 
 def device_changed(app, sender, app_data):
     """Callback when user selects a different device from combo box."""
@@ -92,9 +92,15 @@ def start_sensor_thread(app):
                     sensor_data = read_sensors(app.ser)
                     with app.lock:
                         app.sensor_struct = sensor_data
-                    time.sleep(1.0)
+                    time.sleep(app.sensor_read_interval)
                 except Exception as e:
                     print(f"[ERROR] Sensor read error: {e}")
+                    # Attempt to recover by reopening the serial connection
+                    try:
+                        app.ser.close()
+                    except:
+                        pass
+                    time.sleep(1.0)  # Wait before retry
                     break
         finally:
             with app.lock:

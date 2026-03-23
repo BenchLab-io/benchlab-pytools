@@ -5,7 +5,7 @@ from collections import defaultdict, deque
 import time
 import threading
 
-from benchlab.core.sensor_translation import translate_sensor_struct
+from benchlab_pycore.core import translate_sensor_struct
 from benchlab.wigidash.benchlab_utils import get_logger
 
 logger = get_logger("BenchlabTelemetry")

@@ -1,136 +1,200 @@
-# Benchlab Multi-Device Telemetry API
+# BenchLab FastAPI Telemetry Server
 
-A Python-based API server and telemetry platform for **Benchlab devices**, providing live device monitoring, historical data, and WebSocket streaming. Built with **FastAPI**, this tool reads sensor data over serial connections and exposes it in a standardized API for easy integration with dashboards, GUIs, or other software.
-
----
+A lightweight, cross-platform REST API server for BenchLab telemetry data collection and monitoring.
 
 ## Features
 
-- Automatically detects connected Benchlab devices over USB serial.
-- Periodic polling and caching of telemetry data.
-- Endpoints to query:
-  - Device info
-  - Latest telemetry
-  - Individual sensor readings
-  - Historical telemetry
-  - Available sensors
-- WebSocket support for live telemetry streaming.
-- Configurable via `.env` file:
-  - Poll interval
-  - History length
-  - API host/port
-  - Log level
-- Optional TUI, MQTT, GUI, and VU analog dials (via command-line flags in the main launcher).
+### ✨ Core Improvements
+- **Cross-platform device discovery** - Automatically detects BenchLab devices on Windows, Linux, and macOS
+- **Robust error handling** - Comprehensive error handling and logging for production use
+- **Configuration management** - Environment-based configuration with validation
+- **Health monitoring** - Built-in health check and status endpoints
+- **CORS support** - Ready for web client integration
 
----
+### 🚀 Performance Enhancements
+- **Efficient data streaming** - WebSocket support for real-time telemetry updates
+- **Configurable polling** - Adjustable sensor read intervals (minimum 0.1s)
+- **History management** - Configurable history buffer with pagination
+- **Connection pooling** - Optimized serial connection management
 
-## Installation
+### 🛡️ Reliability Features
+- **Graceful shutdown** - Proper cleanup of threads and connections
+- **Device reconnection** - Automatic handling of device disconnects/reconnects
+- **Validation** - Input validation and configuration checks
+- **Logging** - Structured logging with configurable levels
 
-1. Clone the repository:
+## Quick Start
 
-```
-git clone https://github.com/BenchLab-io/benchlab-pytools.git
-cd benchlab-pytools
-```
-
-2. Create and activate a Python virtual environment:
-
-```
-python -m venv benchlab
-# Linux/macOS
-source benchlab/bin/activate
-# Windows
-benchlab\Scripts\activate
+### 1. Installation
+```bash
+cd benchlab/fastapi
+pip install -r requirements.txt
 ```
 
-3. Install dependencies:
-
-```
-pip install -r fastapi/requirements.txt
-```
-
-4. Copy `.env.example` to `.env` and customize if needed:
-
-```
-LOG_LEVEL=INFO
-POLL_INTERVAL=1.0
-HISTORY_LENGTH=10
-API_HOST=0.0.0.0
-API_PORT=8000
+### 2. Configuration
+Copy the example configuration and customize as needed:
+```bash
+cp .env.example .env
 ```
 
----
+Edit `.env` to configure:
+- Server host and port
+- Polling intervals
+- History buffer size
+- Log levels
 
-## Running the API
-
-From the `benchlab-pytools` folder:
-
-```
-python benchlab.py -fastapi
-```
-
-By default, the server runs on the host and port specified in `.env` (`0.0.0.0:8000`).
-
-### API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/devices` | GET | List all connected Benchlab devices with ports |
-| `/device/{uid}/info` | GET | Return basic device info (cached) |
-| `/device/{uid}/telemetry` | GET | Return latest telemetry readings |
-| `/device/{uid}/telemetry/{sensor}` | GET | Return a single sensor reading |
-| `/device/{uid}/history` | GET | Return last N telemetry readings |
-| `/device/{uid}/sensors` | GET | Return all available sensor keys |
-| `/device/{uid}/stream` | WS | WebSocket endpoint for live telemetry |
-
-> Example:
->
-> ```
-> curl http://localhost:8000/device/2C003D001457435735363620/telemetry
-> ```
-
----
-
-## FastAPI Folder Structure
-
-```
-fastapi/
-├── __init__.py
-├── telemetry_api.py      # Main FastAPI server
-├── readme.md             # This README
-├── requirements.txt      # FastAPI dependencies
-├── benchlab.ico          # Optional favicon
-└── __pycache__/          # Python cache folder
+### 3. Run the Server
+```bash
+python -m benchlab.fastapi.telemetry_api
 ```
 
----
+The server will start on `http://localhost:8000` by default.
 
-## Configuration via `.env`
+## API Endpoints
+
+### Device Management
+- `GET /devices` - List all connected devices
+- `GET /device/{uid}/info` - Get device information
+- `GET /device/{uid}/status` - Get detailed device status
+
+### Telemetry Data
+- `GET /device/{uid}/telemetry` - Get latest telemetry
+- `GET /device/{uid}/telemetry/{sensor}` - Get specific sensor data
+- `GET /device/{uid}/history` - Get telemetry history (with pagination)
+- `GET /device/{uid}/sensors` - List available sensors
+
+### Real-time Streaming
+- `WebSocket /device/{uid}/stream` - Real-time telemetry updates
+
+### Monitoring
+- `GET /health` - Basic health check
+- `GET /status` - Detailed server status
+
+## Configuration Options
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LOG_LEVEL` | INFO | Logging level for the API |
-| `POLL_INTERVAL` | 1.0 | Seconds between device polls |
-| `HISTORY_LENGTH` | 10 | Number of telemetry entries to keep in memory |
-| `API_HOST` | 0.0.0.0 | Host address to serve API |
-| `API_PORT` | 8000 | Port to serve API |
+| `API_HOST` | `0.0.0.0` | Server bind address |
+| `API_PORT` | `8000` | Server port (1-65535) |
+| `LOG_LEVEL` | `INFO` | Logging level |
+| `POLL_INTERVAL` | `1.0` | Sensor read interval in seconds (min 0.1) |
+| `HISTORY_LENGTH` | `10` | Number of history entries per device |
+| `MAX_HISTORY_LIMIT` | `1000` | Max history limit for API requests |
+| `SCAN_INTERVAL` | `30` | Device discovery scan interval in seconds |
 
----
+## Cross-Platform Support
 
-## Contributing
+The server automatically detects and works with BenchLab devices across different platforms:
 
-1. Fork the repository.
-2. Create a new branch for your feature/bugfix.
-3. Submit a pull request with a clear description of your changes.
+- **Windows**: COM1-COM9 ports
+- **Linux**: `/dev/ttyUSB*`, `/dev/ttyACM*`, `/dev/ttyS*` ports
+- **macOS**: `/dev/tty.*` ports
 
----
+## Testing
 
-## Notes
+Run the test suite to verify the server functionality:
+```bash
+python test_server.py
+```
 
-- Ensure you have permission to access the USB serial ports.
-- The API caches device info and telemetry; querying endpoints **does not reopen serial ports**.
-- WebSocket clients will receive live telemetry updates at the configured polling interval.
+This tests:
+- Server startup and configuration
+- API endpoint registration
+- Cross-platform device detection
+- Error handling and validation
 
----
+## Usage Examples
 
-Made with ❤️ by the Benchlab Team
+### Get Device List
+```bash
+curl http://localhost:8000/devices
+```
+
+### Get Latest Telemetry
+```bash
+curl http://localhost:8000/device/ABC123/telemetry
+```
+
+### Get Sensor History
+```bash
+curl "http://localhost:8000/device/ABC123/history?limit=50"
+```
+
+### Real-time Streaming (WebSocket)
+```javascript
+const ws = new WebSocket('ws://localhost:8000/device/ABC123/stream');
+ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    console.log('Telemetry update:', data);
+};
+```
+
+## Production Deployment
+
+### Docker Support
+The server is designed for containerization:
+```dockerfile
+FROM python:3.9-slim
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+CMD ["python", "-m", "benchlab.fastapi.telemetry_api"]
+```
+
+### Systemd Service (Linux)
+Create `/etc/systemd/system/benchlab-api.service`:
+```ini
+[Unit]
+Description=BenchLab Telemetry API
+After=network.target
+
+[Service]
+Type=simple
+User=benchlab
+WorkingDirectory=/opt/benchlab
+ExecStart=/usr/bin/python3 -m benchlab.fastapi.telemetry_api
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **No devices found**
+   - Check USB connections
+   - Verify device firmware
+   - Check serial port permissions
+
+2. **Permission errors**
+   - On Linux, add user to `dialout` group: `sudo usermod -a -G dialout $USER`
+   - Restart terminal or reboot after group changes
+
+3. **Port binding errors**
+   - Check if port is already in use
+   - Try a different port in configuration
+
+### Logging
+Enable debug logging for troubleshooting:
+```bash
+LOG_LEVEL=DEBUG python -m benchlab.fastapi.telemetry_api
+```
+
+## Development
+
+### Adding New Endpoints
+1. Add the endpoint function in `telemetry_api.py`
+2. Use FastAPI decorators (`@app.get`, `@app.post`, etc.)
+3. Add proper error handling and validation
+4. Update this README with new endpoints
+
+### Testing Changes
+1. Run the test suite: `python test_server.py`
+2. Test manually with curl or a REST client
+3. Verify WebSocket functionality
+
+## License
+
+This project is part of the BenchLab suite. See the main project license for details.

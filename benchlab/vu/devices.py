@@ -6,7 +6,7 @@ import time
 import requests
 import logging
 
-from benchlab.core.serial_io import get_benchlab_ports, open_serial_connection, read_uid
+from benchlab_pycore.core.serial_io import get_benchlab_ports, open_serial_connection, read_uid
 
 DUMMY_UID = "0000000000000000"
 DUMMY_BENCHLAB = {"port": None, "uid": DUMMY_UID}

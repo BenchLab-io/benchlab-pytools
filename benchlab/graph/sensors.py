@@ -1,19 +1,11 @@
 # benchlab/graph/sensors.py
 
-from benchlab.core.sensor_translation import translate_sensor_struct
-from benchlab.core.serial_io import read_sensors
-from benchlab.core.structures import (
-    SensorStruct,
-    PowerSensor,
-    FanSensor,
-    SENSOR_POWER_NUM,
-    FAN_NUM,
-)
+from benchlab_pycore.core import translate_sensor_struct, read_sensors, SensorStruct, PowerSensor, FanSensor, SENSOR_POWER_NUM, FAN_NUM
 
 def get_available_sensors():
     """Return all telemetry fields that can be selected in the graph."""
     # Use a sample struct for generating keys
-    from benchlab.core.structures import SensorStruct, PowerSensor, FanSensor, SENSOR_VIN_NUM
+    from benchlab_pycore.core.structures import SensorStruct, PowerSensor, FanSensor, SENSOR_VIN_NUM
 
     sensors = []
 

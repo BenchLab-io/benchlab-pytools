@@ -12,8 +12,8 @@ import sys
 import threading
 import time
 
-from benchlab.core.sensor_translation import translate_sensor_struct
-from benchlab.core.serial_io import get_fleet_info, open_serial_connection, read_sensors
+from benchlab_pycore.core import translate_sensor_struct, read_sensors
+from benchlab_pycore.core.serial_io import get_fleet_info, open_serial_connection
 
 MQTTV5_REASON_CODES = {
     0:  "Success",
