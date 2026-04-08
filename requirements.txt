@@ -1,5 +1,17 @@
-pyserial>=3.5
-paho-mqtt>=1.6.1
-packaging>=25.0
-windows-curses>=2.4.1; platform_system=="Windows"
-benchlab-pycore>=0.1.1
+# Core dependencies with version pins (DEP-1)
+pyserial>=3.5,<4.0
+paho-mqtt>=2.0,<3.0  # v2.0+ required for CallbackAPIVersion
+packaging>=23.0,<26.0
+python-dotenv>=1.0.0,<2.0
+amqtt>=0.11.0,<1.0  # embedded MQTT broker for testing
+pyyaml>=6.0,<7.0    # embedded broker config
+
+# Optional dependencies (tool-specific)
+dearpygui>=2.0  # graph tool
+requests>=2.28.0,<3.0  # fastapi datasource
+
+# Platform-specific
+windows-curses>=2.4.1,<3.0; platform_system=="Windows"  # tui tool
+
+# Internal dependency
+benchlab-pycore>=0.1.1,<1.0

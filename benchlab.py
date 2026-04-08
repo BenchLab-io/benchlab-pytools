@@ -9,11 +9,11 @@ import sys
 
 # --- Enforce Python version ---
 REQUIRED_MAJOR = 3
-REQUIRED_MINOR = 13
+REQUIRED_MINOR = 10  # Minimum required (BENCH-LAUNCH-1: was 13, too restrictive)
 
-if sys.version_info[:2] != (REQUIRED_MAJOR, REQUIRED_MINOR):
+if sys.version_info < (REQUIRED_MAJOR, REQUIRED_MINOR):
     sys.stderr.write(
-        f"ERROR: BENCHLAB PyTools only supports Python {REQUIRED_MAJOR}.{REQUIRED_MINOR}, "
+        f"ERROR: BENCHLAB PyTools requires Python {REQUIRED_MAJOR}.{REQUIRED_MINOR} or higher, "
         f"but you are running Python {sys.version_info.major}.{sys.version_info.minor}\n"
     )
     sys.exit(1)
@@ -31,7 +31,10 @@ if not logger.handlers:
 
 # --- Utilities ---
 def clear_screen():
-    os.system("cls" if os.name == "nt" else "clear")
+    try:
+        os.system("cls" if os.name == "nt" else "clear")
+    except KeyboardInterrupt:
+        pass
 
 
 def prompt_yes_no(msg, default=True):
@@ -151,7 +154,7 @@ def install_requirements_file(req_file, label):
 
 # --- Import benchlab only after PyTools deps ---
 try:
-    from benchlab.main import get_parser, launch_mode, main as benchlab_main
+    from benchlab.main import get_parser, launch_mode, interactive_loop, main as benchlab_main
 except ModuleNotFoundError as e:
     logger.error(f"Missing module: {e}. Make sure PyTools requirements are installed.")
     sys.exit(1)
@@ -192,6 +195,12 @@ MODES = {
         "desc": "MQTT publisher",
         "info": "Publishes telemetry data to an MQTT broker."
     },
+    "Multi-Tool": {
+        "flag": "-multi",
+        "reqs": [],
+        "desc": "Multi-tool selector",
+        "info": "Select and launch multiple tools simultaneously with shared data source."
+    },
     "VU": {
         "flag": "-vu",
         "reqs": ["vu"],
@@ -215,6 +224,14 @@ MODES = {
         "reqs": ["wigidash"],
         "desc": "WigiDash display support",
         "info": "Displays telemetry on a WigiDash device."
+    },
+    "Xeneon": {
+        "flag": "-xeneon",
+        "reqs": ["xeneon"],
+        "desc": "Web dashboard",
+        "info": "Launch Xeneon web dashboard for telemetry monitoring.",
+        "platforms": ["windows", "linux", "mac"],
+        "architectures": ["x86", "arm"]
     },
 }
 
@@ -275,7 +292,7 @@ def print_banner():
 ██████╔╝███████╗██║ ╚████║╚██████╗██║  ██║███████╗██║  ██║██████╔╝
 ╚═════╝ ╚══════╝╚═╝  ╚═══╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═════╝
 
-        ██████╗ ██╗   ██╗████████╗ ██████╗  ██████╗ ██╗     ███████╗
+        ██████╗ ██╗   ██╗████████╗ ██████╗  ██████╗ ██╗     ███████╗  
         ██╔══██╗╚██╗ ██╔╝╚══██╔══╝██╔═══██╗██╔═══██╗██║     ██╔════╝
         ██████╔╝ ╚████╔╝    ██║   ██║   ██║██║   ██║██║     ███████╗
         ██╔═══╝   ╚██╔╝     ██║   ██║   ██║██║   ██║██║     ╚════██║
@@ -301,43 +318,20 @@ def install_requirements(mods):
                 logger.warning(f"{m}: dependencies missing, feature may not work.")
 
 
-# --- Interactive launcher ---
+# --- Interactive launcher (v2) ---
 def interactive_menu():
+    """Delegate to the PyTools v2 interactive launcher."""
     try:
-        while True:
-            clear_screen()
-            print_banner()
-            print("=== BENCHLAB PyTools Launcher ===\n")
-
-            modes_list = available_modes_for_display()
-            for i, name in enumerate(modes_list, 1):
-                print(f"{i}. {name} - {MODES[list(MODES.keys())[i-1]]['desc']}")
-
-            print("\nSelect a feature by number or type 'info':")
-            choice = input("> ").strip().lower()
-
-            if choice == "info":
-                show_info()
-                continue
-
-            try:
-                idx = int(choice) - 1
-                selected_mode = list(MODES.keys())[idx]
-            except (ValueError, IndexError):
-                input("Invalid choice. Press Enter to continue...")
-                continue
-
-            # Install dependencies for the selected mode
-            install_requirements([selected_mode])
-
-            # Launch the mode immediately
-            sys.argv = [sys.argv[0], MODES[selected_mode]["flag"]]
-            launch_mode()
-            break
-
+        # Show info banner first, then v2 menu
+        clear_screen()
+        print_banner()
+        interactive_loop()
     except KeyboardInterrupt:
         logger.info("User interrupted launcher.")
         sys.exit(0)
+    finally:
+        # Clear screen before returning to shell
+        clear_screen()
 
 
 

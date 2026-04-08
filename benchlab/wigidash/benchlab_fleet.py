@@ -29,6 +29,9 @@ class BenchlabFleetSelect:
         # Build fleet cache
         self.fleet_cache = []
         if self.manager:
+            # Refresh the manager's device cache to ensure we have current data
+            self.manager.get_available_benchlabs(log_info=False)
+            
             for port, info in self.manager.benchlab_devices.items():
                 self.fleet_cache.append({
                     "port": port,

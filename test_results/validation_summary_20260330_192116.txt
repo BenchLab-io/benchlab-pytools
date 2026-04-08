@@ -1,0 +1,47 @@
+============================================================
+BENCHLAB DataSource Validation Summary
+============================================================
+
+Overall Status: 2/3 sources fully operational
+Failed: 1
+
+Test Result: DirectDataSource: PASSED
+   Duration: 1.5s
+   Devices found: 1
+   Sensors available: 88
+   Device: COM4 (firmware: Unknown)
+   Sample telemetry:
+      SYS_Power: 182.129
+      CPU_Power: 73.48
+      GPU_Power: 40.317
+      MB_Power: 68.332
+      EPS1_Voltage: 12.083
+      ... and 83 more
+
+Test Result: FastAPIDataSource: PASSED
+   Duration: 4.9s
+   Devices found: 1
+   Sensors available: 88
+   Warnings:
+      - Telemetry data differs from DirectDataSource
+   Sample telemetry:
+      SYS_Power: 182.80700000000002
+      CPU_Power: 73.477
+      GPU_Power: 39.353
+      MB_Power: 69.977
+      EPS1_Voltage: 12.083
+      ... and 83 more
+
+Test Result: MQTTDataSource: FAILED
+   Duration: 10.2s
+   Devices found: 0
+   Sensors available: 0
+   Error: No devices discovered via MQTT
+
+Recommendations:
+- Check device connections and power
+- Verify benchlab-pycore installation
+- Ensure required dependencies are installed
+
+Detailed results saved to test_results/ directory
+============================================================

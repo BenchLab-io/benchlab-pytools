@@ -61,7 +61,7 @@ def telemetry_step(app, device_info=None, sensor_struct=None):
     """
     Process one telemetry iteration.
     - device_info: optional dict already read from serial
-    - sensor_struct: optional raw sensor data already read from serial
+    - sensor_struct: optional raw sensor data (from serial) or already translated dict (from DataSource)
     """
     try:
         # Use device info if provided
@@ -74,10 +74,16 @@ def telemetry_step(app, device_info=None, sensor_struct=None):
             logger.warning("No sensor data provided to telemetry_step")
             return
 
-        data = translate_sensor_struct(sensor_struct)
-        if data is None:
-            logger.warning("Failed to translate sensor data")
-            return
+        # Handle both raw sensor struct (direct serial) and pre-translated dict (DataSource)
+        if isinstance(sensor_struct, dict):
+            # DataSource path: already translated dict
+            data = sensor_struct
+        else:
+            # Direct serial path: raw struct needing translation
+            data = translate_sensor_struct(sensor_struct)
+            if data is None:
+                logger.warning("Failed to translate sensor data")
+                return
 
         # --- Cleanup & normalization ---
         data.setdefault("Fans", [])

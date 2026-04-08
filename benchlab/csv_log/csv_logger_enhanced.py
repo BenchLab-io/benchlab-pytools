@@ -18,11 +18,13 @@ from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, asdict
 import logging
 
-# Import core functionality
+# Import core functionality and DataSource
 try:
-    from benchlab_pycore.core import read_sensors, read_uid, read_device, get_benchlab_ports, translate_sensor_struct
+    from benchlab_pycore.core import translate_sensor_struct
+    from benchlab.core.datasource import DataSource, DirectDataSource, FastAPIDataSource, MQTTDataSource
+    from benchlab.core.infrastructure import InfrastructureManager
 except ImportError:
-    print("Error: benchlab_pycore not available. Please install dependencies.")
+    print("Error: benchlab_pycore or benchlab.core not available. Please install dependencies.")
     sys.exit(1)
 
 @dataclass
@@ -55,7 +57,7 @@ class EnhancedCSVLogger:
     def __init__(self, config: LoggerConfig):
         self.config = config
         self.devices: Dict[str, DeviceConfig] = {}
-        self.device_connections: Dict[str, serial.Serial] = {}
+        self.data_sources: Dict[str, DataSource] = {}
         self.writers: Dict[str, Any] = {}
         self.files: Dict[str, Any] = {}
         self.logging_active = False
@@ -68,6 +70,55 @@ class EnhancedCSVLogger:
         # Ensure output directory exists
         Path(self.config.output_dir).mkdir(parents=True, exist_ok=True)
         
+        # Initialize infrastructure for shared services
+        self.infrastructure = InfrastructureManager()
+        self.selected_data_sources = {}
+        self._data_source_types = {}  # Track which types have been created
+        # Lazy initialization of data sources (PERF-1.1)
+        
+    def _get_or_create_data_source(self, source_type: str) -> Optional[DataSource]:
+        """Lazy-initialize a data source on demand (PERF-1.1).
+        
+        Args:
+            source_type: Type of data source ('direct', 'fastapi', 'mqtt')
+            
+        Returns:
+            DataSource instance, or None if creation failed
+        """
+        if source_type in self.data_sources:
+            return self.data_sources[source_type]
+        
+        if source_type in self._data_source_types:
+            return None  # Already failed, don't retry
+        
+        source_classes = {
+            'direct': DirectDataSource,
+            'fastapi': FastAPIDataSource,
+            'mqtt': MQTTDataSource,
+        }
+        
+        cls = source_classes.get(source_type)
+        if cls is None:
+            logging.error("Unknown data source type: %s", source_type)
+            self._data_source_types[source_type] = False
+            return None
+        
+        try:
+            ds = cls()
+            self.data_sources[source_type] = ds
+            self._data_source_types[source_type] = True
+            logging.info("Lazy-initialized data source: %s", source_type)
+            return ds
+        except Exception as e:
+            logging.error("Failed to initialize data source %s: %s", source_type, e)
+            self._data_source_types[source_type] = False
+            return None
+    
+    def _initialize_data_sources(self):
+        """Initialize all available data source types (deprecated - use lazy init)."""
+        # Only keep this for backward compatibility, but use lazy init instead
+        logging.debug("_initialize_data_sources() deprecated, using lazy init")
+    
     def setup_logging(self):
         """Setup logging configuration"""
         if self.config.silent_mode:
@@ -77,59 +128,87 @@ class EnhancedCSVLogger:
                 level=logging.INFO,
                 format='%(asctime)s - %(levelname)s - %(message)s'
             )
+
+    def discover_data_sources(self) -> List[DataSource]:
+        """Discover all available data sources"""
+        discovered_sources = []
+        
+        for ds in self.data_sources.values():
+            discovered_sources.append(ds)
+        
+        return discovered_sources
     
     def discover_devices(self) -> List[DeviceConfig]:
-        """Discover all BENCHLAB devices with enhanced error handling"""
+        """Discover all BENCHLAB devices using data sources"""
         discovered_devices = []
-        ports = get_benchlab_ports()
         
-        if not ports:
-            logging.warning("No BENCHLAB ports found")
-            return discovered_devices
-            
-        for port_info in ports:
-            port = port_info.get("port")
-            if not port:
-                continue
-                
-            device_config = self._probe_device(port)
-            if device_config:
-                discovered_devices.append(device_config)
-                
-        return discovered_devices
-    
-    def _probe_device(self, port: str) -> Optional[DeviceConfig]:
-        """Probe a single port for BENCHLAB device"""
-        for attempt in range(self.config.retry_attempts):
+        for ds in self.discover_data_sources():
             try:
-                ser = serial.Serial(port, baudrate=115200, timeout=1)
-                uid = read_uid(ser)
-                device_info = read_device(ser)
-                fw = device_info.get("FwVersion", "?") if device_info else "?"
-                ser.close()
-                
-                if uid and uid != "?":
+                devices = ds.list_devices()
+                for device in devices:
                     device_config = DeviceConfig(
-                        port=port,
-                        uid=uid,
-                        firmware=fw,
+                        port=device.get("port", "unknown"),
+                        uid=device.get("uid", "unknown"),
+                        firmware=device.get("firmware", "?"),
                         last_seen=datetime.now()
                     )
-                    logging.info(f"Found device: {uid} on {port} (FW: {fw})")
-                    return device_config
-                else:
-                    logging.warning(f"No valid UID on {port}")
-                    return None
-                    
-            except serial.SerialException as e:
-                logging.warning(f"Serial error on {port} (attempt {attempt + 1}): {e}")
-                if attempt < self.config.retry_attempts - 1:
-                    time.sleep(self.config.retry_delay * (2 ** attempt))  # Exponential backoff
+                    discovered_devices.append(device_config)
             except Exception as e:
-                logging.error(f"Unexpected error probing {port}: {e}")
-                break
-                
+                logging.warning(f"Failed to get devices from data source {ds}: {e}")
+        
+        return discovered_devices
+    
+    def _probe_data_source(self, data_source: DataSource) -> Optional[DeviceConfig]:
+        """Probe a single data source for BENCHLAB device"""
+        try:
+            devices = data_source.get_devices()
+            if devices:
+                device = devices[0]  # Take the first device
+                device_config = DeviceConfig(
+                    port=device.get("port", "unknown"),
+                    uid=device.get("uid", "unknown"),
+                    firmware=device.get("firmware", "?"),
+                    last_seen=datetime.now()
+                )
+                logging.info(f"Found device: {device_config.uid} via {data_source}")
+                return device_config
+        except Exception as e:
+            logging.warning(f"Failed to probe data source {data_source}: {e}")
+        
         return None
+
+    def select_data_sources(self, data_sources: List[DataSource]) -> List[DataSource]:
+        """Select data sources to use"""
+        if not data_sources:
+            logging.error("No data sources available")
+            return []
+            
+        if self.config.auto_select or self.config.silent_mode:
+            logging.info(f"Auto-selecting all {len(data_sources)} data sources")
+            return data_sources
+            
+        # Interactive selection
+        print("\n--- Available Data Sources ---")
+        for i, ds in enumerate(data_sources, 1):
+            print(f"{i}: Type: {type(ds).__name__} Config: {ds}")
+            
+        selection = input(
+            "\nEnter data source numbers to use (comma-separated, e.g., 1,2), 'all', or press Enter for all: "
+        ).strip().lower()
+        
+        if selection == "all" or not selection:
+            return data_sources
+        else:
+            try:
+                indices = [int(s.strip()) - 1 for s in selection.split(",")]
+                selected = [data_sources[i] for i in indices if 0 <= i < len(data_sources)]
+                if selected:
+                    return selected
+            except (ValueError, IndexError):
+                pass
+                
+        logging.error("Invalid selection")
+        return []
     
     def select_devices(self, devices: List[DeviceConfig]) -> List[DeviceConfig]:
         """Select devices to log with enhanced selection logic"""
@@ -164,33 +243,55 @@ class EnhancedCSVLogger:
         logging.error("Invalid selection")
         return []
     
-    def open_connections(self, devices: List[DeviceConfig]) -> Dict[str, serial.Serial]:
-        """Open serial connections with retry logic"""
+    def open_data_source_connections(self, data_sources: List[DataSource]) -> Dict[str, DataSource]:
+        """Open connections to data sources"""
+        connections = {}
+        
+        for ds in data_sources:
+            try:
+                ds.connect()
+                # Use a unique identifier for the data source
+                identifier = f"{ds.source_type}_{id(ds)}"
+                connections[identifier] = ds
+                logging.info(f"Connected to data source: {ds.source_type}")
+            except Exception as e:
+                logging.warning(f"Failed to connect to data source {ds.source_type}: {e}")
+                continue
+        
+        return connections
+    
+    def open_device_connections(self, devices: List[DeviceConfig]) -> Dict[str, DataSource]:
+        """Open connections to devices using data sources"""
         connections = {}
         
         for device in devices:
-            for attempt in range(self.config.retry_attempts):
+            # Find a data source that can handle this device
+            for ds in self.selected_data_sources.values():
                 try:
-                    ser = serial.Serial(device.port, baudrate=115200, timeout=0.5)
-                    connections[device.uid] = ser
-                    logging.info(f"Connected to {device.uid} on {device.port}")
-                    break
-                except serial.SerialException as e:
-                    logging.warning(f"Failed to open {device.port} (attempt {attempt + 1}): {e}")
-                    if attempt < self.config.retry_attempts - 1:
-                        time.sleep(self.config.retry_delay * (2 ** attempt))
+                    # Handle DirectDataSource differently - it connects to all devices automatically
+                    if ds.source_type == "direct":
+                        # DirectDataSource already handles all devices when connected
+                        connections[device.uid] = ds
+                        logging.info(f"Connected to device {device.uid} via DirectDataSource")
+                        break
+                    else:
+                        # For FastAPI and MQTT data sources, connect to specific device
+                        ds.connect_device(device.uid)
+                        connections[device.uid] = ds
+                        logging.info(f"Connected to device {device.uid} via data source {ds}")
+                        break
                 except Exception as e:
-                    logging.error(f"Unexpected error opening {device.port}: {e}")
-                    break
-                    
+                    logging.debug(f"Data source {ds} cannot handle device {device.uid}: {e}")
+                    continue
+        
         return connections
     
-    def initialize_writers(self, connections: Dict[str, serial.Serial]):
+    def initialize_writers(self, connections: Dict[str, DataSource]):
         """Initialize CSV writers with buffering"""
-        for uid, ser in connections.items():
+        for uid, ds in connections.items():
             try:
                 # Get initial sensor data for headers
-                data = translate_sensor_struct(read_sensors(ser))
+                data = self.get_sensor_data(ds, uid)
                 timestamp = datetime.now().isoformat()
                 row = {"Timestamp": timestamp, **data}
                 
@@ -242,10 +343,34 @@ class EnhancedCSVLogger:
         except Exception as e:
             logging.error(f"Failed to write buffered data for {uid}: {e}")
     
-    def log_device_data(self, uid: str, ser: serial.Serial):
+    def get_sensor_data(self, data_source: DataSource, uid: str) -> Dict:
+        """Get sensor data from a data source"""
+        try:
+            data = data_source.get_telemetry(uid)
+            if not data:
+                # Try to refresh data
+                data_source.refresh()
+                data = data_source.get_telemetry(uid)
+            return data if data else {}
+        except Exception as e:
+            logging.debug(f"Failed to get sensor data for {uid} from {data_source}: {e}")
+            return {}
+
+    def log_device_data(self, uid: str):
         """Log data for a single device with error handling"""
         try:
-            data = translate_sensor_struct(read_sensors(ser))
+            # Get the data source for this device
+            # The device connections are stored in selected_data_sources after open_device_connections
+            data_source = self.selected_data_sources.get(uid)
+            if not data_source:
+                logging.warning(f"No data source found for device {uid}")
+                return False
+            
+            data = self.get_sensor_data(data_source, uid)
+            if not data:
+                logging.warning(f"No data available for device {uid}")
+                return False
+            
             timestamp = datetime.now().isoformat()
             row = {"Timestamp": timestamp, **data}
             
@@ -257,88 +382,121 @@ class EnhancedCSVLogger:
             if len(self.data_buffers[uid]) >= self.config.buffer_size:
                 self.write_buffered_data(uid)
                 
-            # Console summary
+            # Console summary (PERF-4.1 fix: replaced print+\r with logging)
             if not self.config.silent_mode:
                 sys_power = data.get("SYS_Power", 0)
                 cpu_power = data.get("CPU_Power", 0)
                 gpu_power = data.get("GPU_Power", 0)
-                print(f"[{uid}] SYS:{sys_power:.0f}W CPU:{cpu_power:.0f}W GPU:{gpu_power:.0f}W",
-                      end="\r", flush=True)
+                logging.debug(f"[{uid}] SYS:{sys_power:.0f}W CPU:{cpu_power:.0f}W GPU:{gpu_power:.0f}W")
                       
-        except serial.SerialException as e:
-            logging.warning(f"Serial error reading {uid}: {e}")
-            return False  # Signal connection issue
+            return True
+                      
         except Exception as e:
             logging.error(f"Error logging data for {uid}: {e}")
-            
-        return True
+            return False
     
-    def monitor_connections(self, connections: Dict[str, serial.Serial]):
+    def monitor_connections(self):
         """Monitor and reconnect dropped connections"""
         while self.logging_active:
-            for uid, ser in list(connections.items()):
-                if not ser.is_open:
-                    logging.warning(f"Connection lost for {uid}, attempting reconnection")
-                    device_config = self.devices.get(uid)
-                    if device_config:
-                        reconnected_ser = self._reconnect_device(device_config)
-                        if reconnected_ser:
-                            connections[uid] = reconnected_ser
-                            logging.info(f"Reconnected to {uid}")
-                        else:
-                            logging.error(f"Failed to reconnect to {uid}")
+            for uid, data_source in list(self.selected_data_sources.items()):
+                try:
+                    if not data_source.is_connected():
+                        logging.warning(f"Connection lost for {uid}, attempting reconnection")
+                        data_source.connect()
+                        logging.info(f"Reconnected to {uid}")
+                except Exception as e:
+                    logging.debug(f"Reconnection attempt for {uid} failed: {e}")
             time.sleep(5)  # Check every 5 seconds
     
-    def _reconnect_device(self, device_config: DeviceConfig) -> Optional[serial.Serial]:
-        """Attempt to reconnect to a device"""
-        for attempt in range(self.config.retry_attempts):
-            try:
-                ser = serial.Serial(device_config.port, baudrate=115200, timeout=0.5)
-                # Verify it's still the same device
-                uid = read_uid(ser)
-                if uid == device_config.uid:
-                    return ser
-                else:
-                    ser.close()
-                    logging.warning(f"Device changed on {device_config.port}")
-                    return None
-            except Exception as e:
-                logging.warning(f"Reconnection attempt {attempt + 1} failed for {uid}: {e}")
-                if attempt < self.config.retry_attempts - 1:
-                    time.sleep(self.config.retry_delay * (2 ** attempt))
-        return None
+    def _reconnect_data_source(self, data_source: DataSource) -> bool:
+        """Attempt to reconnect to a data source"""
+        try:
+            data_source.connect()
+            return True
+        except Exception as e:
+            logging.warning(f"Reconnection attempt failed for {data_source}: {e}")
+            return False
     
     def start_logging(self):
         """Start the enhanced logging process"""
-        # Discover devices
-        discovered_devices = self.discover_devices()
-        if not discovered_devices:
-            logging.error("No devices found")
+        # Discover data sources
+        discovered_data_sources = self.discover_data_sources()
+        if not discovered_data_sources:
+            logging.error("No data sources found")
             return
             
+        # Select data sources
+        selected_data_sources = self.select_data_sources(discovered_data_sources)
+        if not selected_data_sources:
+            logging.error("No data sources selected")
+            return
+            
+        # Store selected data sources with both identifier and device mappings
+        self.selected_data_sources = {}  # Reset to store device mappings
+        self.data_source_identifiers = {}  # Store original identifier mappings
+        
+        for ds in selected_data_sources:
+            identifier = f"{ds.source_type}_{id(ds)}"
+            self.data_source_identifiers[identifier] = ds
+            # Also store in selected_data_sources for device connection
+            self.selected_data_sources[identifier] = ds
+        
+        # Discover devices from selected data sources
+        discovered_devices = []
+        for ds in selected_data_sources:
+            try:
+                devices = ds.list_devices()
+                for device in devices:
+                    device_config = DeviceConfig(
+                        port=device.get("port", "unknown"),
+                        uid=device.get("uid", "unknown"),
+                        firmware=device.get("firmware", "?"),
+                        last_seen=datetime.now()
+                    )
+                    discovered_devices.append(device_config)
+            except Exception as e:
+                logging.warning(f"Failed to get devices from data source {ds}: {e}")
+        
+        if not discovered_devices:
+            logging.error("No devices found from selected data sources")
+            return
+        
         # Select devices
         selected_devices = self.select_devices(discovered_devices)
         if not selected_devices:
             logging.error("No devices selected")
             return
-            
+        
         # Store device configs
         for device in selected_devices:
             self.devices[device.uid] = device
-            
-        # Open connections
-        connections = self.open_connections(selected_devices)
-        if not connections:
-            logging.error("No connections established")
+        
+        # Open connections to data sources
+        data_source_connections = self.open_data_source_connections(selected_data_sources)
+        if not data_source_connections:
+            logging.error("No data source connections established")
             return
-            
+        
+        # Open connections to devices via data sources
+        device_connections = self.open_device_connections(selected_devices)
+        if not device_connections:
+            logging.error("No device connections established")
+            return
+        
+        # Store device-to-data-source mapping for logging
+        # Use separate variable to avoid losing data source identifier mappings
+        self.device_connections = device_connections
+        # Also update selected_data_sources with device mappings for log_device_data
+        for uid, ds in device_connections.items():
+            self.selected_data_sources[uid] = ds
+        
         # Initialize writers
-        self.initialize_writers(connections)
+        self.initialize_writers(device_connections)
         
         # Start logging threads
         self.logging_active = True
-        logging_thread = threading.Thread(target=self._logging_loop, args=(connections,))
-        monitor_thread = threading.Thread(target=self.monitor_connections, args=(connections,))
+        logging_thread = threading.Thread(target=self._logging_loop)
+        monitor_thread = threading.Thread(target=self.monitor_connections)
         
         logging_thread.daemon = True
         monitor_thread.daemon = True
@@ -351,50 +509,68 @@ class EnhancedCSVLogger:
             while self.logging_active:
                 time.sleep(0.5)
                 # Periodically flush buffers
-                for uid in connections.keys():
+                for uid in self.data_buffers.keys():
                     if len(self.data_buffers.get(uid, [])) > 0:
                         self.write_buffered_data(uid)
                         
         except KeyboardInterrupt:
             logging.info("Stopping logging...")
-            self.stop_logging(connections)
+            self.stop_logging()
             
-    def _logging_loop(self, connections: Dict[str, serial.Serial]):
+    def _logging_loop(self):
         """Main logging loop with enhanced error handling"""
         while self.logging_active:
-            for uid, ser in connections.items():
+            for uid in self.devices.keys():
                 if not self.logging_active:
                     break
                     
-                success = self.log_device_data(uid, ser)
+                success = self.log_device_data(uid)
                 if not success:
                     # Connection lost, remove from active connections
-                    if uid in connections:
-                        del connections[uid]
+                    if uid in self.selected_data_sources:
+                        del self.selected_data_sources[uid]
                         
             time.sleep(self.config.interval)
     
-    def stop_logging(self, connections: Dict[str, serial.Serial]):
+    def stop_logging(self):
         """Stop logging and cleanup resources"""
         self.logging_active = False
         
+        # Wait for logging threads to finish (with timeout)
+        current_threads = [t for t in threading.enumerate() 
+                          if t.name in ("LoggingLoop", "ConnectionMonitor")]
+        for thread in current_threads:
+            thread.join(timeout=5)
+            if thread.is_alive():
+                logging.warning(f"Thread {thread.name} did not stop gracefully")
+        
         # Flush remaining buffers
-        for uid in connections.keys():
+        for uid in list(self.data_buffers.keys()):
             self.write_buffered_data(uid)
             
         # Close files
-        for f in self.files.values():
+        for uid, f in list(self.files.items()):
             try:
-                f.close()
+                if not f.closed:
+                    f.flush()
+                    f.close()
             except Exception as e:
-                logging.error(f"Error closing file: {e}")
+                logging.error(f"Error closing file for {uid}: {e}")
                 
-        # Close serial connections
-        for ser in connections.values():
+        # Disconnect data sources
+        for uid, ds in list(self.device_connections.items()):
             try:
-                ser.close()
+                ds.disconnect()
             except Exception as e:
-                logging.error(f"Error closing serial connection: {e}")
+                logging.error(f"Error disconnecting data source for {uid}: {e}")
+        
+        # Also disconnect data source identifiers
+        for identifier, ds in list(self.data_source_identifiers.items()):
+            try:
+                if ds.is_connected():
+                    ds.disconnect()
+            except Exception as e:
+                logging.error(f"Error disconnecting data source {identifier}: {e}")
                 
         logging.info("Logging stopped")
 

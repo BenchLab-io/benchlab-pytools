@@ -1,0 +1,32 @@
+============================================================
+BENCHLAB DataSource Validation Summary
+============================================================
+
+Overall Status: 0/3 sources fully operational
+Failed: 3
+
+Test Result: DirectDataSource: FAILED
+   Duration: 0.0s
+   Devices found: 0
+   Sensors available: 0
+   Error: No devices discovered
+
+Test Result: FastAPIDataSource: FAILED
+   Duration: 5.0s
+   Devices found: 0
+   Sensors available: 0
+   Error: No devices discovered via FastAPI
+
+Test Result: MQTTDataSource: FAILED
+   Duration: 0.0s
+   Devices found: 0
+   Sensors available: 0
+   Error: 'InfrastructureManager' object has no attribute 'start_mqtt'
+
+Recommendations:
+- Check device connections and power
+- Verify benchlab-pycore installation
+- Ensure required dependencies are installed
+
+Detailed results saved to test_results/ directory
+============================================================

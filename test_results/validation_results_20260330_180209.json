@@ -1,0 +1,49 @@
+{
+  "timestamp": "2026-03-30T18:02:09.802549",
+  "config": {
+    "fastapi_port": 8000,
+    "mqtt_broker": "localhost",
+    "mqtt_port": 1883,
+    "test_timeout": 30,
+    "verbose": true,
+    "output_dir": "test_results"
+  },
+  "results": {
+    "direct": {
+      "name": "DirectDataSource",
+      "status": "DataSourceStatus.FAILED",
+      "start_time": "2026-03-30 18:02:04.083361",
+      "end_time": "2026-03-30 18:02:04.134906",
+      "devices_found": 0,
+      "telemetry_sensors": 0,
+      "telemetry_data": null,
+      "device_info": null,
+      "error": "No devices discovered",
+      "warnings": []
+    },
+    "fastapi": {
+      "name": "FastAPIDataSource",
+      "status": "DataSourceStatus.FAILED",
+      "start_time": "2026-03-30 18:02:04.135733",
+      "end_time": "2026-03-30 18:02:09.790131",
+      "devices_found": 0,
+      "telemetry_sensors": 0,
+      "telemetry_data": null,
+      "device_info": null,
+      "error": "No devices discovered via FastAPI",
+      "warnings": []
+    },
+    "mqtt": {
+      "name": "MQTTDataSource",
+      "status": "DataSourceStatus.FAILED",
+      "start_time": "2026-03-30 18:02:09.790567",
+      "end_time": "2026-03-30 18:02:09.790682",
+      "devices_found": 0,
+      "telemetry_sensors": 0,
+      "telemetry_data": null,
+      "device_info": null,
+      "error": "'InfrastructureManager' object has no attribute 'start_mqtt'",
+      "warnings": []
+    }
+  }
+}

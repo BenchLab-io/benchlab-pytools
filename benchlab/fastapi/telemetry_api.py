@@ -19,8 +19,11 @@ from pathlib import Path
 from benchlab_pycore.core import read_sensors, read_device, read_uid, translate_sensor_struct
 from benchlab_pycore.core.serial_io import get_fleet_info, open_serial_connection
 
+# Import DeviceRegistry so the FastAPI server publishes device lifecycle events
+from benchlab.core.device_registry import DeviceRegistry
+
 # --- Load .env first ---
-dotenv_path = Path(__file__).parent / "fastapi" / ".env"
+dotenv_path = Path(__file__).parent / ".env"
 load_dotenv(dotenv_path)
 
 # Configuration class for better organization
@@ -74,10 +77,12 @@ if not logger.handlers:
 # --- FastAPI app ---
 app = FastAPI(title="Benchlab Multi-Device Telemetry API")
 
-# Add CORS middleware for cross-origin requests (useful for web clients)
+# Qual-2.3 fix: CORS configurable via environment variable
+# Default to "*" for local dev, but can restrict to known origins in production
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",") if os.getenv("CORS_ORIGINS") else ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for simplicity in lightweight setup
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -90,6 +95,9 @@ main_loop = None       # Will store main asyncio loop
 shutdown_event = threading.Event()  # Graceful shutdown flag
 device_connections = {}  # { uid: serial.Serial } - Track active connections
 connection_locks = {}    # { uid: threading.Lock } - Prevent duplicate connections
+device_threads = {}    # { uid: threading.Thread } - Track device reader threads
+scan_lock = threading.Lock()  # Prevent concurrent scans
+data_lock = threading.Lock()  # Protect concurrent access to devices_data
 
 # --- WebSocket broadcasting ---
 async def send_updates(uid, data):
@@ -97,84 +105,139 @@ async def send_updates(uid, data):
     if uid not in clients:
         return
     dead_clients = set()
-    for ws in clients[uid]:
+    # Iterate over a copy to avoid RuntimeError: Set changed size during iteration
+    for ws in list(clients[uid]):
         try:
             await ws.send_json(data)
         except Exception:
             dead_clients.add(ws)
     for ws in dead_clients:
-        clients[uid].remove(ws)
+        clients[uid].discard(ws)
 
 def schedule_update(uid, data):
     """Thread-safe schedule to send telemetry to WebSocket clients."""
     if main_loop is not None and not main_loop.is_closed():
         asyncio.run_coroutine_threadsafe(send_updates(uid, data), main_loop)
 
-# --- Serial reader thread per device ---
-def read_device_loop(port, uid):
-    """Continuously read sensor data from a specific device."""
-    ser = open_serial_connection(port)
-    if not ser:
-        logger.error("Failed to open serial port %s for device %s", port, uid)
-        return
+RECONNECT_DELAY = 2.0  # seconds
 
-    logger.info("Started telemetry loop for %s (%s)", uid, port)
+def read_device_loop(port, uid):
+    """Continuously read sensor data from a specific device with reconnection logic."""
+    ser = None
+    consecutive_errors = 0
+    max_consecutive_errors = 10  # After this many errors, attempt reconnect
+
     while not shutdown_event.is_set():
+        # --- (Re)connect ---
+        if ser is None:
+            try:
+                new_ser = open_serial_connection(port)  # BUG-2.2: Use local variable
+                if new_ser is None:
+                    raise OSError("open_serial_connection returned None")
+                ser = new_ser
+                consecutive_errors = 0  # Reset error counter on successful connect
+                logger.info("Connected to device %s on %s", uid, port)
+            except Exception as exc:
+                ser = None  # Ensure ser is None on error (BUG-2.2)
+                consecutive_errors += 1
+                delay = min(RECONNECT_DELAY * consecutive_errors, 30)  # Exponential backoff, capped
+                logger.warning("[%s] Failed to open serial port %s: %s (retry in %.1fs)", uid, port, exc, delay)
+                shutdown_event.wait(delay)
+                continue
+
+        # --- Read sensors ---
         try:
+            if ser is None:  # Safety check (BUG-2.2)
+                logger.warning("[%s] Serial connection unexpectedly None", uid)
+                shutdown_event.wait(1)
+                continue
             sensors = read_sensors(ser)
             if sensors:
                 translated = translate_sensor_struct(sensors)
-                translated["timestamp"] = datetime.utcnow().isoformat()
-                devices_data[uid]["latest"] = translated
-                devices_data[uid]["history"].append(translated)
+                translated["timestamp"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+                consecutive_errors = 0  # Reset error counter on successful read
+
+                with data_lock:
+                    if uid in devices_data:
+                        devices_data[uid]["latest"] = translated
+                        devices_data[uid]["history"].append(translated)
+
                 schedule_update(uid, translated)
             else:
-                logger.warning("[%s] No sensor data read", uid)
+                logger.debug("[%s] No sensor data read", uid)
         except Exception as e:
+            consecutive_errors += 1
             # Specific debug logging for unsupported commands
             if isinstance(e, PermissionError) and "does not recognize the command" in str(e):
                 logger.debug("[%s] Sensor read skipped (unsupported command): %s", uid, e)
             else:
-                logger.warning("[%s] Error reading sensors: %s", uid, e)
-        time.sleep(poll_interval)
-    ser.close()
+                logger.warning("[%s] Error reading sensors (consecutive: %d): %s", uid, consecutive_errors, e)
+
+            # Close serial connection on error to trigger reconnect
+            try:
+                ser.close()
+            except Exception:
+                pass
+            ser = None
+
+            # Exponential backoff with cap
+            if consecutive_errors >= max_consecutive_errors:
+                delay = min(RECONNECT_DELAY * consecutive_errors, 30)
+                logger.warning("[%s] Too many errors, backing off %.1fs", uid, delay)
+                shutdown_event.wait(delay)
+            continue
+
+        shutdown_event.wait(poll_interval)
+
+    # Cleanup
+    if ser:
+        try:
+            ser.close()
+        except Exception:
+            pass
     logger.info("Telemetry loop stopped for %s (%s)", uid, port)
 
 # --- Device discovery ---
-def get_device_ports():
-    """Get device ports based on platform for cross-platform compatibility."""
-    if sys.platform.startswith('win'):
-        # Windows COM ports
-        return ['COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9']
-    else:
-        # Linux/Unix tty ports
-        return glob.glob('/dev/ttyUSB*') + glob.glob('/dev/ttyACM*') + glob.glob('/dev/ttyS*')
+# NOTE: get_device_ports() removed - find_benchlab_devices() uses serial.tools.list_ports
+# directly which is more robust and cross-platform.
+# QUAL-2.2: Previously hardcoded to COM1-COM9 on Windows only.
+
+def is_benchlab_device(port_info):
+    """Check if a serial port is a BenchLab device based on hardware ID.
+    
+    This function only checks the hardware ID without opening the serial port,
+    ensuring we don't interfere with non-BenchLab devices.
+    """
+    port, desc, hwid = port_info
+    # Check for STM32 virtual COM port (BenchLab device)
+    return "VID:PID=0483:5740" in hwid.upper()
 
 def find_benchlab_devices():
-    """Return all connected Benchlab devices with proper UID and firmware."""
+    """Return all connected Benchlab devices with proper UID and firmware.
+    
+    IMPORTANT: This function only attempts to open serial ports for devices
+    that have been identified as BenchLab devices via hardware ID (VID:PID=0483:5740).
+    This prevents interference with non-BenchLab serial devices.
+    """
     devices = []
     logger.info("Scanning for Benchlab devices on platform: %s", sys.platform)
     
-    # Try both hardware ID detection and manual port scanning
-    for port, desc, hwid in serial.tools.list_ports.comports():
-        if "VID:PID=0483:5740" in hwid.upper():
+    # Only scan ports that match BenchLab hardware ID
+    # This ensures we don't open serial ports for non-BenchLab devices
+    for port_info in serial.tools.list_ports.comports():
+        port, desc, hwid = port_info
+        if is_benchlab_device(port_info):
+            logger.debug("Found potential BenchLab device on %s (HWID: %s)", port, hwid)
             device_info = read_device_info_from_port(port)
             if device_info:
                 devices.append(device_info)
+                logger.info("Confirmed BenchLab device: UID=%s on %s", device_info["uid"], port)
+        else:
+            # Log skipped ports at debug level for troubleshooting
+            logger.debug("Skipping non-BenchLab port: %s (HWID: %s)", port, hwid)
     
-    # Fallback: try manual port scanning for devices that might not be detected properly
     if not devices:
-        logger.info("No devices found via hardware ID, trying manual port scanning...")
-        for port in get_device_ports():
-            try:
-                # Quick test to see if port is accessible
-                ser = serial.Serial(port, baudrate=115200, timeout=1)
-                ser.close()
-                device_info = read_device_info_from_port(port)
-                if device_info:
-                    devices.append(device_info)
-            except (serial.SerialException, OSError):
-                continue  # Port not accessible or not a BenchLab device
+        logger.info("No BenchLab devices found via hardware ID detection.")
     
     return devices
 
@@ -213,21 +276,51 @@ def startup_event():
     for dev in found:
         port = dev["port"]
         uid = dev["uid"]
-        devices_data[uid] = {
-            "port": port,
-            "latest": {},
-            "history": deque(maxlen=history_length),
-            "info": read_device(open_serial_connection(port)) or {}
-        }
-        clients[uid] = set()
+        
+        # Read device info without keeping the connection open
+        # (the read_device_loop will open its own connection)
+        device_info = {}
+        try:
+            ser = open_serial_connection(port)
+            if ser:
+                device_info = read_device(ser) or {}
+                ser.close()
+        except Exception as e:
+            logger.debug("Could not read device info for %s: %s", uid, e)
+        
+        with data_lock:
+            devices_data[uid] = {
+                "port": port,
+                "latest": {},
+                "history": deque(maxlen=history_length),
+                "info": device_info
+            }
+            clients[uid] = set()
+
         t = threading.Thread(target=read_device_loop, args=(port, uid), daemon=True)
         t.start()
+
+        # Register device in the DeviceRegistry so tools can discover it
+        registry = DeviceRegistry.get_instance()
+        registry.register(
+            uid=uid,
+            port=port,
+            firmware=str(device_info.get("FwVersion", "?")),
+            data_source="fastapi",
+        )
+
     logger.info("Started %d device threads", len(found))
 
 @app.on_event("shutdown")
 def shutdown_event_handler():
     logger.info("Shutting down telemetry threads...")
     shutdown_event.set()
+
+    # Unregister all devices from the DeviceRegistry
+    registry = DeviceRegistry.get_instance()
+    for uid in list(devices_data.keys()):
+        registry.unregister(uid)
+
     # Give threads time to close cleanly
     time.sleep(poll_interval + 0.1)
     logger.info("Shutdown complete.")
@@ -325,7 +418,7 @@ def health_check():
     return {
         "status": "healthy",
         "platform": sys.platform,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now().isoformat(),
         "connected_devices": len(devices_data),
         "total_clients": sum(len(clients.get(uid, [])) for uid in devices_data)
     }
@@ -346,7 +439,7 @@ def get_status():
     return {
         "server_status": "running",
         "platform": sys.platform,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now().isoformat(),
         "devices": device_status,
         "total_devices": len(devices_data),
         "total_clients": sum(len(clients.get(uid, [])) for uid in devices_data)
@@ -369,6 +462,85 @@ def get_device_status(uid: str):
         "latest_telemetry": data.get("latest", {}),
         "info": data.get("info", {})
     }
+
+def start_device_thread(port, uid):
+    """Start a telemetry reader thread for a new device."""
+    # Initialize device data structure
+    if uid not in devices_data:
+        devices_data[uid] = {
+            "port": port,
+            "latest": {},
+            "history": deque(maxlen=history_length),
+            "info": {}
+        }
+    if uid not in clients:
+        clients[uid] = set()
+    
+    # Try to read device info
+    try:
+        ser = open_serial_connection(port)
+        if ser:
+            info = read_device(ser) or {}
+            devices_data[uid]["info"] = info
+            ser.close()
+    except Exception as e:
+        logger.warning("Failed to read info for device %s: %s", uid, e)
+    
+    # Start the telemetry reader thread
+    if uid not in device_threads or not device_threads[uid].is_alive():
+        t = threading.Thread(target=read_device_loop, args=(port, uid), daemon=True)
+        t.start()
+        device_threads[uid] = t
+        logger.info("Started telemetry thread for device %s (%s)", uid, port)
+
+@app.post("/scan")
+def scan_for_devices():
+    """Scan for new BenchLab devices and start telemetry for newly discovered ones.
+    
+    This endpoint allows runtime device discovery without restarting the server.
+    Only devices with BenchLab hardware ID (VID:PID=0483:5740) will be opened.
+    """
+    with scan_lock:
+        logger.info("Manual device scan triggered...")
+        
+        # Find all currently connected BenchLab devices
+        found_devices = find_benchlab_devices()
+        existing_uids = set(devices_data.keys())
+        new_devices = []
+        
+        for dev in found_devices:
+            port = dev["port"]
+            uid = dev["uid"]
+            
+            if uid not in existing_uids:
+                # New device found - start telemetry
+                logger.info("New device discovered: %s on %s", uid, port)
+                start_device_thread(port, uid)
+                new_devices.append({"port": port, "uid": uid, "fw": dev.get("fw", "?")})
+            else:
+                logger.debug("Device %s already known, skipping", uid)
+        
+        # Check for devices that may have been disconnected
+        current_ports = {dev["port"]: dev["uid"] for dev in found_devices}
+        disconnected = []
+        for uid, data in devices_data.items():
+            port = data.get("port")
+            if port and port not in current_ports:
+                disconnected.append({"uid": uid, "port": port})
+                logger.info("Device %s appears to be disconnected from %s", uid, port)
+        
+        result = {
+            "scan_time": datetime.now().isoformat(),
+            "total_devices": len(devices_data),
+            "new_devices": new_devices,
+            "disconnected_devices": disconnected,
+            "devices": [{"uid": uid, "port": info["port"]} for uid, info in devices_data.items()]
+        }
+        
+        logger.info("Scan complete: %d total devices, %d new, %d disconnected", 
+                   len(devices_data), len(new_devices), len(disconnected))
+        
+        return result
 
 # --- Improved error handling ---
 @app.exception_handler(Exception)

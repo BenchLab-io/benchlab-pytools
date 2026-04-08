@@ -13,12 +13,279 @@ from datetime import datetime
 
 # Benchlab imports
 from benchlab.tui.__init__ import __version__
-from benchlab_pycore.core import read_sensors, read_device, read_uid, translate_sensor_struct
-from benchlab_pycore.core.serial_io import get_fleet_info, open_serial_connection
+from benchlab_pycore.core import read_sensors, translate_sensor_struct
+from benchlab_pycore.core.serial_io import get_benchlab_ports, open_serial_connection
+from benchlab_pycore.core import read_device, read_uid
+
+
+def get_fleet_info(datasource=None):
+    """Scan for Benchlab devices.
+    
+    If datasource is provided and connected, use it instead of local serial scan.
+    This avoids conflicts when the serial port is held by a FastAPI/MQTT server.
+    """
+    # Prefer datasource if available
+    if datasource is not None and datasource.is_connected():
+        devices = datasource.list_devices()
+        fleet = []
+        for dev in devices:
+            fw = dev.get("FwVersion", "?")
+            # Firmware may be a string from remote datasources (FastAPI/MQTT)
+            if isinstance(fw, str):
+                try:
+                    fw = int(fw, 16)
+                except (ValueError, TypeError):
+                    fw = 0
+            fleet.append({
+                "port": dev.get("port", "?"),
+                "firmware": fw,
+                "uid": dev.get("uid", "?"),
+            })
+        return fleet
+
+    # Fall back to local serial scan (for direct mode)
+    fleet = []
+    ports = get_benchlab_ports()
+    for port_info in ports:
+        portname = port_info.get("port", "Unknown")
+        try:
+            ser = open_serial_connection(portname)
+            if ser is None:
+                # Port exists but is held by another process
+                fleet.append({
+                    "port": portname,
+                    "firmware": "?",
+                    "uid": "BUSY",
+                })
+                continue
+            device_info = read_device(ser)
+            uid = read_uid(ser)
+            fleet.append({
+                "port": portname,
+                "firmware": device_info.get("FwVersion") if device_info else "?",
+                "uid": uid,
+            })
+            ser.close()
+        except Exception as e:
+            err_str = str(e).lower()
+            if "permission" in err_str or "access" in err_str or err_str == "":
+                fleet.append({
+                    "port": portname,
+                    "firmware": "?",
+                    "uid": "BUSY",
+                })
+    return fleet
+
+
+from benchlab.core import create_datasource
 
 log = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  Data source configuration
+# ─────────────────────────────────────────────────────────────────────────────
+
+def get_default_datasource(args):
+    """Get default data source based on command-line arguments."""
+    if hasattr(args, 'source'):
+        return args.source
+    return 'direct'  # Default for backward compatibility
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Data source worker
+# ─────────────────────────────────────────────────────────────────────────────
+
+class DataSourceWorker(threading.Thread):
+    """
+    Background thread that polls a DataSource for telemetry data
+    and exposes a snapshot compatible with SerialWorker.
+    """
+
+    def __init__(self, datasource, uid: str, interval: float, stats=None):
+        super().__init__(daemon=True)
+        self.datasource = datasource
+        self.uid = uid
+        self.interval = interval
+        self.stats = stats
+        self._stop_event = threading.Event()
+        self._lock = threading.Lock()
+
+        self.connected = False
+        self.sensor_data = None
+        self.device_info = None
+        self.sensor_struct = None
+        self.last_error = None
+        self.connection_time = None
+
+    def run(self):
+        self.connection_time = datetime.now()
+        while not self._stop_event.is_set():
+            try:
+                if self.datasource.is_connected():
+                    data = self.datasource.get_telemetry(self.uid)
+                    info = self.datasource.get_device_info(self.uid)
+                    with self._lock:
+                        self.connected = True
+                        self.sensor_data = data
+                        self.device_info = info
+                        self.sensor_struct = None  # Not available via MQTT/FastAPI
+                        self.last_error = None
+
+                    # Update stats if available
+                    if self.stats and data:
+                        for key, val in data.items():
+                            if isinstance(val, (int, float)):
+                                self.stats.update(self.uid, key, val)
+                else:
+                    with self._lock:
+                        self.connected = False
+                        self.last_error = "Data source not connected"
+            except Exception as e:
+                with self._lock:
+                    self.connected = False
+                    self.last_error = str(e)
+
+            self._stop_event.wait(self.interval)
+
+    def snapshot(self):
+        with self._lock:
+            return {
+                'connected': self.connected,
+                'port': getattr(self.datasource, 'broker', getattr(self.datasource, 'base_url', 'unknown')),
+                'sensor_data': self.sensor_data,
+                'device_info': self.device_info,
+                'sensor_struct': self.sensor_struct,
+                'uid': self.uid,
+                'connection_time': self.connection_time,
+                'last_error': self.last_error,
+            }
+
+    def stop(self):
+        self._stop_event.set()
+
+
+class ConnectError(Exception):
+    """Raised when a connection attempt fails."""
+    pass
+
+
+class DataSourceWorkerWrapper:
+    """
+    Unified wrapper for both direct serial (SerialWorker) and
+    network datasources (DataSourceWorker).  Provides a common
+    ``snapshot()`` API that the TUI render loop relies on.
+    """
+
+    # Human-readable descriptions for every data-source type
+    _SOURCE_META = {
+        'direct':  'Serial',
+        'fastapi': 'FastAPI',
+        'mqtt':    'MQTT',
+    }
+
+    def __init__(self, args, stats=None):
+        self.args         = args
+        self.stats        = stats         # SerialWorker | DataSourceWorker
+        self._worker      = None          # SerialWorker | DataSourceWorker
+        self._datasource  = None          # DataSource instance (MQTT / FastAPI)
+        self._source_type = 'direct'      # current source type string
+        self._port        = None          # device port string for display
+        self._uid         = None
+
+    # ----- public helpers --------------------------------------------------
+
+    @property
+    def source_type(self):
+        return self._source_type
+
+    def _build_source_desc(self) -> str:
+        """Build a human description like 'COM4, via 1883' or 'COM4'."""
+        src = self._source_type
+        if src == 'direct':
+            return self._port or 'direct'
+        if src == 'fastapi':
+            port = getattr(self.args, 'api_port', 8000)
+            return f"{self._port or '?'}, via {port}"
+        if src == 'mqtt':
+            port = getattr(self.args, 'mqtt_port', 1883)
+            return f"{self._port or '?'}, via {port}"
+        return self._port or 'unknown'
+
+    # ----- lifecycle --------------------------------------------------------
+
+    def connect_direct(self, port: str):
+        """Open a direct serial connection to *port*."""
+        self.stop()
+        self._source_type = 'direct'
+        self._port = port
+        self._uid = None
+        self._worker = SerialWorker(port, self.args.interval, self.stats)
+        self._worker.start()
+
+    def connect_datasource(self):
+        """Connect via FastAPI or MQTT (source type comes from ``args.source``)."""
+        source_type = get_default_datasource(self.args)
+        self.stop()
+        self._source_type = source_type
+
+        if source_type == 'direct':
+            # Fall back to serial if no port specified in fleet flow
+            port = getattr(self.args, 'port', None)
+            if port:
+                self.connect_direct(port)
+                return True
+            raise ConnectError("No serial port specified for direct mode.")
+
+        try:
+            self._datasource = create_datasource(source_type)
+            ok = self._datasource.connect()
+            if not ok:
+                raise ConnectError(f"Failed to connect to {source_type.upper()} broker.")
+
+            # Give the datasource a moment to pick up device info
+            devices = self._datasource.list_devices()
+            if not devices:
+                raise ConnectError(f"No devices available via {source_type.upper()}.")
+
+            self._uid = devices[0]['uid']
+            self._port = devices[0].get('port', '?')
+            self._worker = DataSourceWorker(
+                self._datasource,
+                self._uid,
+                self.args.interval,
+                self.stats,
+            )
+            self._worker.start()
+            return True
+        except ConnectError:
+            raise
+        except Exception as exc:
+            raise ConnectError(f"{source_type} connection failed: {exc}")
+
+    def snapshot(self) -> dict:
+        ws = self._worker.snapshot() if self._worker else {
+            'connected': False, 'sensor_data': None,
+            'device_info': None, 'sensor_struct': None,
+            'uid': None, 'connection_time': None, 'last_error': 'Not connected',
+        }
+        ws['source_type']     = self._SOURCE_META.get(self._source_type, self._source_type)
+        ws['source_desc']     = self._build_source_desc()
+        ws['port']            = self._port
+        return ws
+
+    def stop(self):
+        if self._worker:
+            self._worker.stop()
+            self._worker.join(timeout=2)
+            self._worker = None
+        if self._datasource:
+            try:
+                self._datasource.disconnect()
+            except Exception:
+                pass
+            self._datasource = None
+        self._uid = None
+
 #  Bar scale configuration  ← edit these to change bar ranges
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -297,8 +564,12 @@ def disconnected(stdscr, tab_name):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def render_fleet(stdscr, height, width, state, fleet_cache,
-                 active_device_index, active_device, connected):
-    section(stdscr, 4, 2, "BENCHLAB Fleet")
+                 active_device_index, active_device, connected, source_type='direct'):
+    if source_type == 'direct':
+        title = "BENCHLAB Fleet"
+    else:
+        title = f"BENCHLAB Fleet (via {source_type.upper()})"
+    section(stdscr, 4, 2, title)
 
     if not fleet_cache:
         try:
@@ -331,27 +602,48 @@ def render_fleet(stdscr, height, width, state, fleet_cache,
             pass
 
         for i, dev in enumerate(fleet_cache):
-            port     = dev.get('port', 'Unknown')
-            firmware = dev.get('firmware', 0)
-            dev_uid  = dev.get('uid', 'Unknown')
-            cursor   = "->" if i == active_device_index else "  "
-            is_active    = active_device is not None and port == active_device
-            is_connected = is_active and connected
-            status       = "CONNECTED" if is_connected else "DISCONNECTED"
-            status_color = curses.color_pair(2) if is_connected else curses.color_pair(3)
-            row_color    = curses.color_pair(1) | curses.A_BOLD if i == active_device_index else curses.color_pair(7)
+                port     = dev.get('port', 'Unknown')
+                firmware = dev.get('firmware', 0)
+                dev_uid  = dev.get('uid', 'Unknown')
+                is_busy  = dev_uid == "BUSY"
 
-            row = 8 + i
-            try:
-                stdscr.addstr(row, COL_SEL,    cursor,                        row_color)
-                stdscr.addstr(row, COL_PORT,   f"{port:<{W_PORT}}",           row_color)
-                stdscr.addstr(row, COL_FW,     f"0x{firmware:<{W_FW-2}X}",   row_color)
-                stdscr.addstr(row, COL_UID,    f"{dev_uid:<{W_UID}}",         row_color)
-                stdscr.addstr(row, COL_STATUS, f"{status:<{W_ST}}",           status_color)
-                if is_active:
-                    stdscr.addstr(row, COL_ACTIVE, "*", curses.color_pair(2) | curses.A_BOLD)
-            except curses.error:
-                pass
+                cursor = "->" if i == active_device_index else "  "
+
+                is_active    = active_device is not None and port == active_device
+                is_connected = is_active and connected
+
+                if is_busy:
+                    status = "BUSY"
+                    status_color = curses.color_pair(4)
+                elif is_connected:
+                    status = "CONNECTED"
+                    status_color = curses.color_pair(2)
+                else:
+                    status = "DISCONNECTED"
+                    status_color = curses.color_pair(3)
+
+                row_color = curses.color_pair(1) | curses.A_BOLD if i == active_device_index else curses.color_pair(7)
+
+                row = 8 + i
+                try:
+                    stdscr.addstr(row, COL_SEL,    cursor,                        row_color)
+                    stdscr.addstr(row, COL_PORT,   f"{port:<{W_PORT}}",           row_color)
+                    if is_busy:
+                        stdscr.addstr(row, COL_FW,     f"{'N/A':<{W_FW}}",          row_color)
+                        stdscr.addstr(row, COL_UID,    f"{dev_uid:<{W_UID}}",       curses.color_pair(4) | curses.A_BOLD)
+                    else:
+                        try:
+                            fw_int = int(firmware) if firmware is not None else 0
+                            fw_str = f"0x{fw_int:08X}"
+                        except (TypeError, ValueError):
+                            fw_str = "0x????????"
+                        stdscr.addstr(row, COL_FW,     f"{fw_str:<{W_FW}}",   row_color)
+                        stdscr.addstr(row, COL_UID,    f"{dev_uid:<{W_UID}}",         row_color)
+                    stdscr.addstr(row, COL_STATUS, f"{status:<{W_ST}}",           status_color)
+                    if is_active:
+                        stdscr.addstr(row, COL_ACTIVE, "*", curses.color_pair(2) | curses.A_BOLD)
+                except curses.error:
+                    pass
 
     # footer
     status_text  = "CONNECTED" if connected else "DISCONNECTED"
@@ -370,22 +662,28 @@ def render_fleet(stdscr, height, width, state, fleet_cache,
 
 
 def render_device(stdscr, state, tui_refresh_interval):
-    section(stdscr, 4, 2, "Connection")
-    sd   = state['sensor_data']
-    si   = state['sensor_struct']
-    di   = state['device_info']
-    uid  = state['uid']
+    sd   = state.get('sensor_data') or {}
+    si   = state.get('sensor_struct')
+    di   = state.get('device_info') or {}
+    uid  = state.get('uid')
 
-    if not state['connected'] or not si:
-        disconnected(stdscr, "Device")
-        return
+    # Source type and description — always show, even if not yet connected
+    src_type   = state.get('source_type', 'Unknown')   # "Serial", "FastAPI", "MQTT"
+    src_desc   = state.get('source_desc', '')           # "COM4" or "COM4, via 8000"
+    port_str   = state.get('port', 'Unknown')
 
     try:
-        # Port comes directly from the worker snapshot
-        port_str = state.get('port', 'Unknown')
-        stdscr.addstr(6, 4, f"{'Port':<22} {port_str}")
+        section(stdscr, 4, 2, "Connection")
+        stdscr.addstr(6, 4, f"{'Data Source':<22} {src_type}")
+        stdscr.addstr(7, 4, f"{'Connection':<22} {src_desc}")
+        stdscr.addstr(8, 4, f"{'Device Port':<22} {port_str}")
 
-        # sensor_struct is an object (getattr); device_info is a dict (dict.get)
+        if not state['connected']:
+            # Show a brief disconnected message
+            stdscr.addstr(10, 4, "Not connected to device.", curses.color_pair(3))
+            return
+
+        # sensor_struct may be None for MQTT/FastAPI — handle gracefully
         def _field(attr, default=0):
             v = getattr(si, attr, None)
             if v is None:
@@ -396,22 +694,24 @@ def render_device(stdscr, state, tui_refresh_interval):
         product_id = _field('ProductId')
         fw_version = _field('FwVersion')
 
-        section(stdscr, 9, 2, "Device")
-        stdscr.addstr(11, 4, f"{'Vendor ID':<22} 0x{vendor_id:02X}")
-        stdscr.addstr(12, 4, f"{'Product ID':<22} 0x{product_id:02X}")
-        stdscr.addstr(13, 4, f"{'Device UID':<22} {uid}")
-        stdscr.addstr(14, 4, f"{'Firmware Version':<22} 0x{fw_version:02X}")
+        section(stdscr, 11, 2, "Device")
+        stdscr.addstr(13, 4, f"{'Vendor ID':<22} 0x{vendor_id:02X}")
+        stdscr.addstr(14, 4, f"{'Product ID':<22} 0x{product_id:02X}")
+        stdscr.addstr(15, 4, f"{'Device UID':<22} {uid or 'N/A'}")
+        stdscr.addstr(16, 4, f"{'Firmware Version':<22} 0x{fw_version:02X}")
 
-        section(stdscr, 17, 2, "Configuration")
-        fan_sw = getattr(si, 'FanSwitchStatus', 'Unknown')
-        rgb_sw = getattr(si, 'RGBSwitchStatus', 'Unknown')
-        rgb_ex = getattr(si, 'RGBExtStatus',    'Unknown')
-        stdscr.addstr(19, 4, f"{'Fan Switch':<22} {fan_sw}")
-        stdscr.addstr(20, 4, f"{'RGB Switch':<22} {rgb_sw}")
-        stdscr.addstr(21, 4, f"{'RGB Ext':<22} {rgb_ex}")
+        if si:
+            # Configuration and TUI rows only when sensor_struct is available (direct mode)
+            section(stdscr, 18, 2, "Configuration")
+            fan_sw = getattr(si, 'FanSwitchStatus', 'Unknown')
+            rgb_sw = getattr(si, 'RGBSwitchStatus', 'Unknown')
+            rgb_ex = getattr(si, 'RGBExtStatus',    'Unknown')
+            stdscr.addstr(20, 4, f"{'Fan Switch':<22} {fan_sw}")
+            stdscr.addstr(21, 4, f"{'RGB Switch':<22} {rgb_sw}")
+            stdscr.addstr(22, 4, f"{'RGB Ext':<22} {rgb_ex}")
 
-        section(stdscr, 24, 2, "TUI")
-        stdscr.addstr(26, 4, f"{'Refresh Interval':<22} {tui_refresh_interval} s")
+            section(stdscr, 24, 2, "TUI")
+            stdscr.addstr(26, 4, f"{'Refresh Interval':<22} {tui_refresh_interval} s")
     except curses.error:
         pass
 
@@ -500,14 +800,13 @@ def render_system(stdscr, state, stats, active_device):
 
 def render_voltage(stdscr, state, stats, active_device):
     """Tab 3 — Voltage: Board rails (Vdd/Vref) + VIN_0…VIN_12."""
-    if not state['connected'] or not state['sensor_data'] or not state['sensor_struct']:
+    if not state['connected'] or not state['sensor_data']:
         disconnected(stdscr, "Voltage")
         return
 
     COLOR_VLT = curses.color_pair(7)   # white — light, readable on dark terminal
 
     sd = state['sensor_data']
-    si = state['sensor_struct']
     row = 4
 
     # ── Board ─────────────────────────────────────────────────────────────────
@@ -527,9 +826,8 @@ def render_voltage(stdscr, state, stats, active_device):
     row += 1
     section(stdscr, row, 2, "Voltage Measurements")
     row += 1
-    vin_vals = getattr(si, 'Vin', []) or []
     max_vin  = VOLTAGE_BANDS['VIN'][1]   # hi end of band as bar ceiling
-    for idx in range(min(len(vin_vals), 13)):   # VIN_0 … VIN_12
+    for idx in range(13):   # VIN_0 … VIN_12
         key = f"VIN_{idx}"
         val = sd.get(key) or 0.0
         st  = stats.get(active_device, key)
@@ -589,12 +887,11 @@ def render_temperature(stdscr, state, stats, active_device):
 
 def render_fans(stdscr, state, stats, active_device):
     section(stdscr, 4, 2, "Fan Control & Monitoring")
-    if not state['connected'] or not state['sensor_data'] or not state['sensor_struct']:
+    if not state['connected'] or not state['sensor_data']:
         disconnected(stdscr, "Fan")
         return
 
     sd = state['sensor_data']
-    si = state['sensor_struct']
 
     # Fixed column positions — every addstr uses (row, col) explicitly
     # so Unicode arrows in stats never throw off cursor tracking
@@ -613,14 +910,19 @@ def render_fans(stdscr, state, stats, active_device):
     except curses.error:
         pass
 
-    fans = getattr(si, 'Fans', []) or []
-    for i, f in enumerate(fans):
-        duty    = getattr(f, 'Duty', 0) or 0
-        rpm     = getattr(f, 'Tach', 0) or 0
-        enabled = getattr(f, 'Enable', False)
+    # Fans via sensor_data dict keys: Fan{N}_Duty, Fan{N}_RPM — infer count
+    # FastAPI/MQTT: only dict available. Direct mode may also use si.Fans for "On" status.
+    num_fans = 0
+    while sd.get(f'Fan{num_fans+1}_Duty') is not None:
+        num_fans += 1
 
-        rpm_key  = f'Fan{i+1}_RPM'
-        duty_key = f'Fan{i+1}_Duty'
+    for i in range(1, num_fans + 1):
+        duty    = sd.get(f'Fan{i}_Duty') or 0
+        rpm     = sd.get(f'Fan{i}_RPM') or 0
+        enabled = True   # "On" status not available via dict — assume True
+
+        rpm_key  = f'Fan{i}_RPM'
+        duty_key = f'Fan{i}_Duty'
         stats.update(active_device, rpm_key,  rpm)
         stats.update(active_device, duty_key, duty)
 
@@ -632,9 +934,9 @@ def render_fans(stdscr, state, stats, active_device):
         mn_r, mx_r, avg_r = stats.get(active_device, rpm_key)
         mn_d, mx_d, avg_d = stats.get(active_device, duty_key)
 
-        row = 8 + i
+        row = 8 + i - 1
         try:
-            stdscr.addstr(row, COL_NAME,  f"Fan{i+1:<5}", fan_color)
+            stdscr.addstr(row, COL_NAME,  f"Fan{i:<5}", fan_color)
             stdscr.addstr(row, COL_DUTY,  f"{duty:>5}%", fan_color)
             stdscr.addstr(row, COL_RPM,   f"{rpm:>6}", fan_color)
             stdscr.addstr(row, COL_EN,    f"{en_str:<3}", fan_color)
@@ -649,7 +951,7 @@ def render_fans(stdscr, state, stats, active_device):
     # External fan
     ext_duty = sd.get('FanExtDuty') or 0
     ext_bar  = max(0, min(20, int(ext_duty / 5)))
-    ext_row  = 8 + len(fans) + 1
+    ext_row  = 8 + num_fans + 1
     try:
         stdscr.addstr(ext_row, COL_NAME,  "Ext Fan ", curses.color_pair(8))
         stdscr.addstr(ext_row, COL_DUTY,  f"{ext_duty:>5}%", curses.color_pair(8))
@@ -660,13 +962,14 @@ def render_fans(stdscr, state, stats, active_device):
     except curses.error:
         pass
 
-    active_count = sum(1 for f in fans if (getattr(f, 'Tach', 0) or 0) > 0)
-    try:
-        stdscr.addstr(ext_row + 2, COL_NAME,
-                      f"Active: {active_count}/{len(fans)} fans running",
-                      curses.color_pair(2))
-    except curses.error:
-        pass
+    if num_fans > 0:
+        active_count = sum(1 for i in range(1, num_fans+1) if (sd.get(f'Fan{i}_RPM') or 0) > 0)
+        try:
+            stdscr.addstr(ext_row + 2, COL_NAME,
+                          f"Active: {active_count}/{num_fans} fans running",
+                          curses.color_pair(2))
+        except curses.error:
+            pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -759,11 +1062,12 @@ def tui_main(stdscr, _unused, args):
 
     # ── State ─────────────────────────────────────────────────────────────────
     stats          = ChannelStats()
-    fleet_cache    = sorted(get_fleet_info(), key=lambda d: d["port"])
+    fleet_cache    = []  # Populated after datasource connect
     current_tab    = 0
     fleet_index    = 0
     active_device  = None    # port string of connected device
-    worker: SerialWorker | None = None
+    wrapper        = DataSourceWorkerWrapper(args, stats)
+    source_type    = get_default_datasource(args)  # 'direct', 'fastapi', or 'mqtt'
     status_msg     = ""      # transient footer message
     status_msg_expires = 0.0
 
@@ -773,14 +1077,38 @@ def tui_main(stdscr, _unused, args):
         status_msg_expires = time.monotonic() + secs
 
     def connect_to(port: str):
-        nonlocal worker, active_device
-        if worker:
-            worker.stop()
-            worker.join(timeout=2)
-        active_device = port
-        worker = SerialWorker(port, args.interval, stats)
-        worker.start()
-        set_status(f"Connecting to {port}…")
+        nonlocal wrapper, active_device
+        try:
+            wrapper.connect_direct(port)
+            active_device = port
+            set_status(f"Connecting to {port}…")
+        except Exception as exc:
+            set_status(f"Connect failed: {exc}", 4.0)
+
+    def connect_datasource_source():
+        """Connect via the data source selected at launch (FastAPI or MQTT)."""
+        nonlocal wrapper, active_device
+        try:
+            wrapper.connect_datasource()
+            active_device = wrapper._uid or wrapper._port
+            set_status(f"Connected via {wrapper.source_type}")
+        except ConnectError as exc:
+            set_status(str(exc), 5.0)
+
+    def refresh_fleet_cache():
+        """Refresh fleet list using datasource if available, otherwise local scan."""
+        nonlocal fleet_cache
+        if wrapper._datasource is not None and source_type != 'direct':
+            fleet_cache = sorted(get_fleet_info(wrapper._datasource), key=lambda d: d["port"])
+        else:
+            fleet_cache = sorted(get_fleet_info(), key=lambda d: d["port"])
+
+    # Auto-connect for non-direct sources (FastAPI / MQTT)
+    if source_type != 'direct':
+        connect_datasource_source()
+
+    # Initial fleet scan using appropriate method (datasource or local)
+    refresh_fleet_cache()
 
     # ── Render loop ───────────────────────────────────────────────────────────
     while True:
@@ -832,17 +1160,14 @@ def tui_main(stdscr, _unused, args):
             pass
 
         # ── Get current snapshot ──────────────────────────────────────────────
-        state = worker.snapshot() if worker else {
-            'connected': False, 'sensor_data': None,
-            'device_info': None, 'sensor_struct': None,
-            'uid': None, 'connection_time': None, 'last_error': None,
-        }
+        state = wrapper.snapshot()
 
         # ── Dispatch to tab renderer ───────────────────────────────────────────
         try:
             if current_tab == 0:
+                src_type = wrapper._source_type if wrapper._source_type else 'direct'
                 render_fleet(stdscr, height, width, state, fleet_cache,
-                             fleet_index, active_device, state['connected'])
+                             fleet_index, active_device, state['connected'], src_type)
             elif current_tab == 1:
                 render_device(stdscr, state, args.interval)
             elif current_tab == 2:
@@ -915,9 +1240,10 @@ def tui_main(stdscr, _unused, args):
                 stats.reset(active_device)
                 set_status("Stats reset.")
         elif key == 'f':
-            fleet_cache = sorted(get_fleet_info(), key=lambda d: d["port"])
+            refresh_fleet_cache()
             fleet_index = 0
-            set_status(f"Fleet rescanned — {len(fleet_cache)} device(s) found.")
+            ds_label = wrapper._source_type.upper() if wrapper._datasource else 'serial'
+            set_status(f"Fleet rescanned ({ds_label}) — {len(fleet_cache)} device(s) found.")
         elif key == "KEY_RESIZE":
             pass
         elif current_tab == 0 and fleet_cache:
@@ -926,9 +1252,19 @@ def tui_main(stdscr, _unused, args):
             elif key == 'KEY_DOWN':
                 fleet_index = (fleet_index + 1) % len(fleet_cache)
             elif key in ('\n', '\r', 'KEY_ENTER'):
-                connect_to(fleet_cache[fleet_index]["port"])
+                selected_port = fleet_cache[fleet_index]["port"]
+                if source_type != 'direct':
+                    # When using FastAPI/MQTT, connect via datasource (not direct serial)
+                    selected_uid = fleet_cache[fleet_index].get("uid", "")
+                    try:
+                        wrapper._uid = selected_uid
+                        wrapper._port = selected_port
+                        active_device = selected_port
+                        set_status(f"Selected {selected_uid} via {wrapper.source_type}")
+                    except Exception as exc:
+                        set_status(f"Select failed: {exc}", 4.0)
+                else:
+                    connect_to(selected_port)
 
     # ── Cleanup ───────────────────────────────────────────────────────────────
-    if worker:
-        worker.stop()
-        worker.join(timeout=2)
+    wrapper.stop()

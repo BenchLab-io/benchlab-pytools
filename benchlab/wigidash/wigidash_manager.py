@@ -7,6 +7,7 @@ import time
 
 from benchlab_pycore.core import read_sensors, read_device, read_uid
 from benchlab_pycore.core.serial_io import open_serial_connection, get_fleet_info
+from benchlab.core.datasource import create_datasource, DataSource
 
 from benchlab.wigidash.benchlab_telemetry import TelemetryHistory, telemetry_step, TelemetryContext
 from benchlab.wigidash.benchlab_utils import get_logger, display_image
@@ -22,7 +23,7 @@ class WigidashManager:
     Manages multiple Wigidash sessions and their assigned Benchlab devices.
     """
 
-    def __init__(self, vendor_id=0x28DA, product_id=0xEF01):
+    def __init__(self, vendor_id=0x28DA, product_id=0xEF01, datasource=None):
         self.vendor_id = vendor_id
         self.product_id = product_id
         self.sessions = []
@@ -32,18 +33,37 @@ class WigidashManager:
         self.shutting_down = False
         self.shutdown_event = threading.Event()
         self.shutdown_barrier = None
+        self.datasource = datasource  # Optional DataSource instance
+        # Connect the datasource if provided
+        if self.datasource is not None:
+            try:
+                if not self.datasource.connect():
+                    logger.warning(f"Failed to connect to {self.datasource.source_type} datasource")
+                else:
+                    logger.info(f"Connected to {self.datasource.source_type} datasource")
+            except Exception as e:
+                logger.warning(f"Error connecting to datasource: {e}")
 
     # ----------------- BENCHLAB DEVICE MANAGEMENT ----------------- #
     def get_available_benchlabs(self, log_info=True):
         """
-        Initial scan: open/close serial ports to populate the cache of Benchlab devices.
+        Initial scan: get fleet info from DataSource if available, otherwise use pycore.
         After this, fleet pages only read from the cache; no serial access.
         """
-        try:
-            devices = get_fleet_info()
-        except Exception as e:
-            logger.warning(f"Failed to get fleet info: {e}")
-            devices = []
+        devices = []
+        if self.datasource is not None:
+            try:
+                devices = self.datasource.list_devices()
+            except Exception as e:
+                logger.warning(f"DataSource list_devices failed: {e}")
+                devices = []
+        else:
+            # Only use direct serial when no datasource is configured
+            try:
+                devices = get_fleet_info()
+            except Exception as e:
+                logger.warning(f"Failed to get fleet info: {e}")
+                devices = []
 
         for d in devices:
             port = d['port']
@@ -117,25 +137,38 @@ class WigidashManager:
 
         history = self.telemetry_histories.setdefault(uid, TelemetryHistory())
 
-        try:
-            ser = open_serial_connection(port)
-            logger.info(f"Opened serial port {port} for telemetry")
-        except Exception as e:
-            logger.warning(f"Error opening serial for {port}: {e}")
-            return
+        # Determine device_info: use DataSource if available, else direct
+        device_info = {}
+        ser = None
 
-        try:
-            device_info = read_device(ser)
-            uid = device_info.get("UID", uid)
-            logger.info(f"Device info read for {port}: UID={uid}")
-        except Exception as e:
-            logger.warning(f"Failed to read device info from {port}: {e}")
-            device_info = {}
+        if self.datasource is not None:
+            info = self.datasource.get_device_info(uid)
+            if info:
+                device_info = info
+            uid_from_info = info.get("uid", uid) if info else uid
+            uid = uid_from_info
+            logger.info(f"DataSource provides info for UID={uid}")
+        else:
+            # Fallback: direct serial
+            try:
+                ser = open_serial_connection(port)
+                logger.info(f"Opened serial port {port} for telemetry")
+            except Exception as e:
+                logger.warning(f"Error opening serial for {port}: {e}")
+                return
+
+            try:
+                device_info = read_device(ser)
+                uid = device_info.get("UID", uid)
+                logger.info(f"Device info read for {port}: UID={uid}")
+            except Exception as e:
+                logger.warning(f"Failed to read device info from {port}: {e}")
+                device_info = {}
 
         # Create telemetry context
         ctx = TelemetryContext(
             port=port,
-            ser=ser,
+            ser=ser,  # None when using DataSource
             device_info=device_info,
             uid=uid,
             history=history,
@@ -156,19 +189,30 @@ class WigidashManager:
         def telemetry_loop():
             while not self.shutdown_event.is_set():
                 try:
-                    sensor_struct = read_sensors(ser)
-                    if sensor_struct:
-                        telemetry_step(ctx, device_info=device_info, sensor_struct=sensor_struct)
+                    if self.datasource is not None:
+                        # DataSource path: get telemetry dict directly
+                        data = self.datasource.get_telemetry(uid)
+                        if data:
+                            # Convert telemetry dict to sensor_struct format
+                            # telemetry_step expects a sensor_struct, but our
+                            # DataSource returns a dict - it's already translated
+                            telemetry_step(ctx, device_info=device_info, sensor_struct=data)
+                    else:
+                        # Direct serial fallback
+                        sensor_struct = read_sensors(ser)
+                        if sensor_struct:
+                            telemetry_step(ctx, device_info=device_info, sensor_struct=sensor_struct)
                 except Exception as e:
                     logger.warning(f"Telemetry error on {port}: {e}")
                 time.sleep(0.1)
 
-            # Cleanup serial
-            try:
-                ser.close()
-                logger.info(f"Closed serial port {port}")
-            except Exception:
-                pass
+            # Cleanup serial if we opened it
+            if ser is not None:
+                try:
+                    ser.close()
+                    logger.info(f"Closed serial port {port}")
+                except Exception:
+                    pass
 
         threading.Thread(target=telemetry_loop, daemon=True).start()
 
@@ -242,6 +286,14 @@ class WigidashManager:
         self.shutting_down = True
         self.shutdown_event.set()
 
+        # Disconnect DataSource if we created one
+        if self.datasource is not None:
+            try:
+                self.datasource.disconnect()
+                logger.info("DataSource disconnected")
+            except Exception as e:
+                logger.warning(f"Error disconnecting DataSource: {e}")
+
         active_sessions = [s for s in self.sessions if s.app_running]
 
         # Only create a barrier if we want splash synchronization
@@ -270,7 +322,25 @@ class WigidashManager:
 
 
 def main():
-    manager = WigidashManager()
+    """Entry point — auto-selects DataSource from BENCHLAB_DATA_SOURCE env var."""
+    datasource = None
+    source_type = os.environ.get("BENCHLAB_DATA_SOURCE", "direct")
+
+    if source_type == "fastapi":
+        from benchlab.core.datasource import FastAPIDataSource
+        base_url = os.environ.get("BENCHLAB_API_URL", "http://127.0.0.1:8000")
+        datasource = FastAPIDataSource(base_url=base_url)
+        logger.info(f"Using FastAPI data source: {base_url}")
+    elif source_type == "mqtt":
+        from benchlab.core.datasource import MQTTDataSource
+        broker = os.environ.get("MQTT_BROKER", "localhost")
+        port = int(os.environ.get("MQTT_PORT", "1883"))
+        datasource = MQTTDataSource(broker=broker, port=port)
+        logger.info(f"Using MQTT data source: {broker}:{port}")
+    else:
+        logger.info("Using direct serial data source")
+
+    manager = WigidashManager(datasource=datasource)
     manager.detect_and_start_sessions()
 
     try:
