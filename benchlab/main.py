@@ -544,7 +544,8 @@ def _launch_single_tool(tool_id: str) -> None:
 
         if tool_id == "csv_log":
             interval = float(os.environ.get("CSV_LOG_INTERVAL", "1.0"))
-            func(interval)
+            data_source = os.environ.get("BENCHLAB_DATA_SOURCE", "direct")
+            func(interval, data_source)
         elif tool_id == "hwinfo":
             interval = float(os.environ.get("POLL_INTERVAL", "1.0"))
             func(update_interval=interval)

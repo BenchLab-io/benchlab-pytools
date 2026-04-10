@@ -376,14 +376,17 @@ class BenchlabGraph:
                     continue
 
                 clean_ts, clean_vals = zip(*clean)
-                # Handle both Unix timestamps (direct serial) and ISO strings (DataSource)
+                # Handle Unix timestamps (direct serial), milliseconds (MQTT), and ISO strings (DataSource)
                 x_vals = []
                 for t in clean_ts:
                     if isinstance(t, str):
                         # ISO format string from DataSource
                         x_vals.append(datetime.fromisoformat(t))
+                    elif t > 1e12:  # Likely milliseconds (Unix timestamp * 1000)
+                        # Convert milliseconds to seconds
+                        x_vals.append(datetime.fromtimestamp(t / 1000))
                     else:
-                        # Unix timestamp from direct serial
+                        # Unix timestamp in seconds from direct serial
                         x_vals.append(datetime.fromtimestamp(t))
 
                 # Plot

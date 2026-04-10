@@ -54,8 +54,9 @@ class LoggerConfig:
 class EnhancedCSVLogger:
     """Enhanced CSV logger with improved error handling and performance"""
     
-    def __init__(self, config: LoggerConfig):
+    def __init__(self, config: LoggerConfig, preselected_source: Optional[str] = None):
         self.config = config
+        self.preselected_source = preselected_source
         self.devices: Dict[str, DeviceConfig] = {}
         self.data_sources: Dict[str, DataSource] = {}
         self.writers: Dict[str, Any] = {}
@@ -133,8 +134,18 @@ class EnhancedCSVLogger:
         """Discover all available data sources"""
         discovered_sources = []
         
-        for ds in self.data_sources.values():
-            discovered_sources.append(ds)
+        # Try to create each type of data source
+        source_types = ['direct', 'fastapi', 'mqtt']
+        for source_type in source_types:
+            try:
+                # Use lazy initialization method to create data source
+                ds = self._get_or_create_data_source(source_type)
+                if ds is not None:
+                    discovered_sources.append(ds)
+                    logging.info(f"Discovered {source_type} data source")
+            except Exception as e:
+                logging.debug(f"Failed to create {source_type} data source: {e}")
+                continue
         
         return discovered_sources
     
@@ -425,11 +436,23 @@ class EnhancedCSVLogger:
             logging.error("No data sources found")
             return
             
-        # Select data sources
-        selected_data_sources = self.select_data_sources(discovered_data_sources)
-        if not selected_data_sources:
-            logging.error("No data sources selected")
-            return
+        # Select data sources - use preselected source if provided, otherwise interactive selection
+        if self.preselected_source:
+            # Filter discovered sources to only include the preselected type
+            selected_data_sources = [
+                ds for ds in discovered_data_sources 
+                if ds.source_type == self.preselected_source
+            ]
+            if not selected_data_sources:
+                logging.error(f"No {self.preselected_source} data source found among discovered sources")
+                return
+            logging.info(f"Using preselected data source: {self.preselected_source}")
+        else:
+            # Interactive selection
+            selected_data_sources = self.select_data_sources(discovered_data_sources)
+            if not selected_data_sources:
+                logging.error("No data sources selected")
+                return
             
         # Store selected data sources with both identifier and device mappings
         self.selected_data_sources = {}  # Reset to store device mappings
@@ -605,7 +628,7 @@ def load_config(config_file: str = "csv_logger.config") -> LoggerConfig:
     
     return config
 
-def run_enhanced_csv_logger(interval: float = 1.0, config_file: str = "csv_logger.config"):
+def run_enhanced_csv_logger(interval: float = 1.0, config_file: str = "csv_logger.config", data_source: Optional[str] = None):
     """Run the enhanced CSV logger"""
     print("Running Enhanced BENCHLAB CSV fleet logger...\n")
     
@@ -614,7 +637,7 @@ def run_enhanced_csv_logger(interval: float = 1.0, config_file: str = "csv_logge
     config.interval = interval  # Override with function parameter
     
     # Create and run logger
-    logger = EnhancedCSVLogger(config)
+    logger = EnhancedCSVLogger(config, data_source)
     logger.start_logging()
 
 if __name__ == "__main__":
