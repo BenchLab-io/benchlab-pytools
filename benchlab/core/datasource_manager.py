@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional, Callable
 
 from benchlab.core import create_datasource, DataSource
+from benchlab.core.discovery import discover_devices as _discover_devices
 
 logger = logging.getLogger("benchlab.tui.datasource_manager")
 
@@ -53,6 +54,24 @@ class DataSourceManager:
         
         # Track previous values for stats updates
         self._prev_telemetry: Dict[str, Dict[str, Any]] = {}
+
+    # ---------------------------------------------------------------------
+    # Discovery helpers
+    # ---------------------------------------------------------------------
+    from typing import List
+    def discover_devices(self) -> List[Dict[str, Any]]:
+        """Expose the core discovery helper.
+
+        Returns a list of dictionaries with ``uid``, ``port`` and ``fw`` keys
+        for each connected BenchLab device.  This method provides a convenient
+        way for callers (e.g., UI tools) to query available devices without
+        needing to import the discovery module directly.
+        """
+        try:
+            return _discover_devices()
+        except Exception as e:
+            logger.error(f"Device discovery failed: {e}")
+            return []
 
     def connect(self, port: Optional[str] = None, uid: Optional[str] = None) -> bool:
         """Connect to the datasource.

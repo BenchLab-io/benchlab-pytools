@@ -1,14 +1,17 @@
-"""
-BENCHLAB PyTools v2 - Main Launcher
+"""BENCHLAB PyTools v2 – Main Launcher.
 
-Refactored architecture:
-  Step 1: Choose telemetry source (who owns the serial bus)
-  Step 2: Choose consumer tools (all tools share the source from Step 1)
-  Step 3: Launch — source starts first, then tools consume from it
+This module implements the interactive command‑line interface for the Benchlab
+telemetry suite. The workflow is split into three steps:
 
-Uses:
-  - DeviceRegistry for device lifecycle tracking
-  - ProcessManager for infrastructure service management (FastAPI, MQTT, broker)
+1. **Select a data source** – FastAPI, MQTT, or direct serial access.
+2. **Choose consumer tools** – one or many tools that will read from the
+   selected source.
+3. **Launch** – start the source (if needed) and then launch the selected
+   tools, handling cleanup on exit.
+
+The launcher relies on :class:`benchlab.core.process_manager.ProcessManager`
+to start and monitor auxiliary services and on :class:`benchlab.core.device_registry.DeviceRegistry`
+to keep track of discovered devices.
 """
 
 import argparse
@@ -16,15 +19,17 @@ import curses
 import importlib
 import os
 import socket
-import subprocess
 import sys
 import threading
-import time
 import traceback
+import logging
 from typing import List, Optional
 
 from benchlab.core.process_manager import ProcessManager
 from benchlab.core.device_registry import DeviceRegistry
+
+# Set up a module‑level logger consistent with the rest of the project.
+logger = logging.getLogger("benchlab.launcher")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -144,8 +149,8 @@ def start_fastapi_source(port: int = 8000) -> bool:
     if pm.is_running("fastapi"):
         return True
 
-    print(f"  Starting FastAPI server on port {port}...")
-    print("  Note: Make sure the serial device is not held by another process.")
+    logger.info(f"Starting FastAPI server on port {port}...")
+    logger.debug("Ensure the serial device is not held by another process.")
 
     ok = pm.start_service(
         name="fastapi",
@@ -155,11 +160,11 @@ def start_fastapi_source(port: int = 8000) -> bool:
     )
 
     if ok:
-        print(f"  ✓ FastAPI server ready with device(s) on port {port}")
+        logger.info(f"FastAPI server ready with device(s) on port {port}")
     else:
         svc = pm.get_service("fastapi")
         if svc:
-            print(f"  ✗ FastAPI failed to start. Server log:")
+            logger.error("FastAPI failed to start. Server log:")
             if svc.stderr_log or svc.stdout_log:
                 for line in (svc.stderr_log or svc.stdout_log).splitlines()[-15:]:
                     print(f"    > {line}")
@@ -185,7 +190,7 @@ def start_mqtt_broker(port: int = 1883) -> bool:
     if check_mqtt_running(port=port):
         return True  # Broker already running
 
-    print(f"  Starting embedded MQTT broker on port {port}...")
+    logger.info(f"Starting embedded MQTT broker on port {port}...")
     pm = ProcessManager.get_instance()
 
     if pm.is_running("mqtt_broker"):
@@ -232,9 +237,9 @@ asyncio.run(main())
     )
 
     if ok:
-        print(f"  ✓ Embedded MQTT broker ready on port {port}")
+        logger.info(f"Embedded MQTT broker ready on port {port}")
     else:
-        print(f"  ✗ Embedded MQTT broker failed to start")
+        logger.error("Embedded MQTT broker failed to start")
     return ok
 
 
@@ -246,8 +251,8 @@ def start_mqtt_source(broker: str = "localhost", port: int = 1883) -> bool:
     if pm.is_running("mqtt_publisher"):
         return True
 
-    print(f"  Starting MQTT publisher to {broker}:{port}...")
-    print("  Note: Make sure the serial device is not held by another process.")
+    logger.info(f"Starting MQTT publisher to {broker}:{port}...")
+    logger.debug("Ensure the serial device is not held by another process.")
 
     ok = pm.start_service(
         name="mqtt_publisher",
@@ -257,11 +262,11 @@ def start_mqtt_source(broker: str = "localhost", port: int = 1883) -> bool:
     )
 
     if ok:
-        print(f"  ✓ MQTT publisher ready with device(s)")
+        logger.info("MQTT publisher ready with device(s)")
     else:
         svc = pm.get_service("mqtt_publisher")
         if svc:
-            print(f"  ✗ MQTT publisher failed to start. Server log:")
+            logger.error("MQTT publisher failed to start. Server log:")
             if svc.stderr_log or svc.stdout_log:
                 for line in (svc.stderr_log or svc.stdout_log).splitlines()[-15:]:
                     print(f"    > {line}")
@@ -274,7 +279,6 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
     Returns True if source is ready, False if setup failed.
     """
     if source_type == "direct":
-        # Direct mode doesn't need a subprocess — this process owns serial
         os.environ["BENCHLAB_DATA_SOURCE"] = "direct"
         return True
 
@@ -286,11 +290,11 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
         os.environ["API_PORT"] = str(port)
 
         if check_fastapi_running(host, port):
-            print(f"  ✓ FastAPI already running at {api_url} (device(s) detected)")
+            logger.info(f"FastAPI already running at {api_url} (device(s) detected)")
             os.environ["BENCHLAB_DATA_SOURCE"] = "fastapi"
             return True
         else:
-            print(f"  FastAPI not detected at {api_url}")
+            logger.info(f"FastAPI not detected at {api_url}")
             return start_fastapi_source(port)
 
     if source_type == "mqtt":
@@ -301,11 +305,11 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
 
         # Step 1: Ensure broker is running
         if not check_mqtt_running(host, mqtt_port):
-            print(f"  MQTT broker not detected at {host}:{mqtt_port}")
+            logger.info(f"MQTT broker not detected at {host}:{mqtt_port}")
             if not start_mqtt_broker(mqtt_port):
                 return False
         else:
-            print(f"  ✓ MQTT broker available at {host}:{mqtt_port}")
+            logger.info(f"MQTT broker available at {host}:{mqtt_port}")
 
         # Step 2: Start publisher and verify device discovery
         return start_mqtt_source(host, mqtt_port)
@@ -331,7 +335,7 @@ def show_step1_menu() -> Optional[str]:
     print("What would you like to do?\n")
     print("  1. Data Provider   - Run FastAPI or MQTT server for other tools")
     print("  2. Single Tool     - Run one tool with a data source")
-    print("  3. Multi-Tool      - Run multiple tools with shared data")
+    print("  3. Multi-Tool      - Run multiple tools with shared data (Experimental!)")
     print()
     print("  q. Quit")
     print()
@@ -354,9 +358,9 @@ def show_step1_menu() -> Optional[str]:
 
 def step2_data_provider() -> None:
     """Step 2a: Select and start a data provider."""
-    print("\n=== Data Provider ===")
-    print("  1. FastAPI Server  - REST API + WebSocket on port 8000")
-    print("  2. MQTT Publisher  - Publish telemetry to MQTT broker")
+    print("=== Data Provider ===")
+    print("1. FastAPI Server  - REST API + WebSocket on port 8000")
+    print("2. MQTT Publisher  - Publish telemetry to MQTT broker")
     print()
 
     choice = input("Choice [1-2]: ").strip()
@@ -366,7 +370,7 @@ def step2_data_provider() -> None:
         port = int(port_input) if port_input else 8000
         os.environ["API_PORT"] = str(port)
         check_and_setup_source("fastapi", port=port)
-        print("\n  Press Ctrl+C to stop the provider.\n")
+        print("Press Ctrl+C to stop the provider.")
         input("  (Press Enter to return to menu after verifying...) ")
 
     elif choice == "2":
@@ -374,25 +378,25 @@ def step2_data_provider() -> None:
         port_input = input("  Broker port [1883]: ").strip()
         port = int(port_input) if port_input else 1883
         if not check_mqtt_running(host, port):
-            print(f"  ⚠ No MQTT broker at {host}:{port}")
-            print("  Starting embedded broker...")
+            logger.warning(f"No MQTT broker at {host}:{port}")
+            logger.info("Starting embedded broker...")
             if not start_mqtt_broker(port):
-                print("  ✗ Could not start broker.")
+                logger.error("Could not start MQTT broker.")
                 return
         else:
-            print(f"  ✓ MQTT broker available at {host}:{port}")
+            logger.info(f"MQTT broker available at {host}:{port}")
         os.environ["MQTT_BROKER"] = host
         os.environ["MQTT_PORT"] = str(port)
         start_mqtt_source(host, port)
-        print("\n  Press Ctrl+C to stop the provider.\n")
+        logger.info("Press Ctrl+C to stop the provider.")
         input("  (Press Enter to return to menu after verifying...) ")
     else:
-        print("  Invalid choice.")
+        logger.error("Invalid choice in data provider selection.")
 
 
 def step2_single_tool() -> None:
     """Step 2b: Select one tool and its data source."""
-    print("\n=== Select Tool ===")
+    print("=== Select Tool ===")
     consumer_list = list(CONSUMER_TOOLS.items())
     for i, (tid, t) in enumerate(consumer_list, 1):
         print(f"  {i}. {t['name']} - {t['description']}")
@@ -414,10 +418,10 @@ def step2_single_tool() -> None:
 
 
 def step2_multi_tool() -> None:
-    """Step 2c: Select multiple tools and shared data source."""
-    print("\n=== Select Tools ===")
+    """Step 2c: Select multiple tools and shared data source. (Experimental!)"""
+    print("=== Select Tools ===")
     print("Enter tool numbers separated by commas (e.g., 1,3,5)")
-    print("Or 'all' to select all.\n")
+    print("Or 'all' to select all.")
 
     consumer_list = list(CONSUMER_TOOLS.items())
     for i, (tid, t) in enumerate(consumer_list, 1):
@@ -456,19 +460,19 @@ def step2_multi_tool() -> None:
 def step3_select_source(tool_ids: List[str], tool_names: List[str]) -> None:
     """Step 3: Select data source, check/start it, then launch tools."""
     is_multi = len(tool_ids) > 1
-    print(f"\n=== Data Source ===")
+    print("=== Data Source ===")
     if is_multi:
         print(f"Tools: {', '.join(tool_names)}")
-        print("  1. FastAPI (recommended)")
-        print("  2. MQTT")
+        print("1. FastAPI (recommended)")
+        print("2. MQTT")
         print()
         print("  Note: Direct mode is not available for multi-tool")
         print("  because the serial port can only be used by one application.")
     else:
         print(f"Tool: {tool_names[0]}")
-        print("  1. Direct (serial port)")
-        print("  2. FastAPI")
-        print("  3. MQTT")
+        print("1. Direct (serial port)")
+        print("2. FastAPI")
+        print("3. MQTT")
     print()
 
     default = "1" if not is_multi else "1"
@@ -487,7 +491,7 @@ def step3_select_source(tool_ids: List[str], tool_names: List[str]) -> None:
         return
 
     source_type = source_map[choice]
-    print(f"\n  Setting up {source_type} data source...")
+    logger.info(f"Setting up {source_type} data source...")
 
     if source_type == "fastapi":
         port = int(os.environ.get("API_PORT", "8000"))
@@ -506,14 +510,14 @@ def step3_select_source(tool_ids: List[str], tool_names: List[str]) -> None:
         print(f"\n  ✗ Could not set up {source_type} data source.")
         return
 
-    print(f"\n=== Launch Summary ===")
-    print(f"  Tools: {', '.join(tool_names)}")
-    print(f"  Data source: {source_type}")
+    print("=== Launch Summary ===")
+    print(f"Tools: {', '.join(tool_names)}")
+    print(f"Data source: {source_type}")
     print()
 
     confirm = input("Launch? (Y/n): ").strip().lower()
     if confirm in ("n", "no"):
-        print("  Aborted.")
+        print("Aborted.")
         return
 
     # Set data source env
@@ -535,76 +539,66 @@ def step3_select_source(tool_ids: List[str], tool_names: List[str]) -> None:
 def _launch_single_tool(tool_id: str) -> None:
     """Launch a single tool (blocks until exit)."""
     tool = CONSUMER_TOOLS[tool_id]
-    print(f"\n  Starting {tool['name']}...")
-    print("  Press Ctrl+C to stop.\n")
+    print(f"Starting {tool['name']}...")
+    print("Press Ctrl+C to stop.")
+
+    # Build a standard args namespace from env vars.
+    # Every tool receives this — tools use what they need and ignore the rest.
+    import types
+    args = types.SimpleNamespace(
+        source=os.environ.get("BENCHLAB_DATA_SOURCE", "direct"),
+        interval=float(os.environ.get("POLL_INTERVAL", "1.0")),
+        api_url=os.environ.get("BENCHLAB_API_URL", "http://127.0.0.1:8000"),
+        api_port=int(os.environ.get("API_PORT", "8000")),
+        mqtt_port=int(os.environ.get("MQTT_PORT", "1883")),
+        mqtt_broker=os.environ.get("MQTT_BROKER", "localhost"),
+    )
 
     try:
         module = importlib.import_module(tool["module"])
         func = getattr(module, tool["function"])
 
-        if tool_id == "csv_log":
-            interval = float(os.environ.get("CSV_LOG_INTERVAL", "1.0"))
-            data_source = os.environ.get("BENCHLAB_DATA_SOURCE", "direct")
-            func(interval, data_source)
-        elif tool_id == "hwinfo":
-            interval = float(os.environ.get("POLL_INTERVAL", "1.0"))
-            func(update_interval=interval)
-        elif tool_id == "vu":
-            func()
-        elif tool_id == "vuconfig":
-            func()
-        elif tool_id == "tui":
-            import types
-            args = types.SimpleNamespace()
-            args.source = os.environ.get("BENCHLAB_DATA_SOURCE", "direct")
-            args.interval = float(os.environ.get("POLL_INTERVAL", "1.0"))
-            args.api_url = os.environ.get("BENCHLAB_API_URL", "http://127.0.0.1:8000")
-            args.api_port = int(os.environ.get("API_PORT", "8000"))
-            args.mqtt_port = int(os.environ.get("MQTT_PORT", "1883"))
+        if tool_id == "tui":
             curses.wrapper(lambda stdscr: func(stdscr, None, args))
-        elif tool_id == "wigidash":
-            func()
-        elif tool_id == "graph":
-            func()
         elif tool_id == "xeneon":
             import uvicorn
             print("  Starting Xeneon Dashboard on http://localhost:8001")
             uvicorn.run(func, host="127.0.0.1", port=8001, log_level="info")
         else:
-            func()
+            func(args)
 
     except KeyboardInterrupt:
-        print(f"\n  {tool['name']} stopped.")
+        logger.info(f"{tool['name']} stopped.")
     except Exception as e:
-        print(f"\n  {tool['name']} failed: {e}")
+        logger.error(f"{tool['name']} failed: {e}")
         traceback.print_exc()
 
 
 def _launch_tools_concurrent(tool_ids: List[str]) -> None:
-    """Launch multiple tools in background threads."""
+    """Launch multiple tools in background threads. (Experimental!)"""
     threads: List[threading.Thread] = []
 
     def run_tool(tid: str):
         try:
             _launch_single_tool(tid)
         except Exception as e:
-            print(f"\n  [{CONSUMER_TOOLS.get(tid, {}).get('name', tid)}] Error: {e}")
+            logger.error(f"[{CONSUMER_TOOLS.get(tid, {}).get('name', tid)}] Error: {e}")
 
     for tid in tool_ids:
         t = threading.Thread(target=run_tool, args=(tid,), daemon=True)
         t.start()
         threads.append(t)
-        print(f"  Started: {CONSUMER_TOOLS.get(tid, {}).get('name', tid)}")
+        logger.info(f"Started: {CONSUMER_TOOLS.get(tid, {}).get('name', tid)}")
 
-    print(f"\n  Running {len(threads)} tool(s). Press Ctrl+C to stop all.\n")
+    logger.info(f"Running {len(threads)} tool(s). Press Ctrl+C to stop all.")
 
     try:
         for t in threads:
             while t.is_alive():
                 t.join(timeout=1)
     except (KeyboardInterrupt, EOFError):
-        print("\n  Stopping all tools...")
-    print("  Done.")
+        logger.info("Stopping all tools...")
+    logger.info("Done.")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -617,7 +611,7 @@ def interactive_loop() -> None:
         try:
             mode = show_step1_menu()
             if mode is None:
-                print("  Goodbye!")
+                print("Goodbye!")
                 # Clean up any services that may have been started
                 _cleanup_all_services()
                 return
@@ -635,7 +629,7 @@ def interactive_loop() -> None:
             else:
                 os.system("clear")
         except (EOFError, KeyboardInterrupt):
-            print("\n  Goodbye!")
+            print("Goodbye!")
             _cleanup_all_services()
             return
 
@@ -663,6 +657,13 @@ def get_parser() -> argparse.ArgumentParser:
                         help="MQTT publisher to localhost mosquitto")
     parser.add_argument("-tui", action="store_true",
                         help="Enable TUI (default)")
+    parser.add_argument(
+        "--source",
+        choices=["direct", "fastapi", "mqtt"],
+        default=None,
+        metavar="SOURCE",
+        help="Data source for -tui (and other tools): direct | fastapi | mqtt",
+    )
     parser.add_argument("-vu", action="store_true",
                         help="Launch VU analog dials")
     parser.add_argument("-vuconfig", action="store_true",
@@ -673,6 +674,37 @@ def get_parser() -> argparse.ArgumentParser:
                         help="Launch Xeneon web dashboard")
 
     return parser
+
+
+def _setup_source_from_args(args) -> bool:
+    """Resolve and start the data source requested via --source (or env fallback).
+
+    Sets BENCHLAB_DATA_SOURCE (and related env vars) so that any tool that
+    reads from the environment will pick up the correct source.
+
+    Returns True if the source is ready, False on failure.
+    """
+    source = args.source or os.environ.get("BENCHLAB_DATA_SOURCE", "direct")
+    logger.info(f"Setting up data source: {source}")
+
+    if source == "fastapi":
+        port = int(os.environ.get("API_PORT", "8000"))
+        os.environ["API_PORT"] = str(port)
+        ready = check_and_setup_source("fastapi", port=port)
+    elif source == "mqtt":
+        broker = os.environ.get("MQTT_BROKER", "localhost")
+        mqtt_port = int(os.environ.get("MQTT_PORT", "1883"))
+        os.environ["MQTT_BROKER"] = broker
+        os.environ["MQTT_PORT"] = str(mqtt_port)
+        ready = check_and_setup_source("mqtt", broker=broker, mqtt_port=mqtt_port)
+    else:
+        ready = check_and_setup_source("direct")
+
+    if ready:
+        os.environ["BENCHLAB_DATA_SOURCE"] = source
+    else:
+        logger.error(f"Could not set up '{source}' data source.")
+    return ready
 
 
 def launch_mode() -> None:
@@ -689,31 +721,46 @@ def launch_mode() -> None:
 
     if args.fastapi:
         try:
-            from benchlab.fastapi.telemetry_api import run_server
+            from benchlab.restapi.telemetry_api import run_server
             run_server()
         except ModuleNotFoundError:
             print("FastAPI / Uvicorn not available in this build.")
 
     elif args.graph:
+        if not _setup_source_from_args(args):
+            return
         try:
             from benchlab.graph.runner import run_graph_mode
             run_graph_mode()
         except ModuleNotFoundError:
             print("Graph module not available in this build.")
+        finally:
+            _cleanup_all_services()
 
     elif args.hwinfo:
+        if not _setup_source_from_args(args):
+            return
         try:
             from benchlab.hwinfo.hwinfo_export import export_all_devices
             export_all_devices(update_interval=args.interval)
         except ModuleNotFoundError:
             print("HWiNFO export module not available in this build.")
+        finally:
+            _cleanup_all_services()
 
     elif args.logfleet:
+        if not _setup_source_from_args(args):
+            return
         try:
             from benchlab.csv_log.csv_logger_enhanced import run_enhanced_csv_logger
-            run_enhanced_csv_logger(args.interval)
+            # Pass the full args namespace to the enhanced CSV logger, which expects an object
+            # with an `interval` attribute (and potentially other configuration options).
+            # Previously only the float value was passed, causing an AttributeError.
+            run_enhanced_csv_logger(args)
         except ModuleNotFoundError:
             print("Enhanced CSV logger not available in this build.")
+        finally:
+            _cleanup_all_services()
 
     elif args.mqtt:
         try:
@@ -724,28 +771,42 @@ def launch_mode() -> None:
             print("MQTT module not available in this build.")
 
     elif args.vu:
+        if not _setup_source_from_args(args):
+            return
         try:
             from benchlab.vu.vu_updater import run_updater
             run_updater()
         except ModuleNotFoundError:
             print("VU module not available in this build.")
+        finally:
+            _cleanup_all_services()
 
     elif args.vuconfig:
+        if not _setup_source_from_args(args):
+            return
         try:
             from benchlab.vu.vu_tui import launch_vu_config
             launch_vu_config()
         except ModuleNotFoundError:
             print("VU configuration module not available in this build.")
+        finally:
+            _cleanup_all_services()
 
     elif args.wigidash:
+        if not _setup_source_from_args(args):
+            return
         try:
             from benchlab.wigidash.wigidash_manager import main
             main()
         except ModuleNotFoundError:
             traceback.print_exc()
             print("WigiDash module not available in this build.")
+        finally:
+            _cleanup_all_services()
 
     elif args.xeneon:
+        if not _setup_source_from_args(args):
+            return
         try:
             from benchlab.xeneon.xeneon_main import app
             import uvicorn
@@ -757,13 +818,26 @@ def launch_mode() -> None:
             uvicorn.run(app, host="127.0.0.1", port=8001, log_level="info")
         except ModuleNotFoundError:
             print("Xeneon dashboard module not available in this build.")
+        finally:
+            _cleanup_all_services()
 
-    else:  # default: TUI
+    elif args.tui:
+        if not _setup_source_from_args(args):
+            return
         try:
             from benchlab.tui.tui_main import tui_main
             curses.wrapper(tui_main, None, args)
+        except KeyboardInterrupt:
+            pass  # Clean exit via Ctrl+C
         except ModuleNotFoundError:
-            print("TUI module not available in this build.")
+            logger.error("TUI module not available in this build.")
+        finally:
+            _cleanup_all_services()
+
+    else:
+        # No recognised flags – fall back to interactive loop.
+        logger.info("No specific mode flags provided; launching interactive loop.")
+        interactive_loop()
 
 
 def main() -> None:

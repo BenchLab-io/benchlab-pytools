@@ -61,7 +61,7 @@ telemetry_thread = None
 def run_telemetry_server():
     """Run the FastAPI telemetry server in a background thread"""
     import uvicorn
-    from benchlab.fastapi.telemetry_api import app as telemetry_app
+    from benchlab.restapi.telemetry_api import app as telemetry_app
     
     config = uvicorn.Config(
         telemetry_app,

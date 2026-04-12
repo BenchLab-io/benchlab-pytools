@@ -52,7 +52,7 @@ TOOLS = {
         "name": "FastAPI Server",
         "description": "REST API server for telemetry data",
         "flag": "-fastapi",
-        "module": "benchlab.fastapi.telemetry_api",
+        "module": "benchlab.restapi.telemetry_api",
         "function": "run_server",
         "platforms": ["windows", "linux", "mac"],
         "architectures": ["x86", "arm"],

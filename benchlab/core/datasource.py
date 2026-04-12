@@ -13,10 +13,13 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from collections import deque
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("benchlab.core.datasource")
+
+# Import retry utilities for robust connection handling
+from .retry import retry, RetryPolicy
 
 
 class DataSource(ABC):
@@ -96,15 +99,21 @@ class DirectDataSource(DataSource):
     the serial port.
     """
     
-    def __init__(self, port: Optional[str] = None, poll_interval: float = 1.0):
+    def __init__(self, *, config: Optional["SerialConfig"] = None, port: Optional[str] = None, poll_interval: float = 1.0):
         """Initialize direct data source.
-        
-        Args:
-            port: Serial port to connect to. If None, will auto-detect.
-            poll_interval: Interval between sensor reads in seconds.
+
+        Parameters are now wrapped in a :class:`SerialConfig` model for
+        validation.  For backward compatibility the original ``port`` and
+        ``poll_interval`` arguments are still accepted and will be used to
+        construct a temporary ``SerialConfig`` if ``config`` is omitted.
         """
-        self.port = port
-        self.poll_interval = poll_interval
+        # Lazy import to avoid circular dependency
+        from .config import SerialConfig
+
+        if config is None:
+            config = SerialConfig(port=port, poll_interval=poll_interval)
+        self.port = config.port
+        self.poll_interval = config.poll_interval
         self._connected = False
         self._ser = None
         self._lock = threading.Lock()
@@ -132,8 +141,9 @@ class DirectDataSource(DataSource):
             logger.error(f"Failed to import benchlab_pycore: {e}")
             self._pycore = None
     
+    @retry(RetryPolicy(max_retries=3, backoff_factor=2.0, base_delay=0.5, allowed_exceptions=(Exception,)))
     def connect(self) -> bool:
-        """Connect to the serial device."""
+        """Connect to the serial device with retry logic."""
         if self._pycore is None:
             logger.error("pycore not available")
             return False
@@ -265,7 +275,7 @@ class DirectDataSource(DataSource):
                     sensors = self._pycore['read_sensors'](self._ser)
                     if sensors:
                         data = self._pycore['translate_sensor_struct'](sensors)
-                        data['timestamp'] = datetime.utcnow().isoformat()
+                        data['timestamp'] = datetime.now(UTC).isoformat()
                         
                         # Get UID from device info
                         uid = None
@@ -296,19 +306,24 @@ class FastAPIDataSource(DataSource):
     This is used when multiple tools need to share data from a single
     serial connection managed by the FastAPI server.
     """
-    
-    def __init__(self, base_url: str = "http://127.0.0.1:8000", timeout: float = 5.0):
+
+    def __init__(self, *, config: Optional["FastAPIConfig"] = None, base_url: str = "http://127.0.0.1:8000", timeout: float = 5.0):
         """Initialize FastAPI data source.
-        
-        Args:
-            base_url: Base URL of the FastAPI server
-            timeout: Request timeout in seconds
+
+        Parameters can be supplied via a :class:`FastAPIConfig` instance for
+        validation.  For backward compatibility the original ``base_url`` and
+        ``timeout`` arguments are still accepted.
         """
-        self.base_url = base_url.rstrip('/')
-        self.timeout = timeout
+        # Lazy import to avoid circular dependency
+        from .config import FastAPIConfig
+
+        if config is None:
+            config = FastAPIConfig(base_url=base_url, timeout=timeout)
+        self.base_url = config.base_url.rstrip('/')
+        self.timeout = config.timeout
         self._connected = False
         self._session = None
-        
+
         try:
             import requests
             self._requests = requests
@@ -316,8 +331,9 @@ class FastAPIDataSource(DataSource):
             logger.error("requests library not available")
             self._requests = None
     
+    @retry(RetryPolicy(max_retries=3, backoff_factor=2.0, base_delay=0.5, allowed_exceptions=(Exception,)))
     def connect(self) -> bool:
-        """Connect to the FastAPI server and verify device access."""
+        """Connect to the FastAPI server and verify device access with retry logic."""
         if self._requests is None:
             return False
         
@@ -417,26 +433,22 @@ class MQTTDataSource(DataSource):
     
     This is used when multiple tools need to share data via MQTT topics.
     """
-    
-    def __init__(
-        self, 
-        broker: str = "localhost", 
-        port: int = 1883,
-        topic_prefix: str = "benchlab",
-        timeout: float = 5.0
-    ):
+
+    def __init__(self, *, config: Optional["MQTTConfig"] = None, broker: str = "localhost", port: int = 1883, topic_prefix: str = "benchlab", timeout: float = 5.0):
         """Initialize MQTT data source.
-        
-        Args:
-            broker: MQTT broker hostname
-            port: MQTT broker port
-            topic_prefix: Base topic prefix for BenchLab data
-            timeout: Connection timeout in seconds
+
+        Parameters can be supplied via a :class:`MQTTConfig` model for validation.
+        For backward compatibility the individual arguments are still accepted.
         """
-        self.broker = broker
-        self.port = port
-        self.topic_prefix = topic_prefix
-        self.timeout = timeout
+        # Lazy import to avoid circular dependency
+        from .config import MQTTConfig
+
+        if config is None:
+            config = MQTTConfig(broker=broker, port=port, topic_prefix=topic_prefix, timeout=timeout)
+        self.broker = config.broker
+        self.port = config.port
+        self.topic_prefix = config.topic_prefix
+        self.timeout = config.timeout
         self._connected = False
         self._client = None
         self._lock = threading.Lock()
@@ -451,8 +463,9 @@ class MQTTDataSource(DataSource):
             logger.error("paho-mqtt library not available")
             self._mqtt = None
     
+    @retry(RetryPolicy(max_retries=3, backoff_factor=2.0, base_delay=0.5, allowed_exceptions=(Exception,)))
     def connect(self) -> bool:
-        """Connect to the MQTT broker."""
+        """Connect to the MQTT broker with retry logic."""
         if self._mqtt is None:
             return False
         

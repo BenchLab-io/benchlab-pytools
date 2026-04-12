@@ -84,7 +84,7 @@ class InfrastructureManager:
                         sys.executable,
                         "-m",
                         "uvicorn",
-                        "benchlab.fastapi.telemetry_api:app",
+                        "benchlab.restapi.telemetry_api:app",
                         "--host",
                         self.fastapi_host,
                         "--port",

@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import paho.mqtt.client as mqtt
-import serial
 import sys
 import threading
 import time
@@ -267,7 +266,8 @@ def device_thread(device, cfg, publish_interval=1):
                 try:
                     ser = open_serial_connection(port)
                     retry_count = 0
-                except (serial.SerialException, OSError) as e:
+                except OSError as e:
+                    # open_serial_connection raises OSError on failure; we no longer depend on serial.SerialException
                     logger.warning("Failed to open serial port %s: %s", port, e)
                     retry_count += 1
                     if retry_count >= max_retries:
@@ -304,7 +304,8 @@ def device_thread(device, cfg, publish_interval=1):
                 retry_count = 0
                 time.sleep(publish_interval) 
 
-            except (serial.SerialException, OSError) as e:
+            except OSError as e:
+                # Serial connection errors surface as OSError from open_serial_connection/read_sensors
                 logger.warning("Lost connection to %s: %s", uid, e)
                 try:
                     if ser:
@@ -385,14 +386,32 @@ def run_mqtt_mode(broker_type="localhost"):
         threads.append(t)
 
     # Start periodic logging thread
+    # The periodic log thread sleeps for a relatively long interval (default 30 s).
+    # Store the interval so we can use an appropriate join timeout during shutdown.
+    log_interval = 30
     log_thread = threading.Thread(
-        target=log_connected_devices_periodically, 
-        args=(fleet, 30), 
-        daemon=True
+        target=log_connected_devices_periodically,
+        args=(fleet, log_interval),
+        daemon=True,
     )
     log_thread.start()
 
-    # Wait until Ctrl+C
+    # Helper to join threads with a timeout and log if they do not finish.
+    def safe_join(thread: threading.Thread, timeout: float = 5.0) -> None:
+        """Join *thread* with *timeout* seconds.
+
+        If the thread is still alive after the timeout, a warning is logged
+        and the function returns, allowing shutdown to continue.
+        """
+        try:
+            thread.join(timeout)
+        except Exception as e:
+            logger.error("Error while joining thread %s: %s", thread.name, e)
+        if thread.is_alive():
+            logger.warning("Thread %s did not terminate within %.1f seconds", thread.name, timeout)
+
+    # Wait until Ctrl+C. The outer try/except ensures a second interrupt during
+    # shutdown does not produce a second traceback.
     try:
         while True:
             time.sleep(1)
@@ -402,6 +421,11 @@ def run_mqtt_mode(broker_type="localhost"):
         # Signal all device threads to stop (QUAL-3.1)
         for dev_stop in device_stop_events.values():
             dev_stop.set()
+        # Join device threads with timeout protection.
         for t in threads:
-            t.join()
-        log_thread.join()
+            safe_join(t, timeout=5.0)
+        # Join the periodic log thread with a timeout longer than its sleep interval.
+        safe_join(log_thread, timeout=log_interval + 5.0)
+    # Ensure any stray KeyboardInterrupts during the cleanup are ignored.
+    except KeyboardInterrupt:
+        logger.info("Forced shutdown during cleanup.")

@@ -45,7 +45,7 @@ Edit `.env` to configure:
 
 ### 3. Run the Server
 ```bash
-python -m benchlab.fastapi.telemetry_api
+python -m benchlab.restapi.telemetry_api
 ```
 
 The server will start on `http://localhost:8000` by default.
@@ -138,7 +138,7 @@ FROM python:3.9-slim
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 COPY . .
-CMD ["python", "-m", "benchlab.fastapi.telemetry_api"]
+CMD ["python", "-m", "benchlab.restapi.telemetry_api"]
 ```
 
 ### Systemd Service (Linux)
@@ -152,7 +152,7 @@ After=network.target
 Type=simple
 User=benchlab
 WorkingDirectory=/opt/benchlab
-ExecStart=/usr/bin/python3 -m benchlab.fastapi.telemetry_api
+ExecStart=/usr/bin/python3 -m benchlab.restapi.telemetry_api
 Restart=always
 
 [Install]
@@ -179,7 +179,7 @@ WantedBy=multi-user.target
 ### Logging
 Enable debug logging for troubleshooting:
 ```bash
-LOG_LEVEL=DEBUG python -m benchlab.fastapi.telemetry_api
+LOG_LEVEL=DEBUG python -m benchlab.restapi.telemetry_api
 ```
 
 ## Development

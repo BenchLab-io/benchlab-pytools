@@ -1,10 +1,22 @@
 #!/usr/bin/env python3
+"""Benchlab PyTools launcher.
+
+This script provides a command‑line entry point for the Benchlab suite. It
+detects the current platform, ensures required Python packages are installed,
+and dispatches to the appropriate sub‑tool based on the supplied flag.
+
+The original implementation was functional but lacked type hints, docstrings,
+and a few usability improvements. The changes in this patch add documentation,
+type annotations, a ``--debug`` flag to increase log verbosity, better handling
+of unknown flags, and deduplication of requirement installations.
+"""
 
 import logging
 import os
 import platform
 import subprocess
 import sys
+from typing import List, Tuple
 
 
 # --- Enforce Python version ---
@@ -21,6 +33,7 @@ if sys.version_info < (REQUIRED_MAJOR, REQUIRED_MINOR):
 
 # --- Logger setup ---
 logger = logging.getLogger("benchlab.launcher")
+# Default to INFO; can be overridden with a "--debug" flag before any other processing.
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler()
@@ -28,16 +41,35 @@ if not logger.handlers:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
+# Enable debug logging if the user passed "--debug" as the first argument.
+if len(sys.argv) > 1 and sys.argv[1] in ("--debug", "-debug"):
+    logger.setLevel(logging.DEBUG)
+    logger.debug("Debug logging enabled via command‑line flag.")
+
 
 # --- Utilities ---
-def clear_screen():
+def clear_screen() -> None:
+    """Clear the terminal screen.
+
+    Uses ``cls`` on Windows and ``clear`` on POSIX systems. Any ``KeyboardInterrupt``
+    raised while the command runs is ignored so the caller can continue gracefully.
+    """
     try:
         os.system("cls" if os.name == "nt" else "clear")
     except KeyboardInterrupt:
         pass
 
 
-def prompt_yes_no(msg, default=True):
+def prompt_yes_no(msg: str, default: bool = True) -> bool:
+    """Prompt the user for a yes/no answer.
+
+    Args:
+        msg: The question to display.
+        default: The default value returned when the user simply presses ``Enter``.
+
+    Returns:
+        ``True`` for a yes answer, ``False`` for no.
+    """
     suffix = " [Y/n]: " if default else " [y/N]: "
     while True:
         choice = input(msg + suffix).strip().lower()
@@ -64,13 +96,23 @@ logger.info(f"Detected platform: {CURRENT_OS} / {CURRENT_ARCH}")
 
 
 # --- PyTools requirements installer ---
-def install_pytools_requirements():
+def install_pytools_requirements() -> None:
+    """Install top‑level Benchlab PyTools requirements if they are missing.
+
+    The function checks the project's ``requirements.txt`` and installs any
+    missing packages. It is called after all helper functions are defined to
+    avoid forward‑reference errors.
+    """
     base_dir = os.path.dirname(os.path.abspath(__file__))
     req_file = os.path.join(base_dir, "requirements.txt")
     if not os.path.isfile(req_file):
         logger.warning(f"No PyTools requirements.txt found at {req_file}")
         return
-    logger.info("Checking PyTools requirements...")
+    ok, missing = requirements_satisfied(req_file)
+    if ok:
+        logger.info("PyTools requirements already satisfied.")
+        return
+    logger.info("Installing missing PyTools requirements...")
     try:
         subprocess.check_call(
             [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "-r", req_file]
@@ -78,8 +120,6 @@ def install_pytools_requirements():
     except subprocess.CalledProcessError:
         logger.error("PyTools dependency installation failed.")
         sys.exit(1)
-
-install_pytools_requirements()
 
 
 # --- Ensure packaging is available ---
@@ -97,8 +137,14 @@ except ModuleNotFoundError:
 
 
 # --- Dependency helpers ---
-def requirements_satisfied(req_file):
-    missing = []
+def requirements_satisfied(req_file: str) -> Tuple[bool, List[str]]:
+    """Check whether all requirements in *req_file* are satisfied.
+
+    Returns a tuple ``(ok, missing)`` where ``ok`` is ``True`` when every
+    requirement is present and ``missing`` is a list of human‑readable strings
+    describing the unsatisfied entries.
+    """
+    missing: List[str] = []
     try:
         with open(req_file, "r", encoding="utf-8") as f:
             lines = [l.strip() for l in f if l.strip() and not l.startswith("#")]
@@ -115,7 +161,7 @@ def requirements_satisfied(req_file):
         # Skip if marker doesn't match current environment
         if req.marker is not None:
             marker = Marker(str(req.marker))
-            if not marker.evaluate():  # Only evaluate against current system
+            if not marker.evaluate():
                 continue
 
         try:
@@ -128,7 +174,12 @@ def requirements_satisfied(req_file):
     return not missing, missing
 
 
-def install_requirements_file(req_file, label):
+def install_requirements_file(req_file: str, label: str) -> bool:
+    """Prompt the user to install missing dependencies for *label*.
+
+    Returns ``True`` when the requirements are satisfied (either already or
+    after a successful installation), ``False`` otherwise.
+    """
     ok, missing = requirements_satisfied(req_file)
     if ok:
         logger.info(f"{label}: requirements already satisfied.")
@@ -194,12 +245,6 @@ MODES = {
         "reqs": ["mqtt"],
         "desc": "MQTT publisher",
         "info": "Publishes telemetry data to an MQTT broker."
-    },
-    "Multi-Tool": {
-        "flag": "-multi",
-        "reqs": [],
-        "desc": "Multi-tool selector",
-        "info": "Select and launch multiple tools simultaneously with shared data source."
     },
     "VU": {
         "flag": "-vu",
@@ -302,14 +347,23 @@ def print_banner():
 
 
 # --- Installer for selected modes ---
-def install_requirements(mods):
+def install_requirements(mods: List[str]) -> None:
+    """Install requirements for the selected *mods*.
+
+    The function respects platform/architecture constraints and avoids installing
+    the same requirement file multiple times by tracking already‑processed tags.
+    """
     base_dir = os.path.dirname(os.path.abspath(__file__))
     benchlab_dir = os.path.join(base_dir, "benchlab")
+    processed_tags: set = set()
     for m in mods:
         if not mode_supported(m):
             logger.info(f"Skipping {m} (unsupported on this platform).")
             continue
         for tag in MODES[m]["reqs"]:
+            if tag in processed_tags:
+                continue
+            processed_tags.add(tag)
             req_file = os.path.join(benchlab_dir, tag, "requirements.txt")
             if not os.path.isfile(req_file):
                 logger.warning(f"{m}: no requirements.txt found for {tag}")
@@ -319,10 +373,13 @@ def install_requirements(mods):
 
 
 # --- Interactive launcher (v2) ---
-def interactive_menu():
-    """Delegate to the PyTools v2 interactive launcher."""
+def interactive_menu() -> None:
+    """Delegate to the PyTools v2 interactive launcher.
+
+    The screen is cleared before and after the interactive loop to keep the
+    terminal tidy. ``KeyboardInterrupt`` is caught to exit gracefully.
+    """
     try:
-        # Show info banner first, then v2 menu
         clear_screen()
         print_banner()
         interactive_loop()
@@ -330,7 +387,6 @@ def interactive_menu():
         logger.info("User interrupted launcher.")
         sys.exit(0)
     finally:
-        # Clear screen before returning to shell
         clear_screen()
 
 

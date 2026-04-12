@@ -405,9 +405,9 @@ class TUICore:
         
         try:
             self._draw_section(4, 2, "Connection")
-            self.stdscr.addstr(6, 4, f"{'Data Source':<22} {source_type}")
-            self.stdscr.addstr(7, 4, f"{'Connection':<22} {source_desc}")
-            self.stdscr.addstr(8, 4, f"{'Device Port':<22} {port_str}")
+            self.stdscr.addstr(5, 4, f"{'Data Source':<22} {source_type}")
+            self.stdscr.addstr(6, 4, f"{'Connection':<22} {source_desc}")
+            self.stdscr.addstr(7, 4, f"{'Device Port':<22} {port_str}")
             
             if not snapshot.get('connected'):
                 self.stdscr.addstr(10, 4, "Not connected to device.", 
@@ -419,25 +419,25 @@ class TUICore:
             product_id = device_info.get('ProductId', 0)
             fw_version = device_info.get('FwVersion', 0)
             
-            self._draw_section(11, 2, "Device")
-            self.stdscr.addstr(13, 4, f"{'Vendor ID':<22} 0x{vendor_id:02X}")
-            self.stdscr.addstr(14, 4, f"{'Product ID':<22} 0x{product_id:02X}")
-            self.stdscr.addstr(15, 4, f"{'Device UID':<22} {uid or 'N/A'}")
-            self.stdscr.addstr(16, 4, f"{'Firmware Version':<22} 0x{fw_version:02X}")
+            self._draw_section(9, 2, "Device")
+            self.stdscr.addstr(10, 4, f"{'Vendor ID':<22} 0x{vendor_id:02X}")
+            self.stdscr.addstr(11, 4, f"{'Product ID':<22} 0x{product_id:02X}")
+            self.stdscr.addstr(12, 4, f"{'Device UID':<22} {uid or 'N/A'}")
+            self.stdscr.addstr(13, 4, f"{'Firmware Version':<22} 0x{fw_version:02X}")
             
             # Configuration (only show if we have sensor_struct - direct mode)
             sensor_struct = snapshot.get('sensor_struct')
             if sensor_struct:
-                self._draw_section(18, 2, "Configuration")
+                self._draw_section(15, 2, "Configuration")
                 fan_sw = getattr(sensor_struct, 'FanSwitchStatus', 'Unknown')
                 rgb_sw = getattr(sensor_struct, 'RGBSwitchStatus', 'Unknown')  
                 rgb_ex = getattr(sensor_struct, 'RGBExtStatus', 'Unknown')
-                self.stdscr.addstr(20, 4, f"{'Fan Switch':<22} {fan_sw}")
-                self.stdscr.addstr(21, 4, f"{'RGB Switch':<22} {rgb_sw}")
-                self.stdscr.addstr(22, 4, f"{'RGB Ext':<22} {rgb_ex}")
+                self.stdscr.addstr(16, 4, f"{'Fan Switch':<22} {fan_sw}")
+                self.stdscr.addstr(17, 4, f"{'RGB Switch':<22} {rgb_sw}")
+                self.stdscr.addstr(18, 4, f"{'RGB Ext':<22} {rgb_ex}")
                 
-                self._draw_section(24, 2, "TUI")
-                self.stdscr.addstr(26, 4, f"{'Refresh Interval':<22} {refresh_interval} s")
+                self._draw_section(20, 2, "TUI")
+                self.stdscr.addstr(21, 4, f"{'Refresh Interval':<22} {refresh_interval} s")
             
         except curses.error:
             pass
@@ -613,7 +613,7 @@ class TUICore:
                f"{'Bar ('+rpm_max_str+' RPM)':<20}  Stats")
         
         try:
-            self.stdscr.addstr(6, cols['NAME'], hdr, 
+            self.stdscr.addstr(5, cols['NAME']+2, hdr, 
                              curses.A_UNDERLINE | curses.color_pair(Config.COLOR_PAIRS['default']))
         except curses.error:
             pass
@@ -641,18 +641,18 @@ class TUICore:
             mn_r, mx_r, avg_r = stats.get(uid, rpm_key)
             mn_d, mx_d, avg_d = stats.get(uid, duty_key)
             
-            row = 8 + i - 1
+            row = 7 + i - 1
             try:
-                self.stdscr.addstr(row, cols['NAME'], f"Fan{i:<5}", fan_color)
-                self.stdscr.addstr(row, cols['DUTY'], f"{duty:>5}%", fan_color)
-                self.stdscr.addstr(row, cols['RPM'], f"{rpm:>6}", fan_color)
-                self.stdscr.addstr(row, cols['ENABLED'], f"{en_str:<3}", fan_color)
-                self.stdscr.addstr(row, cols['BAR'], bar, fan_color)
+                self.stdscr.addstr(row, cols['NAME']+2, f"Fan{i:<5}", fan_color)
+                self.stdscr.addstr(row, cols['DUTY']+2, f"{duty:>5}%", fan_color)
+                self.stdscr.addstr(row, cols['RPM']+2, f"{rpm:>6}", fan_color)
+                self.stdscr.addstr(row, cols['ENABLED']+2, f"{en_str:<3}", fan_color)
+                self.stdscr.addstr(row, cols['BAR']+2, bar, fan_color)
                 
                 if mn_r is not None:
                     stat_str = (f"  {mn_r:.0f}-{mx_r:.0f} ~{avg_r:.0f} RPM"
                                f"  {mn_d:.0f}-{mx_d:.0f} ~{avg_d:.0f}%")
-                    self.stdscr.addstr(row, cols['STATS'], stat_str, 
+                    self.stdscr.addstr(row, cols['STATS']+2, stat_str, 
                                      curses.color_pair(Config.COLOR_PAIRS['default']))
             except curses.error:
                 pass
@@ -663,15 +663,15 @@ class TUICore:
         ext_row = 8 + num_fans + 1
         
         try:
-            self.stdscr.addstr(ext_row, cols['NAME'], "Ext Fan ", 
+            self.stdscr.addstr(ext_row, cols['NAME']+2, "Ext Fan ", 
                              curses.color_pair(Config.COLOR_PAIRS['highlight']))
-            self.stdscr.addstr(ext_row, cols['DUTY'], f"{ext_duty:>5}%", 
+            self.stdscr.addstr(ext_row, cols['DUTY']+2, f"{ext_duty:>5}%", 
                              curses.color_pair(Config.COLOR_PAIRS['highlight']))
-            self.stdscr.addstr(ext_row, cols['RPM'], f"{'N/A':>6}", 
+            self.stdscr.addstr(ext_row, cols['RPM']+2, f"{'N/A':>6}", 
                              curses.color_pair(Config.COLOR_PAIRS['highlight']))
-            self.stdscr.addstr(ext_row, cols['ENABLED'], f"{'N/A':<3}", 
+            self.stdscr.addstr(ext_row, cols['ENABLED']+2, f"{'N/A':<3}", 
                              curses.color_pair(Config.COLOR_PAIRS['highlight']))
-            self.stdscr.addstr(ext_row, cols['BAR'], "█" * ext_bar + "░" * (20 - ext_bar),
+            self.stdscr.addstr(ext_row, cols['BAR']+2, "█" * ext_bar + "░" * (20 - ext_bar),
                              curses.color_pair(Config.COLOR_PAIRS['highlight']))
         except curses.error:
             pass
@@ -680,7 +680,7 @@ class TUICore:
         if num_fans > 0:
             active_count = sum(1 for i in range(1, num_fans+1) if (sd.get(f'Fan{i}_RPM', 0) > 0))
             try:
-                self.stdscr.addstr(ext_row + 2, cols['NAME'],
+                self.stdscr.addstr(ext_row + 2, cols['NAME']+2,
                                  f"Active: {active_count}/{num_fans} fans running",
                                  curses.color_pair(Config.COLOR_PAIRS['ok']))
             except curses.error:

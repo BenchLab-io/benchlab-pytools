@@ -20,7 +20,6 @@ from benchlab.tui.__init__ import __version__
 from benchlab.core.datasource_manager import DataSourceManager
 from benchlab.core.statistics import ChannelStats, create_stats_callback
 from .tui_core import TUICore
-from .config import Config
 
 logger = logging.getLogger("benchlab.tui.main")
 

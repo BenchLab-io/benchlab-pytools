@@ -22,7 +22,7 @@ def test_server_startup():
     
     try:
         # Import the telemetry API module
-        from benchlab.fastapi.telemetry_api import app, Config
+        from benchlab.restapi.telemetry_api import app, Config
         
         # Test configuration validation
         Config.validate()
@@ -43,7 +43,7 @@ def test_api_endpoints():
     print("\nTesting API endpoints...")
     
     try:
-        from benchlab.fastapi.telemetry_api import app
+        from benchlab.restapi.telemetry_api import app
         
         # Test that all expected routes are registered
         routes = [route.path for route in app.routes]
@@ -81,7 +81,7 @@ def test_cross_platform_detection():
     
     try:
         import sys
-        from benchlab.fastapi.telemetry_api import get_device_ports
+        from benchlab.restapi.telemetry_api import get_device_ports
         
         # Test platform detection
         ports = get_device_ports()

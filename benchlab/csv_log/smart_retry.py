@@ -6,6 +6,7 @@ Provides intelligent retry strategies with exponential backoff, jitter, and circ
 import time
 import random
 import logging
+import serial
 import threading
 from typing import Callable, Any, Optional, Dict, List, Union
 from enum import Enum

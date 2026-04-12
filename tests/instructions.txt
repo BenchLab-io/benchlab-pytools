@@ -1,0 +1,3 @@
+test_data_sources.py
+- run from project root 
+- command: pytest -m integration -s -v
