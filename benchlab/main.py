@@ -542,30 +542,40 @@ def _launch_single_tool(tool_id: str) -> None:
     print(f"Starting {tool['name']}...")
     print("Press Ctrl+C to stop.")
 
-    # Build a standard args namespace from env vars.
-    # Every tool receives this — tools use what they need and ignore the rest.
-    import types
-    args = types.SimpleNamespace(
-        source=os.environ.get("BENCHLAB_DATA_SOURCE", "direct"),
-        interval=float(os.environ.get("POLL_INTERVAL", "1.0")),
-        api_url=os.environ.get("BENCHLAB_API_URL", "http://127.0.0.1:8000"),
-        api_port=int(os.environ.get("API_PORT", "8000")),
-        mqtt_port=int(os.environ.get("MQTT_PORT", "1883")),
-        mqtt_broker=os.environ.get("MQTT_BROKER", "localhost"),
-    )
-
     try:
         module = importlib.import_module(tool["module"])
         func = getattr(module, tool["function"])
 
-        if tool_id == "tui":
+        if tool_id == "csv_log":
+            interval = float(os.environ.get("CSV_LOG_INTERVAL", "1.0"))
+            data_source = os.environ.get("BENCHLAB_DATA_SOURCE", "direct")
+            func(interval, data_source)
+        elif tool_id == "hwinfo":
+            interval = float(os.environ.get("POLL_INTERVAL", "1.0"))
+            func(update_interval=interval)
+        elif tool_id == "vu":
+            func()
+        elif tool_id == "vuconfig":
+            func()
+        elif tool_id == "tui":
+            import types
+            args = types.SimpleNamespace()
+            args.source = os.environ.get("BENCHLAB_DATA_SOURCE", "direct")
+            args.interval = float(os.environ.get("POLL_INTERVAL", "1.0"))
+            args.api_url = os.environ.get("BENCHLAB_API_URL", "http://127.0.0.1:8000")
+            args.api_port = int(os.environ.get("API_PORT", "8000"))
+            args.mqtt_port = int(os.environ.get("MQTT_PORT", "1883"))
             curses.wrapper(lambda stdscr: func(stdscr, None, args))
+        elif tool_id == "wigidash":
+            func()
+        elif tool_id == "graph":
+            func()
         elif tool_id == "xeneon":
             import uvicorn
             print("  Starting Xeneon Dashboard on http://localhost:8001")
             uvicorn.run(func, host="127.0.0.1", port=8001, log_level="info")
         else:
-            func(args)
+            func()
 
     except KeyboardInterrupt:
         logger.info(f"{tool['name']} stopped.")
@@ -664,6 +674,18 @@ def get_parser() -> argparse.ArgumentParser:
         metavar="SOURCE",
         help="Data source for -tui (and other tools): direct | fastapi | mqtt",
     )
+    parser.add_argument("--api-url", default="http://127.0.0.1:8000",
+                        dest="api_url",
+                        help="FastAPI base URL (default: http://127.0.0.1:8000)")
+    parser.add_argument("--api-port", type=int, default=8000,
+                        dest="api_port",
+                        help="FastAPI port (default: 8000)")
+    parser.add_argument("--mqtt-broker", default="localhost",
+                        dest="mqtt_broker",
+                        help="MQTT broker host (default: localhost)")
+    parser.add_argument("--mqtt-port", type=int, default=1883,
+                        dest="mqtt_port",
+                        help="MQTT broker port (default: 1883)")
     parser.add_argument("-vu", action="store_true",
                         help="Launch VU analog dials")
     parser.add_argument("-vuconfig", action="store_true",
@@ -688,12 +710,13 @@ def _setup_source_from_args(args) -> bool:
     logger.info(f"Setting up data source: {source}")
 
     if source == "fastapi":
-        port = int(os.environ.get("API_PORT", "8000"))
+        port = getattr(args, "api_port", None) or int(os.environ.get("API_PORT", "8000"))
         os.environ["API_PORT"] = str(port)
+        os.environ["BENCHLAB_API_URL"] = getattr(args, "api_url", f"http://127.0.0.1:{port}")
         ready = check_and_setup_source("fastapi", port=port)
     elif source == "mqtt":
-        broker = os.environ.get("MQTT_BROKER", "localhost")
-        mqtt_port = int(os.environ.get("MQTT_PORT", "1883"))
+        broker = getattr(args, "mqtt_broker", None) or os.environ.get("MQTT_BROKER", "localhost")
+        mqtt_port = getattr(args, "mqtt_port", None) or int(os.environ.get("MQTT_PORT", "1883"))
         os.environ["MQTT_BROKER"] = broker
         os.environ["MQTT_PORT"] = str(mqtt_port)
         ready = check_and_setup_source("mqtt", broker=broker, mqtt_port=mqtt_port)
@@ -753,9 +776,6 @@ def launch_mode() -> None:
             return
         try:
             from benchlab.csv_log.csv_logger_enhanced import run_enhanced_csv_logger
-            # Pass the full args namespace to the enhanced CSV logger, which expects an object
-            # with an `interval` attribute (and potentially other configuration options).
-            # Previously only the float value was passed, causing an AttributeError.
             run_enhanced_csv_logger(args)
         except ModuleNotFoundError:
             print("Enhanced CSV logger not available in this build.")

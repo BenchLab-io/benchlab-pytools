@@ -81,10 +81,17 @@ class EnhancedCSVLogger:
         self.stats = ChannelStats()
         self.batcher: Optional[BatchingLogger] = None
         self.logging_active = False
+        self._stop_event = threading.Event()
         self.logging_thread: Optional[threading.Thread] = None
         self.manager: Optional[DataSourceManager] = None
         self._setup_logging()
         Path(self.config.output_dir).mkdir(parents=True, exist_ok=True)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.stop_logging()
 
     # ------------------------------------------------------------------
     # Internal setup
@@ -174,7 +181,10 @@ class EnhancedCSVLogger:
                 logging.warning(f"No telemetry for device {uid}")
                 return False
 
-            row = {"Timestamp": datetime.now().isoformat(), **data}
+            # Strip the device-supplied 'timestamp' key (case-insensitive) to
+            # avoid a duplicate column alongside our own 'Timestamp'.
+            data = {k: v for k, v in data.items() if k.lower() != "timestamp"}
+            row = {"Timestamp": datetime.now().isoformat(), "uid": uid, **data}
 
             if self.batcher:
                 self.batcher.add_message(row)
@@ -214,7 +224,6 @@ class EnhancedCSVLogger:
         args = self.args
         source_type = (args.source if args else None) or "direct"
 
-        # Build datasource kwargs from args
         ds_kwargs: Dict[str, Any] = {}
         if source_type == "fastapi" and args:
             ds_kwargs["base_url"] = args.api_url
@@ -241,36 +250,41 @@ class EnhancedCSVLogger:
 
         self.create_batcher()
 
+        log_path = Path(self.config.output_dir).resolve()
+        print(f"\nLogging to: {log_path}")
+        if not self.config.silent_mode:
+            print("Press Ctrl+C to stop.\n")
+
         self.logging_active = True
-        self.logging_thread = threading.Thread(
-            target=self._logging_loop, daemon=True, name="CSVLoggerLoop"
-        )
-        self.logging_thread.start()
+        self._stop_event.clear()
 
         try:
-            if not self.config.silent_mode:
-                print("\nLogging started. Press Ctrl+C to stop.")
-            while self.logging_active:
-                time.sleep(self.config.interval)
+            while not self._stop_event.is_set():
+                # Sleep in small chunks so Ctrl+C is responsive on Windows
+                for _ in range(int(self.config.interval / 0.1)):
+                    if self._stop_event.is_set():
+                        break
+                    time.sleep(0.1)
+
+                if self._stop_event.is_set():
+                    break
+
                 if self.batcher:
                     self.batcher.flush()
                 for uid in self.selected_uids:
                     self.log_device_data(uid)
+
         except KeyboardInterrupt:
-            logging.info("Stopping logging...")
+            print("\nStopping...")
         finally:
             self.stop_logging()
 
-    def _logging_loop(self):
-        """Background thread — kept alive to allow future extension."""
-        while self.logging_active:
-            time.sleep(self.config.interval)
-
     def stop_logging(self):
         """Stop logging, flush buffers, and disconnect."""
+        if not self.logging_active:
+            return   # already stopped
         self.logging_active = False
-        if self.logging_thread and self.logging_thread.is_alive():
-            self.logging_thread.join(timeout=5)
+        self._stop_event.set()
         if self.batcher:
             self.batcher.shutdown()
         if self.manager:
@@ -335,13 +349,11 @@ def run_enhanced_csv_logger(args=None):
     config = load_config()
     config.interval = args.interval
 
-    # In non-interactive contexts (tests, CI) auto-select devices so we never
-    # block on stdin.  Tests set BENCHLAB_AUTO_SELECT=true for this purpose.
     if os.getenv("BENCHLAB_AUTO_SELECT", "").lower() == "true":
         config.auto_select = True
 
-    logger = EnhancedCSVLogger(config, args=args)
-    logger.start_logging()
+    with EnhancedCSVLogger(config, args=args) as logger:
+        logger.start_logging()
 
 
 # ----------------------------------------------------------------------

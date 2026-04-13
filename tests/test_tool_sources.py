@@ -26,6 +26,7 @@ Override broker defaults via env vars: MQTT_BROKER / MQTT_PORT.
 """
 
 import importlib
+import logging
 import os
 import threading
 import time
@@ -150,38 +151,39 @@ def _run_tool_in_thread(
     """Run the tool's func(args) in a daemon thread for *timeout* seconds.
 
     Returns the exception if one was raised before the timeout, else None.
+    Treats logged PermissionError / port access failures as test failures
+    so tools that swallow serial errors don't produce false positives.
     """
     tool = CONSUMER_TOOLS[tool_id]
     module = importlib.import_module(tool["module"])
     func = getattr(module, tool["function"])
 
-    error: list[Exception] = []   # mutable container so the thread can write to it
+    error: list[Exception] = []
+    logged_errors: list[str] = []
+
+    # Intercept logging.error/critical to catch swallowed failures
+    # (e.g. "could not open port COM4: PermissionError")
+    _orig_error    = logging.error
+    _orig_critical = logging.critical
+
+    def _capture(msg, *a, **kw):
+        logged_errors.append(str(msg) % a if a else str(msg))
+
+    logging.error    = lambda msg, *a, **kw: (_capture(msg, *a), _orig_error(msg, *a, **kw))
+    logging.critical = lambda msg, *a, **kw: (_capture(msg, *a), _orig_critical(msg, *a, **kw))
 
     def _target():
         try:
             if tool_id == "tui":
-                # tui_main requires a real initialised terminal (initscr()).
-                # There is no way to integration-test a curses app in pytest
-                # without a PTY — skip it on all platforms.
                 pytest.skip("tui requires a real terminal; cannot integration-test in pytest")
-
             elif tool_id == "xeneon":
-                # xeneon exposes an ASGI app, not a plain func(args).
                 import uvicorn
-                config = uvicorn.Config(
-                    func,
-                    host="127.0.0.1",
-                    port=8001,
-                    log_level="error",
-                )
-                server = uvicorn.Server(config)
-                server.run()   # blocks until server.should_exit is set
-
+                cfg = uvicorn.Config(func, host="127.0.0.1", port=8001, log_level="error")
+                uvicorn.Server(cfg).run()
             else:
                 func(args)
-
         except KeyboardInterrupt:
-            pass   # clean kill — not an error
+            pass
         except Exception as exc:
             error.append(exc)
 
@@ -189,13 +191,18 @@ def _run_tool_in_thread(
     thread.start()
     thread.join(timeout=timeout)
 
-    # For xeneon: signal the uvicorn server to stop if it's still running.
-    # We can't easily get the server reference out of the thread, so we rely
-    # on the daemon=True flag — the thread is killed when the test process
-    # moves on. This is acceptable for integration testing purposes.
+    logging.error    = _orig_error
+    logging.critical = _orig_critical
 
     if error:
         return error[0]
+
+    # Surface fatal port/permission errors that tools log but don't raise
+    fatal_keywords = ("PermissionError", "Access is denied", "could not open port")
+    for msg in logged_errors:
+        if any(kw in msg for kw in fatal_keywords):
+            return PermissionError(f"Tool logged a fatal error: {msg}")
+
     return None
 
 
