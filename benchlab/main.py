@@ -754,7 +754,7 @@ def launch_mode() -> None:
             return
         try:
             from benchlab.graph.runner import run_graph_mode
-            run_graph_mode()
+            run_graph_mode(args)
         except ModuleNotFoundError:
             print("Graph module not available in this build.")
         finally:

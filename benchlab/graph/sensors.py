@@ -1,27 +1,26 @@
 # benchlab/graph/sensors.py
 
-from benchlab_pycore.core import translate_sensor_struct, read_sensors, SensorStruct, PowerSensor, FanSensor, SENSOR_POWER_NUM, FAN_NUM
 
-def get_available_sensors():
-    """Return all telemetry fields that can be selected in the graph."""
-    # Use a sample struct for generating keys
-    from benchlab_pycore.core.structures import SensorStruct, PowerSensor, FanSensor, SENSOR_VIN_NUM
+def get_available_sensors(sensor_data: dict = None) -> list:
+    """Return sensor keys available for graphing.
 
-    sensors = []
-
-    # Use translate_sensor_struct to get human-readable keys
-    sample_struct = SensorStruct()  # empty struct just to extract keys
-    translated = translate_sensor_struct(sample_struct)
-
-    return list(translated.keys())
-
-def get_sensor_value(sensor_struct, sensor_name):
+    Parameters
+    ----------
+    sensor_data:
+        A telemetry dict from a datasource snapshot. When provided, the keys
+        are derived from live data. When None, returns an empty list — the UI
+        should call this again once data arrives.
     """
-    Return the value of a sensor by name.
-    Returns translated/human-readable value.
+    if not sensor_data:
+        return []
+    return [k for k in sensor_data if k.lower() != "timestamp"]
+
+
+def get_sensor_value(sensor_struct, sensor_name: str):
+    """Return the value for sensor_name from a telemetry dict.
+
+    sensor_struct is always a plain dict in datasource mode.
     """
-    if not sensor_struct:
+    if not sensor_struct or not sensor_name:
         return None
-
-    translated = translate_sensor_struct(sensor_struct)
-    return translated.get(sensor_name)
+    return sensor_struct.get(sensor_name)
