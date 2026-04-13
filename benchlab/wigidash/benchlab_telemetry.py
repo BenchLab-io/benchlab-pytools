@@ -5,7 +5,6 @@ from collections import defaultdict, deque
 import time
 import threading
 
-from benchlab_pycore.core import translate_sensor_struct
 from benchlab.wigidash.benchlab_utils import get_logger
 
 logger = get_logger("BenchlabTelemetry")
@@ -74,16 +73,11 @@ def telemetry_step(app, device_info=None, sensor_struct=None):
             logger.warning("No sensor data provided to telemetry_step")
             return
 
-        # Handle both raw sensor struct (direct serial) and pre-translated dict (DataSource)
-        if isinstance(sensor_struct, dict):
-            # DataSource path: already translated dict
-            data = sensor_struct
-        else:
-            # Direct serial path: raw struct needing translation
-            data = translate_sensor_struct(sensor_struct)
-            if data is None:
-                logger.warning("Failed to translate sensor data")
-                return
+        # sensor_struct is always a pre-translated dict from DataSourceManager
+        if not isinstance(sensor_struct, dict):
+            logger.warning("Unexpected sensor_struct type: %s", type(sensor_struct))
+            return
+        data = sensor_struct
 
         # --- Cleanup & normalization ---
         data.setdefault("Fans", [])

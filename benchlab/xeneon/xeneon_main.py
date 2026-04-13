@@ -258,28 +258,44 @@ async def ws_stream(uid: str, ws: WebSocket):
         ws_url  = api_url.replace("http://", "ws://") + f"/device/{uid}/stream"
         try:
             import websockets
+            import websockets.exceptions
             async with websockets.connect(ws_url) as remote:
                 async def fwd_to_client():
-                    async for msg in remote:
-                        await ws.send_text(msg)
+                    try:
+                        async for msg in remote:
+                            await ws.send_text(msg)
+                    except (websockets.exceptions.ConnectionClosedError,
+                            websockets.exceptions.ConnectionClosedOK,
+                            WebSocketDisconnect):
+                        pass
+
                 async def fwd_to_remote():
                     try:
                         while True:
                             await remote.send(await ws.receive_text())
-                    except WebSocketDisconnect:
+                    except (WebSocketDisconnect,
+                            websockets.exceptions.ConnectionClosedError,
+                            websockets.exceptions.ConnectionClosedOK):
                         pass
+
                 done, pending = await asyncio.wait(
                     [asyncio.create_task(fwd_to_client()),
                      asyncio.create_task(fwd_to_remote())],
                     return_when=asyncio.FIRST_COMPLETED)
                 for t in pending:
                     t.cancel()
+                    try:
+                        await t
+                    except (asyncio.CancelledError, Exception):
+                        pass
         except ImportError:
             logger.error("websockets not installed — run: pip install websockets")
             await ws.close(code=1011)
+        except (websockets.exceptions.ConnectionClosedError,
+                websockets.exceptions.ConnectionClosedOK):
+            pass  # Remote closed — normal on shutdown
         except Exception as e:
-            logger.error(f"[{uid}] WS proxy error: {e}")
-            await ws.close(code=1011)
+            logger.debug(f"[{uid}] WS proxy closed: {e}")
     else:
         import json
         try:

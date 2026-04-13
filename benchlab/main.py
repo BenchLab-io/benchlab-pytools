@@ -19,8 +19,10 @@ import curses
 import importlib
 import os
 import socket
+import subprocess
 import sys
 import threading
+import time
 import traceback
 import logging
 from typing import List, Optional
@@ -115,6 +117,31 @@ def check_fastapi_running(host: str = "127.0.0.1", port: int = 8000) -> bool:
     except Exception:
         pass
     return False
+
+
+def _port_in_use(host: str, port: int) -> bool:
+    """Return True if something is already bound to host:port."""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
+        result = sock.connect_ex((host, port))
+        sock.close()
+        return result == 0
+    except Exception:
+        return False
+
+
+def _trigger_fastapi_scan(host: str, port: int) -> None:
+    """POST /scan to an already-running FastAPI server to force device discovery."""
+    import urllib.request
+    try:
+        req = urllib.request.Request(
+            f"http://{host}:{port}/scan", method="POST", data=b""
+        )
+        with urllib.request.urlopen(req, timeout=5):
+            pass
+    except Exception:
+        pass
 
 
 def check_mqtt_running(host: str = "localhost", port: int = 1883) -> bool:
@@ -293,9 +320,21 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
             logger.info(f"FastAPI already running at {api_url} (device(s) detected)")
             os.environ["BENCHLAB_DATA_SOURCE"] = "fastapi"
             return True
-        else:
-            logger.info(f"FastAPI not detected at {api_url}")
-            return start_fastapi_source(port)
+
+        # Check if port is already bound by something (not necessarily our server)
+        # If so, try a /scan to wake it up rather than starting a duplicate process.
+        if _port_in_use(host, port):
+            logger.info(f"Port {port} is in use — triggering /scan on existing server")
+            _trigger_fastapi_scan(host, port)
+            if check_fastapi_running(host, port):
+                logger.info(f"FastAPI at {api_url} now has device(s)")
+                os.environ["BENCHLAB_DATA_SOURCE"] = "fastapi"
+                return True
+            logger.error(f"Port {port} is occupied but FastAPI has no devices — cannot start")
+            return False
+
+        logger.info(f"FastAPI not detected at {api_url}")
+        return start_fastapi_source(port)
 
     if source_type == "mqtt":
         host = kwargs.get("broker", "localhost")
@@ -542,40 +581,36 @@ def _launch_single_tool(tool_id: str) -> None:
     print(f"Starting {tool['name']}...")
     print("Press Ctrl+C to stop.")
 
+    # Build standard args namespace from env vars so every tool
+    # receives the same interface regardless of how it was invoked.
+    import types as _types
+    args = _types.SimpleNamespace(
+        source=os.environ.get("BENCHLAB_DATA_SOURCE", "direct"),
+        interval=float(os.environ.get("POLL_INTERVAL", "1.0")),
+        api_url=os.environ.get("BENCHLAB_API_URL", "http://127.0.0.1:8000"),
+        api_port=int(os.environ.get("API_PORT", "8000")),
+        mqtt_broker=os.environ.get("MQTT_BROKER", "localhost"),
+        mqtt_port=int(os.environ.get("MQTT_PORT", "1883")),
+    )
+
     try:
         module = importlib.import_module(tool["module"])
         func = getattr(module, tool["function"])
 
-        if tool_id == "csv_log":
-            interval = float(os.environ.get("CSV_LOG_INTERVAL", "1.0"))
-            data_source = os.environ.get("BENCHLAB_DATA_SOURCE", "direct")
-            func(interval, data_source)
-        elif tool_id == "hwinfo":
-            interval = float(os.environ.get("POLL_INTERVAL", "1.0"))
-            func(update_interval=interval)
-        elif tool_id == "vu":
-            func()
-        elif tool_id == "vuconfig":
-            func()
-        elif tool_id == "tui":
-            import types
-            args = types.SimpleNamespace()
-            args.source = os.environ.get("BENCHLAB_DATA_SOURCE", "direct")
-            args.interval = float(os.environ.get("POLL_INTERVAL", "1.0"))
-            args.api_url = os.environ.get("BENCHLAB_API_URL", "http://127.0.0.1:8000")
-            args.api_port = int(os.environ.get("API_PORT", "8000"))
-            args.mqtt_port = int(os.environ.get("MQTT_PORT", "1883"))
+        if tool_id == "tui":
             curses.wrapper(lambda stdscr: func(stdscr, None, args))
-        elif tool_id == "wigidash":
-            func()
-        elif tool_id == "graph":
-            func()
         elif tool_id == "xeneon":
-            import uvicorn
-            print("  Starting Xeneon Dashboard on http://localhost:8001")
-            uvicorn.run(func, host="127.0.0.1", port=8001, log_level="info")
+            from benchlab.xeneon.xeneon_main import run_xeneon
+            run_xeneon(args)
         else:
-            func()
+            try:
+                func(args)
+            except TypeError:
+                logger.warning(
+                    f"{tool['name']}: func(args) failed, retrying without args. "
+                    f"Update {tool['module']}.{tool['function']} to accept args."
+                )
+                func()
 
     except KeyboardInterrupt:
         logger.info(f"{tool['name']} stopped.")
@@ -584,9 +619,61 @@ def _launch_single_tool(tool_id: str) -> None:
         traceback.print_exc()
 
 
+def _spawn_tui_in_terminal(args) -> subprocess.Popen:
+    """Launch the TUI in a separate terminal window so it doesn't block the main console.
+
+    Returns the Popen handle so the caller can wait on / terminate it.
+    """
+    cmd = [
+        sys.executable, "-m", "benchlab",
+        "-tui",
+        "--source", args.source,
+        "--api-url", args.api_url,
+        "--api-port", str(args.api_port),
+        "--mqtt-broker", args.mqtt_broker,
+        "--mqtt-port", str(args.mqtt_port),
+    ]
+
+    if os.name == "nt":
+        # Windows — open a new cmd window with a large enough console buffer
+        # mode con sets columns x lines before the TUI starts
+        setup = "mode con cols=220 lines=50 && "
+        inner = " ".join(f'"{c}"' if " " in c else c for c in cmd)
+        return subprocess.Popen(
+            f'start "BENCHLAB TUI" cmd /k "{setup}{inner}"',
+            shell=True,
+        )
+    else:
+        # Linux/macOS — try common terminal emulators
+        for term in ("x-terminal-emulator", "gnome-terminal", "xterm"):
+            try:
+                return subprocess.Popen([term, "--"] + cmd)
+            except FileNotFoundError:
+                continue
+        # Fallback: run in background (no new window)
+        logger.warning("No terminal emulator found — TUI will run in background")
+        return subprocess.Popen(cmd)
+
+
 def _launch_tools_concurrent(tool_ids: List[str]) -> None:
-    """Launch multiple tools in background threads. (Experimental!)"""
+    """Launch multiple tools, each in its own daemon thread.
+
+    TUI is special-cased to run in a separate terminal window so it
+    doesn't fight with the main console output.
+    """
     threads: List[threading.Thread] = []
+    tui_proc: Optional[subprocess.Popen] = None
+
+    # Build args namespace from env for tools that need it
+    import types as _types
+    args = _types.SimpleNamespace(
+        source=os.environ.get("BENCHLAB_DATA_SOURCE", "direct"),
+        interval=float(os.environ.get("POLL_INTERVAL", "1.0")),
+        api_url=os.environ.get("BENCHLAB_API_URL", "http://127.0.0.1:8000"),
+        api_port=int(os.environ.get("API_PORT", "8000")),
+        mqtt_broker=os.environ.get("MQTT_BROKER", "localhost"),
+        mqtt_port=int(os.environ.get("MQTT_PORT", "1883")),
+    )
 
     def run_tool(tid: str):
         try:
@@ -595,19 +682,41 @@ def _launch_tools_concurrent(tool_ids: List[str]) -> None:
             logger.error(f"[{CONSUMER_TOOLS.get(tid, {}).get('name', tid)}] Error: {e}")
 
     for tid in tool_ids:
-        t = threading.Thread(target=run_tool, args=(tid,), daemon=True)
-        t.start()
-        threads.append(t)
-        logger.info(f"Started: {CONSUMER_TOOLS.get(tid, {}).get('name', tid)}")
+        if tid == "tui":
+            logger.info("Spawning TUI in a separate terminal window...")
+            tui_proc = _spawn_tui_in_terminal(args)
+            logger.info(f"TUI started (PID {tui_proc.pid})")
+        else:
+            t = threading.Thread(target=run_tool, args=(tid,), daemon=True)
+            t.start()
+            threads.append(t)
+            logger.info(f"Started: {CONSUMER_TOOLS.get(tid, {}).get('name', tid)}")
 
-    logger.info(f"Running {len(threads)} tool(s). Press Ctrl+C to stop all.")
+    logger.info(f"Running {len(threads)} tool thread(s). Press Ctrl+C to stop all.")
 
     try:
-        for t in threads:
-            while t.is_alive():
-                t.join(timeout=1)
+        while True:
+            # Check if all threads are done
+            alive = [t for t in threads if t.is_alive()]
+            if not alive and tui_proc is None:
+                break
+            # Check if TUI process exited
+            if tui_proc is not None and tui_proc.poll() is not None:
+                tui_proc = None
+            time.sleep(0.5)
     except (KeyboardInterrupt, EOFError):
         logger.info("Stopping all tools...")
+    finally:
+        # Give threads a moment to finish naturally
+        for t in threads:
+            t.join(timeout=3)
+        # Kill TUI process if still running
+        if tui_proc is not None and tui_proc.poll() is None:
+            tui_proc.terminate()
+            try:
+                tui_proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                tui_proc.kill()
     logger.info("Done.")
 
 
