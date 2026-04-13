@@ -828,14 +828,8 @@ def launch_mode() -> None:
         if not _setup_source_from_args(args):
             return
         try:
-            from benchlab.xeneon.xeneon_main import app
-            import uvicorn
-            print("Starting Xeneon Dashboard with Device Telemetry...")
-            print("Dashboard: http://localhost:8001/xeneon/dashboard")
-            print("Iframe URL: http://localhost:8001/xeneon")
-            print("Press Ctrl+C to stop the server")
-            print("-" * 50)
-            uvicorn.run(app, host="127.0.0.1", port=8001, log_level="info")
+            from benchlab.xeneon.xeneon_main import run_xeneon
+            run_xeneon(args)
         except ModuleNotFoundError:
             print("Xeneon dashboard module not available in this build.")
         finally:

@@ -41,10 +41,10 @@ class XeneonDashboard {
             });
         });
         
-        // Refresh fleet button
+        // Refresh fleet button — triggers explicit scan
         const refreshBtn = document.getElementById('refresh-fleet');
         if (refreshBtn) {
-            refreshBtn.addEventListener('click', () => this.refreshFleet());
+            refreshBtn.addEventListener('click', () => this.scanForDevices());
         }
         
         // Window resize for responsive design
@@ -174,17 +174,17 @@ class XeneonDashboard {
     }
     
     startPolling() {
+        // Always poll telemetry via REST every second.
+        // WebSocket updates are additive — if WS works we get updates from both,
+        // which is fine. This ensures values update even if WS is unavailable.
         setInterval(() => {
-            if (this.connectionStatus !== 'connected') {
-                // Fallback to REST polling when WebSocket is not available
-                this.refreshFleet();
-                if (this.activeDevice) {
-                    this.refreshDevice();
-                    this.refreshSystem();
-                    this.refreshVoltage();
-                    this.refreshTemperature();
-                    this.refreshFans();
-                }
+            this.refreshFleet();
+            if (this.activeDevice) {
+                this.refreshDevice();
+                this.refreshSystem();
+                this.refreshVoltage();
+                this.refreshTemperature();
+                this.refreshFans();
             }
         }, this.config.refreshInterval);
     }
@@ -233,48 +233,34 @@ class XeneonDashboard {
     // Data Refresh Methods
     async refreshFleet() {
         try {
-            // Use POST /scan to trigger a device rescan
-            const scanResult = await this.apiPost('/scan', {});
-            const devices = scanResult.devices || [];
-            
-            // Show scan results
-            if (scanResult.new_devices && scanResult.new_devices.length > 0) {
-                console.log('New devices found:', scanResult.new_devices);
-            }
-            if (scanResult.disconnected_devices && scanResult.disconnected_devices.length > 0) {
-                console.log('Devices disconnected:', scanResult.disconnected_devices);
-            }
-            
-            this.updateDeviceList(devices);
-            
-            // If no active device, try to connect to first available
+            // Use GET /devices for routine polling — never triggers a port rescan.
+            // POST /scan is only called when the user explicitly clicks Refresh.
+            const devices = await this.apiGet('/devices');
+            this.updateDeviceList(Array.isArray(devices) ? devices : (devices.devices || []));
+
             if (!this.activeDevice && devices.length > 0) {
                 this.activeDevice = devices[0].uid;
-                // Try WebSocket but don't fail if it doesn't work
                 this.connectToWebSocket();
             }
-            
-            // If we have devices and got a successful response, mark as connected
+
             if (devices.length > 0 && this.connectionStatus === 'disconnected') {
-                // We're using REST polling, which is working
                 this.setConnectionStatus('connected');
             }
-            
         } catch (error) {
             console.error('Error refreshing fleet:', error);
-            // Fallback to GET /devices if scan fails
-            try {
-                const devices = await this.apiGet('/devices');
-                this.updateDeviceList(devices);
-                
-                // If we got devices via fallback, we're connected via REST
-                if (devices.length > 0 && this.connectionStatus === 'disconnected') {
-                    this.setConnectionStatus('connected');
-                }
-            } catch (fallbackError) {
-                console.error('Fallback also failed:', fallbackError);
-                this.showErrorMessage('Failed to refresh fleet data');
-            }
+            this.showErrorMessage('Failed to refresh fleet data');
+        }
+    }
+
+    async scanForDevices() {
+        // Called only by the explicit Refresh button — may trigger port scan
+        try {
+            const scanResult = await this.apiPost('/scan', {});
+            const devices = scanResult.devices || [];
+            this.updateDeviceList(devices);
+        } catch (error) {
+            console.error('Error scanning devices:', error);
+            this.showErrorMessage('Scan failed');
         }
     }
     

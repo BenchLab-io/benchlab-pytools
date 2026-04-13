@@ -1,367 +1,327 @@
 """
 Xeneon Dashboard Main Module
 
-Web dashboard server that automatically launches the FastAPI telemetry server
-and proxies API calls to it. This server does NOT open any serial ports directly -
-it starts the telemetry server in a background thread which handles all serial communication.
+For direct/mqtt sources: serves telemetry directly from DataSourceManager.
+For fastapi source: proxies API calls to the already-running telemetry server.
+
+This means the dashboard never starts a second telemetry server and never
+tries to open a serial port that's already held by another component.
 """
 
+import asyncio
 import logging
 import threading
 import time
-import asyncio
+import types
 from pathlib import Path
+from typing import Optional
+
+import httpx
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.middleware.cors import CORSMiddleware
-import httpx
 
 logger = logging.getLogger("benchlab.xeneon")
 
-# Configuration
-TELEMETRY_API_HOST = "127.0.0.1"
-TELEMETRY_API_PORT = 8000
-TELEMETRY_API_URL = f"http://{TELEMETRY_API_HOST}:{TELEMETRY_API_PORT}"
+app = FastAPI(title="Xeneon Dashboard", version="0.1.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True,
+                   allow_methods=["*"], allow_headers=["*"], expose_headers=["*"])
 
-# Create standalone FastAPI app (NOT extending telemetry_api to avoid serial port access)
-app = FastAPI(
-    title="Xeneon Dashboard",
-    description="Web dashboard for BenchLab telemetry",
-    version="0.1.0"
-)
-
-# Add CORS middleware for iframe embedding
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allow embedding from any domain
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"]
-)
-
-# Mount static files for the dashboard
-static_dir = Path(__file__).parent / "static"
-app.mount("/xeneon/static", StaticFiles(directory=static_dir), name="static")
-
-# Setup templates
+static_dir    = Path(__file__).parent / "static"
 templates_dir = Path(__file__).parent / "templates"
+app.mount("/xeneon/static", StaticFiles(directory=static_dir), name="static")
 templates = Jinja2Templates(directory=templates_dir)
 
-# HTTP client for proxying to telemetry API (XENEON-1: will be initialized in startup)
-http_client = None
-
-# Background telemetry server
-telemetry_server = None
-telemetry_thread = None
-
-
-def run_telemetry_server():
-    """Run the FastAPI telemetry server in a background thread"""
-    import uvicorn
-    from benchlab.restapi.telemetry_api import app as telemetry_app
-    
-    config = uvicorn.Config(
-        telemetry_app,
-        host=TELEMETRY_API_HOST,
-        port=TELEMETRY_API_PORT,
-        log_level="warning",  # Suppress verbose logs from telemetry server
-        use_colors=False
-    )
-    server = uvicorn.Server(config)
-    
-    # Run the server in the thread's event loop
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(server.serve())
-
-
-def wait_for_telemetry_server(timeout=10):
-    """Wait for the telemetry server to become available (XENEON-1: use sync httpx)"""
-    start_time = time.time()
-    while time.time() - start_time < timeout:
-        try:
-            response = httpx.get(f"{TELEMETRY_API_URL}/health", timeout=1)
-            if response.status_code == 200:
-                return True
-        except Exception:
-            pass
-        time.sleep(0.2)
-    return False
+_args: Optional[types.SimpleNamespace] = None
+_datasource_manager = None
+_http_client: Optional[httpx.AsyncClient] = None
+_telemetry_lock = threading.Lock()
 
 
 @app.on_event("startup")
 async def startup_event():
-    """Start the telemetry server and log startup information.
-    
-    XENEON-1: Initialize http_client here to avoid module-level initialization issues.
-    """
-    global telemetry_thread, http_client
-    
-    # Initialize the async HTTP client (XENEON-1)
-    http_client = httpx.AsyncClient(base_url=TELEMETRY_API_URL, timeout=30.0)
-    
-    logger.info("Xeneon Dashboard starting up...")
-    logger.info(f"Starting embedded FastAPI telemetry server on {TELEMETRY_API_URL}...")
-    
-    # Start the telemetry server in a background thread
-    telemetry_thread = threading.Thread(target=run_telemetry_server, daemon=True)
-    telemetry_thread.start()
-    
-    # Wait for the telemetry server to be ready
-    if wait_for_telemetry_server():
-        logger.info(f"Telemetry server is ready at {TELEMETRY_API_URL}")
+    global _datasource_manager, _http_client
+    source = _args.source if _args else "direct"
+
+    if source == "fastapi":
+        api_url = getattr(_args, "api_url", "http://127.0.0.1:8000")
+        logger.info(f"Xeneon: proxy mode -> {api_url}")
+        _http_client = httpx.AsyncClient(base_url=api_url, timeout=10.0)
     else:
-        logger.warning(f"Telemetry server did not start within timeout. API calls may fail.")
-    
-    logger.info("Dashboard will be available at: http://localhost:8001/xeneon/dashboard")
-    logger.info("Iframe URL: http://localhost:8001/xeneon")
+        from benchlab.core.datasource_manager import DataSourceManager
+        logger.info(f"Xeneon: datasource mode -> {source}")
+        ds_kwargs = {}
+        if source == "mqtt" and _args:
+            ds_kwargs["broker"] = getattr(_args, "mqtt_broker", "localhost")
+            ds_kwargs["port"]   = getattr(_args, "mqtt_port", 1883)
+        _datasource_manager = DataSourceManager(source_type=source, **ds_kwargs)
+        if not _datasource_manager.connect():
+            logger.error("Xeneon: failed to connect DataSourceManager")
+            _datasource_manager = None
+        else:
+            logger.info("Xeneon: DataSourceManager connected")
+
+    logger.info("Xeneon Dashboard ready at http://localhost:8001/xeneon/dashboard")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Clean up HTTP client on shutdown"""
-    await http_client.aclose()
+    if _http_client:
+        await _http_client.aclose()
+    if _datasource_manager:
+        _datasource_manager.disconnect()
+
+
+def _dsm_list_devices() -> list:
+    if not _datasource_manager:
+        return []
+    try:
+        return [{"uid": uid, "port": info.get("port", "?"), **info}
+                for uid, info in _datasource_manager.list_devices().items()]
+    except Exception as e:
+        logger.error(f"list_devices: {e}")
+        return []
+
+
+def _dsm_get_telemetry(uid: str) -> dict:
+    if not _datasource_manager:
+        return {}
+    try:
+        with _telemetry_lock:
+            _datasource_manager.select_device(uid)
+            snap = _datasource_manager.snapshot()
+        return snap.get("sensor_data") or snap.get("all_telemetry", {}).get(uid, {})
+    except Exception as e:
+        logger.error(f"get_telemetry({uid}): {e}")
+        return {}
+
+
+def _dsm_get_info(uid: str) -> dict:
+    if not _datasource_manager:
+        return {}
+    try:
+        with _telemetry_lock:
+            snap = _datasource_manager.snapshot()
+        return {"UID": uid, **snap.get("all_devices", {}).get(uid, {})}
+    except Exception as e:
+        logger.error(f"get_info({uid}): {e}")
+        return {"UID": uid}
+
+
+async def _proxy_get(path: str, **params):
+    if not _http_client:
+        return None
+    try:
+        r = await _http_client.get(path, params=params or None)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        logger.error(f"Proxy GET {path}: {e}")
+        return None
+
+
+async def _proxy_post(path: str):
+    if not _http_client:
+        return None
+    try:
+        r = await _http_client.post(path)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        logger.error(f"Proxy POST {path}: {e}")
+        return None
 
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard_root():
-    """Redirect root to dashboard"""
-    return HTMLResponse(content="""
-    <html>
-        <head>
-            <meta http-equiv="refresh" content="0; url=/xeneon/dashboard">
-        </head>
-        <body>
-            <p>Redirecting to dashboard...</p>
-        </body>
-    </html>
-    """)
+async def root():
+    return HTMLResponse('<html><head><meta http-equiv="refresh" content="0; url=/xeneon/dashboard"></head></html>')
 
 
-@app.get("/dashboard", response_class=HTMLResponse)
+@app.get("/xeneon/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    """Serve the main dashboard page"""
     return templates.TemplateResponse("dashboard.html", {"request": request})
 
 
 @app.get("/xeneon", response_class=HTMLResponse)
 async def dashboard_embed(request: Request):
-    """Serve the dashboard for iframe embedding"""
     return templates.TemplateResponse("dashboard.html", {"request": request})
 
 
 @app.get("/health")
-async def health_check():
-    """Health check endpoint for the dashboard service"""
-    return {
-        "status": "healthy",
-        "service": "xeneon-dashboard",
-        "version": "0.1.0"
-    }
+async def health():
+    return {"status": "healthy", "service": "xeneon-dashboard", "version": "0.1.0"}
 
 
 @app.get("/config")
-async def get_dashboard_config():
-    """Get dashboard configuration"""
+async def config():
     return {
-        "title": "Xeneon Dashboard",
-        "version": "0.1.0",
-        "refresh_interval": 1000,  # 1 second
-        "theme": {
-            "primary": "#2ecc71",  # Green
-            "danger": "#e74c3c",   # Red
-            "warning": "#f1c40f",  # Yellow
-            "info": "#3498db",     # Cyan
-            "muted": "#34495e"     # Blue
-        },
+        "title": "Xeneon Dashboard", "version": "0.1.0", "refresh_interval": 1000,
+        "theme": {"primary": "#2ecc71", "danger": "#e74c3c", "warning": "#f1c40f",
+                  "info": "#3498db", "muted": "#34495e"},
         "tabs": [
             {"id": "fleet", "name": "Fleet", "icon": "📡"},
             {"id": "device", "name": "Device", "icon": "🖥️"},
             {"id": "system", "name": "System", "icon": "⚡"},
             {"id": "voltage", "name": "Voltage", "icon": "🔋"},
             {"id": "temperature", "name": "Temperature", "icon": "🌡️"},
-            {"id": "fans", "name": "Fans", "icon": "🌀"}
-        ]
+            {"id": "fans", "name": "Fans", "icon": "🌀"},
+        ],
     }
 
 
-# --- API Proxy Routes ---
-# These routes forward requests to the FastAPI telemetry server
-
 @app.get("/api/devices")
-async def api_list_devices():
-    """Proxy to telemetry server's /devices endpoint"""
-    try:
-        response = await http_client.get("/devices")
-        response.raise_for_status()
-        return response.json()
-    except httpx.HTTPError as e:
-        logger.error(f"Error proxying /api/devices: {e}")
-        return []
+async def api_devices():
+    if _datasource_manager:
+        return _dsm_list_devices()
+    return await _proxy_get("/devices") or []
 
 
 @app.post("/api/scan")
-async def api_scan_for_devices():
-    """Proxy to telemetry server's /scan endpoint"""
-    try:
-        response = await http_client.post("/scan")
-        response.raise_for_status()
-        return response.json()
-    except httpx.HTTPError as e:
-        logger.error(f"Error proxying /api/scan: {e}")
-        return {
-            "scan_time": "",
-            "total_devices": 0,
-            "new_devices": [],
-            "disconnected_devices": [],
-            "devices": [],
-            "error": str(e)
-        }
+async def api_scan():
+    """Return current known devices without touching the serial port.
+    The JS calls this on every poll — for direct/mqtt we never re-scan."""
+    if _datasource_manager:
+        devices = _dsm_list_devices()
+        return {"scan_time": "", "total_devices": len(devices),
+                "new_devices": [], "disconnected_devices": [], "devices": devices}
+    return await _proxy_post("/scan") or {"total_devices": 0, "devices": []}
 
 
 @app.get("/api/device/{uid}/info")
-async def api_get_device_info(uid: str):
-    """Proxy to telemetry server's /device/{uid}/info endpoint"""
-    try:
-        response = await http_client.get(f"/device/{uid}/info")
-        response.raise_for_status()
-        return response.json()
-    except httpx.HTTPError as e:
-        logger.error(f"Error proxying /api/device/{uid}/info: {e}")
+async def api_device_info(uid: str):
+    if _datasource_manager:
+        info = _dsm_get_info(uid)
+        if not info:
+            raise HTTPException(status_code=404, detail=f"Device {uid} not found")
+        return info
+    data = await _proxy_get(f"/device/{uid}/info")
+    if data is None:
         raise HTTPException(status_code=404, detail=f"Device {uid} not found")
+    return data
 
 
 @app.get("/api/device/{uid}/telemetry")
-async def api_get_telemetry(uid: str):
-    """Proxy to telemetry server's /device/{uid}/telemetry endpoint"""
-    try:
-        response = await http_client.get(f"/device/{uid}/telemetry")
-        response.raise_for_status()
-        return response.json()
-    except httpx.HTTPError as e:
-        logger.error(f"Error proxying /api/device/{uid}/telemetry: {e}")
-        return {"error": f"Device {uid} not found"}
+async def api_telemetry(uid: str):
+    if _datasource_manager:
+        return _dsm_get_telemetry(uid) or {"error": "no data"}
+    return await _proxy_get(f"/device/{uid}/telemetry") or {"error": "no data"}
 
 
 @app.get("/api/device/{uid}/telemetry/{sensor}")
-async def api_get_sensor(uid: str, sensor: str):
-    """Proxy to telemetry server's /device/{uid}/telemetry/{sensor} endpoint"""
-    try:
-        response = await http_client.get(f"/device/{uid}/telemetry/{sensor}")
-        response.raise_for_status()
-        return response.json()
-    except httpx.HTTPError as e:
-        logger.error(f"Error proxying /api/device/{uid}/telemetry/{sensor}: {e}")
-        return {"error": f"Sensor {sensor} not found"}
+async def api_sensor(uid: str, sensor: str):
+    if _datasource_manager:
+        telem = _dsm_get_telemetry(uid)
+        if sensor not in telem:
+            raise HTTPException(status_code=404, detail=f"Sensor {sensor} not found")
+        return {sensor: telem[sensor]}
+    return await _proxy_get(f"/device/{uid}/telemetry/{sensor}") or {"error": "no data"}
 
 
 @app.get("/api/device/{uid}/history")
-async def api_get_history(uid: str, limit: int = 100):
-    """Proxy to telemetry server's /device/{uid}/history endpoint"""
-    try:
-        response = await http_client.get(f"/device/{uid}/history", params={"limit": limit})
-        response.raise_for_status()
-        return response.json()
-    except httpx.HTTPError as e:
-        logger.error(f"Error proxying /api/device/{uid}/history: {e}")
-        return {"error": f"Device {uid} not found"}
+async def api_history(uid: str, limit: int = 100):
+    if _datasource_manager:
+        return {"count": 0, "data": [], "total_available": 0}
+    return await _proxy_get(f"/device/{uid}/history", limit=limit) or {"count": 0, "data": []}
 
 
 @app.get("/api/device/{uid}/sensors")
-async def api_get_sensors(uid: str):
-    """Proxy to telemetry server's /device/{uid}/sensors endpoint"""
-    try:
-        response = await http_client.get(f"/device/{uid}/sensors")
-        response.raise_for_status()
-        return response.json()
-    except httpx.HTTPError as e:
-        logger.error(f"Error proxying /api/device/{uid}/sensors: {e}")
-        return {"error": f"Device {uid} not found"}
+async def api_sensors(uid: str):
+    if _datasource_manager:
+        telem = _dsm_get_telemetry(uid)
+        return [k for k in telem if k.lower() != "timestamp"]
+    return await _proxy_get(f"/device/{uid}/sensors") or []
 
 
 @app.get("/api/device/{uid}/status")
-async def api_get_device_status(uid: str):
-    """Proxy to telemetry server's /device/{uid}/status endpoint"""
-    try:
-        response = await http_client.get(f"/device/{uid}/status")
-        response.raise_for_status()
-        return response.json()
-    except httpx.HTTPError as e:
-        logger.error(f"Error proxying /api/device/{uid}/status: {e}")
+async def api_status(uid: str):
+    if _datasource_manager:
+        devices = {d["uid"]: d for d in _dsm_list_devices()}
+        if uid not in devices:
+            raise HTTPException(status_code=404, detail=f"Device {uid} not found")
+        return {"uid": uid, "connected": True, **devices[uid]}
+    data = await _proxy_get(f"/device/{uid}/status")
+    if data is None:
         raise HTTPException(status_code=404, detail=f"Device {uid} not found")
+    return data
 
 
 @app.websocket("/api/device/{uid}/stream")
-async def api_stream_device(uid: str, ws: WebSocket):
-    """Proxy WebSocket to telemetry server's /device/{uid}/stream endpoint"""
+async def ws_stream(uid: str, ws: WebSocket):
     await ws.accept()
-    logger.info(f"[{uid}] WebSocket client connected to dashboard")
-    
-    try:
-        # Connect to the telemetry server's WebSocket using httpx
-        async with httpx.AsyncClient() as client:
-            # Use the WebSocket endpoint on the telemetry server
-            async with client.websocket_connect(f"/device/{uid}/stream") as remote_ws:
-                logger.info(f"[{uid}] WebSocket proxy connected to telemetry server")
-                
-                async def receive_from_remote():
-                    """Receive messages from remote server and forward to client"""
-                    try:
-                        while True:
-                            data = await remote_ws.receive_text()
-                            await ws.send_text(data)
-                    except Exception as e:
-                        logger.debug(f"[{uid}] Remote WebSocket closed: {e}")
-                
-                async def receive_from_client():
-                    """Receive messages from client and forward to remote server"""
-                    try:
-                        while True:
-                            data = await ws.receive_text()
-                            await remote_ws.send_text(data)
-                    except WebSocketDisconnect:
-                        logger.info(f"[{uid}] Client disconnected")
-                
-                # Run both receive tasks concurrently
-                done, pending = await asyncio.wait(
-                    [
-                        asyncio.create_task(receive_from_remote()),
-                        asyncio.create_task(receive_from_client())
-                    ],
-                    return_when=asyncio.FIRST_COMPLETED
-                )
-                
-                # Cancel pending tasks
-                for task in pending:
-                    task.cancel()
-                
-    except Exception as e:
-        logger.error(f"[{uid}] WebSocket proxy error: {e}")
+    logger.info(f"[{uid}] WebSocket client connected")
+    source = _args.source if _args else "direct"
+
+    if source == "fastapi":
+        api_url = getattr(_args, "api_url", "http://127.0.0.1:8000")
+        ws_url  = api_url.replace("http://", "ws://") + f"/device/{uid}/stream"
         try:
-            await ws.close(code=1011, reason=str(e))
-        except Exception:
+            import websockets
+            async with websockets.connect(ws_url) as remote:
+                async def fwd_to_client():
+                    async for msg in remote:
+                        await ws.send_text(msg)
+                async def fwd_to_remote():
+                    try:
+                        while True:
+                            await remote.send(await ws.receive_text())
+                    except WebSocketDisconnect:
+                        pass
+                done, pending = await asyncio.wait(
+                    [asyncio.create_task(fwd_to_client()),
+                     asyncio.create_task(fwd_to_remote())],
+                    return_when=asyncio.FIRST_COMPLETED)
+                for t in pending:
+                    t.cancel()
+        except ImportError:
+            logger.error("websockets not installed — run: pip install websockets")
+            await ws.close(code=1011)
+        except Exception as e:
+            logger.error(f"[{uid}] WS proxy error: {e}")
+            await ws.close(code=1011)
+    else:
+        import json
+        try:
+            while True:
+                if uid == "all":
+                    payload = {}
+                    for d in _dsm_list_devices():
+                        payload.update(_dsm_get_telemetry(d["uid"]))
+                else:
+                    payload = _dsm_get_telemetry(uid)
+                if payload:
+                    await ws.send_text(json.dumps(payload))
+                await asyncio.sleep(1.0)
+        except WebSocketDisconnect:
             pass
-    finally:
-        logger.info(f"[{uid}] WebSocket connection closed")
+        except Exception as e:
+            logger.error(f"[{uid}] WS push error: {e}")
+        finally:
+            logger.info(f"[{uid}] WebSocket closed")
 
 
 @app.get("/favicon.ico")
 async def favicon():
-    """Serve favicon"""
-    favicon_path = Path(__file__).parent / "favicon.ico"
-    if favicon_path.exists():
-        return FileResponse(favicon_path)
-    raise HTTPException(status_code=404, detail="Favicon not found")
+    p = Path(__file__).parent / "favicon.ico"
+    if p.exists():
+        return FileResponse(p)
+    raise HTTPException(status_code=404)
+
+
+def run_xeneon(args=None):
+    global _args
+    if args is None:
+        args = types.SimpleNamespace(source="direct", api_url="http://127.0.0.1:8000",
+                                     api_port=8000, mqtt_broker="localhost", mqtt_port=1883, interval=1.0)
+    _args = args
+    import uvicorn
+    print("Starting Xeneon Dashboard...")
+    print("Dashboard: http://localhost:8001/xeneon/dashboard")
+    print("Press Ctrl+C to stop")
+    print("-" * 50)
+    uvicorn.run(app, host="127.0.0.1", port=8001, log_level="info")
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "benchlab.xeneon.xeneon_main:app",
-        host="127.0.0.1",
-        port=8001,
-        log_level="info"
-    )
+    run_xeneon()
