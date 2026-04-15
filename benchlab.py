@@ -240,6 +240,14 @@ MODES = {
         "platforms": ["windows"],
         "architectures": ["x86"]
     },
+    "Link": {
+        "flag": "-link",
+        "reqs": ["link"],
+        "desc": "Link for BENCHLAB SaaS",
+        "info": "Stream telemetry data to the BENCHLAB SaaS platform for real‑time monitoring and historical analysis.",
+        "platforms": ["windows"],
+        "architectures": ["x86"]
+    },
     "MQTT": {
         "flag": "-mqtt",
         "reqs": ["mqtt"],

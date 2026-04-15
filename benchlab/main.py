@@ -39,6 +39,13 @@ logger = logging.getLogger("benchlab.launcher")
 # ──────────────────────────────────────────────────────────────
 
 CONSUMER_TOOLS = {
+    "link": {
+        "name": "Benchlab Link",
+        "description": "Publish telemetry to cloud MQTT broker",
+        "flag": "-link",
+        "module": "benchlab.link.link_main",
+        "function": "run_link",
+    },
     "tui": {
         "name": "TUI",
         "description": "Interactive terminal user interface",
@@ -774,6 +781,20 @@ def get_parser() -> argparse.ArgumentParser:
                         help="Run CSV logger without TUI")
     parser.add_argument("-mqtt", nargs="?", const="localhost",
                         help="MQTT publisher to localhost mosquitto")
+    parser.add_argument("-link", action="store_true",
+                        help="Run cloud MQTT link publisher")
+    parser.add_argument("--remote-host", default=None, dest="remote_host",
+                        help="Cloud MQTT broker hostname (overrides LINK_REMOTE_HOST)")
+    parser.add_argument("--remote-port", type=int, default=None, dest="remote_port",
+                        help="Cloud MQTT broker port (default: 8883)")
+    parser.add_argument("--remote-user", default=None, dest="remote_user",
+                        help="Cloud MQTT username (overrides LINK_REMOTE_USER)")
+    parser.add_argument("--remote-pass", default=None, dest="remote_pass",
+                        help="Cloud MQTT password (overrides LINK_REMOTE_PASS)")
+    parser.add_argument("--no-tls", action="store_true", dest="no_tls",
+                        help="Disable TLS for cloud MQTT connection")
+    parser.add_argument("--topic-pattern", default=None, dest="topic_pattern",
+                        help="MQTT topic pattern with {uid} token (overrides LINK_TOPIC_PATTERN)")
     parser.add_argument("-tui", action="store_true",
                         help="Enable TUI (default)")
     parser.add_argument(
@@ -845,13 +866,24 @@ def launch_mode() -> None:
     args = parser.parse_args()
 
     # If no flags, run interactive mode
-    if not any([args.fastapi, args.graph, args.hwinfo, args.logfleet,
+    if not any([args.fastapi, args.graph, args.hwinfo, args.link, args.logfleet,
                 args.mqtt, args.tui, args.vu, args.vuconfig,
                 args.wigidash, args.xeneon]):
         interactive_loop()
         return
 
-    if args.fastapi:
+    if args.link:
+        if not _setup_source_from_args(args):
+            return
+        try:
+            from benchlab.link.link_main import run_link
+            run_link(args)
+        except ModuleNotFoundError:
+            print("Link module not available in this build.")
+        finally:
+            _cleanup_all_services()
+
+    elif args.fastapi:
         try:
             from benchlab.restapi.telemetry_api import run_server
             run_server()
