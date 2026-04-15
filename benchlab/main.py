@@ -904,7 +904,7 @@ def launch_mode() -> None:
             return
         try:
             from benchlab.vu.vu_updater import run_updater
-            run_updater()
+            run_updater(args)
         except ModuleNotFoundError:
             print("VU module not available in this build.")
         finally:
@@ -915,7 +915,7 @@ def launch_mode() -> None:
             return
         try:
             from benchlab.vu.vu_tui import launch_vu_config
-            launch_vu_config()
+            launch_vu_config(args)
         except ModuleNotFoundError:
             print("VU configuration module not available in this build.")
         finally:
@@ -926,7 +926,7 @@ def launch_mode() -> None:
             return
         try:
             from benchlab.wigidash.wigidash_manager import main
-            main()
+            main(args)
         except ModuleNotFoundError:
             traceback.print_exc()
             print("WigiDash module not available in this build.")

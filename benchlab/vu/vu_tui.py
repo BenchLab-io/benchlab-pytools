@@ -9,7 +9,6 @@ import sys
 import threading
 from pathlib import Path
 
-from benchlab_pycore.core import translate_sensor_struct
 from benchlab.vu import devices
 from benchlab.vu.vu_server_manager import start_vu_server, check_vu_server, terminate_vu_server, forward_logs
 
@@ -37,27 +36,35 @@ def save_json(path, data):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
-def get_available_sensors():
-    class DummyStruct:
-        PowerReadings = [type("P", (), {"Power": 0, "Voltage":0, "Current":0})() for _ in range(12)]
-        Vin = [0]*16
-        Vdd = 0
-        Vref = 0
-        Tchip = 0
-        Tamb = 0
-        Hum = 0
-        Ts = [0]*4
-        Fans = [type("F", (), {"Duty":0, "Tach":0, "Enable":0})() for _ in range(4)]
-        FanExtDuty = 0
-    return list(translate_sensor_struct(DummyStruct()).keys())
+def get_available_sensors(datasource=None) -> list:
+    """Return sensor keys from a live datasource snapshot.
+    Falls back to an empty list if no data is available yet.
+    """
+    if datasource is None:
+        return []
+    try:
+        raw = datasource.list_devices()
+        if isinstance(raw, dict):
+            uids = list(raw.keys())
+        else:
+            uids = [d.get("uid") for d in raw if d.get("uid")]
+        if not uids:
+            return []
+        datasource.select_device(uids[0])
+        snap = datasource.snapshot()
+        data = snap.get("sensor_data") or snap.get("all_telemetry", {}).get(uids[0], {})
+        return [k for k in data if k.lower() != "timestamp"]
+    except Exception as e:
+        logger.warning(f"Could not get sensor list from datasource: {e}")
+        return []
 
-SENSORS = get_available_sensors()
 
 class VUTUI:
-    def __init__(self, stdscr, server_proc=None):
+    def __init__(self, stdscr, server_proc=None, datasource=None):
         self.stdscr = stdscr
         self.running = True
         self.server_proc = server_proc
+        self.datasource = datasource
 
         try:
             curses.curs_set(0)
@@ -83,6 +90,7 @@ class VUTUI:
 
         # Load configs & devices
         self.reload_configs()
+        self.SENSORS = get_available_sensors(self.datasource)
 
     # -------------------- CLEANUP --------------------
     def cleanup(tui: "VUTUI", server_proc=None):
@@ -109,7 +117,7 @@ class VUTUI:
     def reload_configs(self):
         self.server_cfg = load_json(VU_SERVER_CONFIG, {})
         self.dial_cfg = load_json(VU_DIAL_CONFIG, [])
-        self.benchlabs = devices.get_benchlab_devices()
+        self.benchlabs = devices.get_benchlab_devices(self.datasource)
 
         self.vu_server_running = devices.vu_server_check(
             self.server_cfg.get("vu_server_url", "http://localhost:5340"),
@@ -525,9 +533,21 @@ class VUTUI:
             cfg_entry["benchlab_uid"] = dial["benchlab_uid"]
 
         # --- Step 3: Sensor Selection ---
+        # Refresh sensor list in case datasource wasn't ready at startup
+        if not self.SENSORS:
+            self.SENSORS = get_available_sensors(self.datasource)
+
+        if not self.SENSORS:
+            self.stdscr.addstr(h-2, 0,
+                "No sensors available yet — ensure device is connected.".ljust(w),
+                curses.color_pair(3))
+            self.stdscr.refresh()
+            curses.napms(2000)
+            return
+
         max_display_rows = h - 6
-        num_sensors = len(SENSORS)
-        col_width = max(len(s) for s in SENSORS) + 4
+        num_sensors = len(self.SENSORS)
+        col_width = max(len(s) for s in self.SENSORS) + 4
         num_cols = max(1, w // col_width)
         num_rows = (num_sensors + num_cols - 1) // num_cols
 
@@ -538,7 +558,7 @@ class VUTUI:
                 self.stdscr.clrtoeol()
 
             # Display sensors
-            for idx, sensor in enumerate(SENSORS):
+            for idx, sensor in enumerate(self.SENSORS):
                 row = idx % num_rows
                 col = idx // num_rows
                 x = col * col_width
@@ -558,9 +578,9 @@ class VUTUI:
 
             try:
                 sel = int(inp) - 1
-                if 0 <= sel < len(SENSORS):
-                    dial['sensor'] = SENSORS[sel]
-                    cfg_entry['sensor'] = SENSORS[sel]
+                if 0 <= sel < len(self.SENSORS):
+                    dial['sensor'] = self.SENSORS[sel]
+                    cfg_entry['sensor'] = self.SENSORS[sel]
                     break
             except ValueError:
                 continue
@@ -627,8 +647,8 @@ class VUTUI:
                     self.handle_tab3_input(key)
 
 # -------------------- RUN TUI --------------------
-def run_vu_tui(stdscr, server_proc=None):
-    tui = VUTUI(stdscr, server_proc=server_proc)
+def run_vu_tui(stdscr, server_proc=None, datasource=None):
+    tui = VUTUI(stdscr, server_proc=server_proc, datasource=datasource)
 
     def sigint_handler(sig, frame):
         tui.running = False
@@ -647,18 +667,36 @@ def run_vu_tui(stdscr, server_proc=None):
             logger.info("VU server terminated.")
 
 # -------------------- LAUNCH FUNCTION --------------------
-def launch_vu_config():
-    # Pre-TUI messages
+def launch_vu_config(args=None):
+    """Launch the VU configuration TUI.
+
+    Parameters
+    ----------
+    args:
+        Standard benchlab args namespace. If None, reads from env vars.
+    """
+    import os, types as _types
+    from benchlab.core.datasource_manager import DataSourceManager
+
+    if args is None:
+        args = _types.SimpleNamespace(
+            source=os.environ.get("BENCHLAB_DATA_SOURCE", "direct"),
+            api_url=os.environ.get("BENCHLAB_API_URL", "http://127.0.0.1:8000"),
+            mqtt_broker=os.environ.get("MQTT_BROKER", "localhost"),
+            mqtt_port=int(os.environ.get("MQTT_PORT", "1883")),
+            interval=1.0,
+        )
+
     logger.info("Launching the BENCHLAB VU Server & Dials Configuration")
     time.sleep(1)
     logger.info("Launch updater with -vu")
     time.sleep(1)
-    logger.info("Checking for VU server ... ")
+    logger.info("Checking for VU server...")
     time.sleep(1)
 
     server_cfg = load_json(VU_SERVER_CONFIG, {})
     server_url = server_cfg.get("vu_server_url", "http://localhost:5340")
-    api_key = server_cfg.get("api_key", "")
+    api_key    = server_cfg.get("api_key", "")
 
     server_proc = None
     if not check_vu_server(server_url, api_key):
@@ -674,8 +712,21 @@ def launch_vu_config():
 
     time.sleep(1)
 
-    # Launch curses TUI
-    curses.wrapper(run_vu_tui, server_proc)
+    ds_kwargs = {}
+    if args.source == "fastapi":
+        ds_kwargs["base_url"] = args.api_url
+    elif args.source == "mqtt":
+        ds_kwargs["broker"]   = args.mqtt_broker
+        ds_kwargs["port"]     = args.mqtt_port
+
+    datasource = DataSourceManager(source_type=args.source, **ds_kwargs)
+    if not datasource.connect():
+        logger.warning(f"Could not connect to {args.source} datasource — sensor list may be empty")
+
+    try:
+        curses.wrapper(run_vu_tui, server_proc, datasource)
+    finally:
+        datasource.disconnect()
 
 if __name__ == "__main__":
     main()
