@@ -57,83 +57,83 @@
 
         <!-- Middle Section (B) - Sensor Display -->
         <section class="dashboard-center">
-            <div class="sensor-grid">
+            <div class="sensor-grid-scroll">
+                <div class="sensor-grid">
 
-                <!-- Summary -->
-                <div class="sensor-card">
-                    <div class="card-header">
-                        <h3>SUMMARY</h3>
+                    <!-- Summary -->
+                    <div class="sensor-card" data-sensor-type="summary">
+                        <div class="card-header">
+                            <h3>SUMMARY</h3>
+                        </div>
+                        <div class="card-content" id="card-summary"></div>
                     </div>
-                    <div class="card-content" id="card-summary"></div>
-                </div>
 
-                <!-- Temperature -->
-                <div class="sensor-card">
-                    <div class="card-header">
-                        <h3>TEMPERATURES</h3>
+                    <!-- Temperature -->
+                    <div class="sensor-card" data-sensor-type="temperatures">
+                        <div class="card-header">
+                            <h3>TEMPERATURES</h3>
+                        </div>
+                        <div class="card-content" id="card-temperatures"></div>
                     </div>
-                    <div class="card-content" id="card-temperatures"></div>
-                </div>
 
-                <!-- Fans -->
-                <div class="sensor-card">
-                    <div class="card-header">
-                        <h3>FANS</h3>
+                    <!-- Fans -->
+                    <div class="sensor-card" data-sensor-type="fans">
+                        <div class="card-header">
+                            <h3>FANS</h3>
+                        </div>
+                        <div class="card-content" id="card-fans"></div>
                     </div>
-                    <div class="card-content" id="card-fans"></div>
-                </div>
 
-                <!-- Power -->
-                <div class="sensor-card">
-                    <div class="card-header">
-                        <h3>POWER</h3>
+                    <!-- Power -->
+                    <div class="sensor-card" data-sensor-type="power">
+                        <div class="card-header">
+                            <h3>POWER</h3>
+                        </div>
+                        <div class="card-content" id="card-power"></div>
                     </div>
-                    <div class="card-content" id="card-power"></div>
-                </div>
 
-                <!-- Current -->
-                <div class="sensor-card">
-                    <div class="card-header">
-                        <h3>CURRENT</h3>
+                    <!-- Current -->
+                    <div class="sensor-card" data-sensor-type="current">
+                        <div class="card-header">
+                            <h3>CURRENT</h3>
+                        </div>
+                        <div class="card-content" id="card-current"></div>
                     </div>
-                    <div class="card-content" id="card-current"></div>
-                </div>
 
-                <!-- Voltage -->
-                <div class="sensor-card">
-                    <div class="card-header">
-                        <h3>VOLTAGE</h3>
+                    <!-- Voltage -->
+                    <div class="sensor-card" data-sensor-type="voltage">
+                        <div class="card-header">
+                            <h3>VOLTAGE</h3>
+                        </div>
+                        <div class="card-content" id="card-voltage"></div>
                     </div>
-                    <div class="card-content" id="card-voltage"></div>
-                </div>
 
-                <!-- Voltage Inputs -->
-                <div class="sensor-card">
-                    <div class="card-header">
-                        <h3>VOLTAGE INPUTS</h3>
+                    <!-- Voltage Inputs -->
+                    <div class="sensor-card" data-sensor-type="vins">
+                        <div class="card-header">
+                            <h3>VOLTAGE INPUTS</h3>
+                        </div>
+                        <div class="card-content" id="card-vins"></div>
                     </div>
-                    <div class="card-content" id="card-vins"></div>
-                </div>
 
+                </div>
             </div>
         </section>
 
-        <!-- Right Section (C) - Graph Display -->
-        <aside class="dashboard-graph">
-            <div class="graph-container">
-                <div class="graph-header">
-                    <h3 class="section-title">Telemetry History</h3>
-                    <div class="graph-controls">
-                        <button class="btn btn-small" id="btn-clear-graph">Clear</button>
+        <!-- Right Section (C) - Favorite Sensors -->
+        <aside class="dashboard-favorites">
+            <div class="favorites-container">
+                <div class="favorites-header">
+                    <h3 class="section-title">Favorite Sensors</h3>
+                    <div class="favorites-controls">
+                        <button class="btn btn-small" id="btn-clear-favorites">Clear All</button>
                     </div>
                 </div>
-                <div class="graph-canvas-container">
-                    <!--
-                        width/height attributes set the drawing-buffer resolution.
-                        dashboard.js syncs these to the element's CSS layout size on
-                        load and on window resize so the canvas renders at full sharpness.
-                    -->
-                    <canvas id="graph-canvas" width="300" height="150"></canvas>
+                <div class="favorites-grid" id="favorites-grid">
+                    <!-- Favorite sensor widgets will be inserted here -->
+                </div>
+                <div class="favorites-empty" id="favorites-empty" style="display: none;">
+                    <p>Tap sensors in the middle pane to add them as favorites</p>
                 </div>
             </div>
         </aside>

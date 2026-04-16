@@ -134,14 +134,290 @@ body {
     overflow: hidden;
 }
 
-/* Right Graph Section (C) */
-.dashboard-graph {
+/* Touch-optimized sensor grid scrolling */
+.sensor-grid-scroll {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: var(--spacing);
+    /* Touch scrolling optimizations */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    /* Custom scrollbar styling */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.05);
+}
+
+.sensor-grid-scroll::-webkit-scrollbar {
+    width: 8px;
+}
+
+.sensor-grid-scroll::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.sensor-grid-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+}
+
+.sensor-grid-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+/* Sensor grid layout */
+.sensor-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing);
+    padding-bottom: var(--spacing); /* Prevent content from being hidden behind scrollbar */
+}
+
+/* Right Favorites Section (C) */
+.dashboard-favorites {
     display: flex;
     flex-direction: column;
     background-color: var(--color-card-bg);
     border: 1px solid var(--color-border);
     border-radius: var(--border-radius);
     overflow: hidden;
+}
+
+/* Favorites container */
+.favorites-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.favorites-header {
+    padding: var(--card-padding);
+    border-bottom: 1px solid var(--color-border);
+    background-color: rgba(255, 255, 255, 0.05);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.favorites-header h3,
+.favorites-header .section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-section);
+    margin: 0;
+}
+
+.favorites-controls {
+    display: flex;
+    gap: 8px;
+}
+
+.favorites-grid {
+    flex: 1;
+    padding: var(--card-padding);
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(3, 1fr);
+    gap: var(--spacing);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
+
+/* Responsive favorites grid - 3 rows x 2 columns max */
+@media (min-width: 769px) {
+    .favorites-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (min-width: 1200px) {
+    .favorites-grid {
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: repeat(3, 1fr);
+    }
+}
+
+.favorites-empty {
+    padding: var(--card-padding);
+    text-align: center;
+    color: var(--color-muted);
+    font-style: italic;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+}
+
+/* Favorite sensor widget */
+.favorite-widget {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    padding: var(--card-padding);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.favorite-widget:hover {
+    border-color: var(--color-primary);
+    background-color: rgba(252, 228, 119, 0.1);
+}
+
+.favorite-widget-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.favorite-widget-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.favorite-widget-remove {
+    background: transparent;
+    border: 1px solid var(--color-danger);
+    color: var(--color-danger);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.favorite-widget-remove:hover {
+    background-color: var(--color-danger);
+    color: white;
+}
+
+.favorite-widget-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.favorite-widget-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--color-primary);
+}
+
+.favorite-widget-unit {
+    font-size: 12px;
+    color: var(--color-muted);
+    margin-left: 4px;
+}
+
+.favorite-widget-graph {
+    width: 100%;
+    height: 60px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: 4px;
+    position: relative;
+}
+
+.favorite-widget-graph canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/* Sensor card touch enhancements */
+.sensor-card {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-height: 120px;
+    user-select: none; /* Prevent text selection on touch */
+    -webkit-tap-highlight-color: transparent; /* Remove tap highlight on iOS */
+}
+
+.sensor-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.sensor-card:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.sensor-card.selected {
+    border-color: var(--color-primary);
+    background-color: rgba(252, 228, 119, 0.1);
+}
+
+/* Make telemetry items clickable */
+.telemetry-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.telemetry-item:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.telemetry-item:active {
+    background-color: rgba(252, 228, 119, 0.1);
+}
+
+/* Touch target optimization */
+.telemetry-label {
+    min-width: 100px;
+    cursor: pointer;
+}
+
+.telemetry-value {
+    cursor: pointer;
+}
+
+/* Touch target optimization */
+.telemetry-item {
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+}
+
+.telemetry-label {
+    min-width: 100px;
+}
+
+/* Responsive adjustments for touch devices */
+@media (max-width: 768px) {
+    .sensor-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .favorites-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto;
+    }
+    
+    .dashboard-main {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr auto;
+        overflow-y: auto;
+    }
+    
+    .dashboard-sidebar { order: 1; }
+    .dashboard-center  { order: 2; }
+    .dashboard-favorites { order: 3; }
 }
 
 /* Responsive: Stack on mobile */
