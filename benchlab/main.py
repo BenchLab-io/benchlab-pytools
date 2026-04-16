@@ -28,12 +28,14 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 
+from bootstrap import (
+    prompt_yes_no,
+    requirements_satisfied,
+    install_requirements_file,
+    clear_screen
+)
 from benchlab.core.process_manager import ProcessManager
 from benchlab.core.device_registry import DeviceRegistry
-
-# cache to avoid reinstalling same requirements file multiple times
-_REQ_CACHE = {}
-_INSTALLED_REQ_FILES = set()
 
 # Set up a module‑level logger consistent with the rest of the project.
 logger = logging.getLogger("benchlab.launcher")
@@ -123,88 +125,6 @@ CONSUMER_TOOLS = {
 # ──────────────────────────────────────────────────────────────
 
 
-def prompt_yes_no(msg: str, default: bool = True) -> bool:
-    suffix = " [Y/n]: " if default else " [y/N]: "
-    while True:
-        choice = input(msg + suffix).strip().lower()
-        if not choice:
-            return default
-        if choice in ("y", "yes"):
-            return True
-        if choice in ("n", "no"):
-            return False
-
-def requirements_satisfied(req_file: str) -> Tuple[bool, List[str]]:
-    if req_file in _REQ_CACHE:
-        return _REQ_CACHE[req_file]
-
-    missing: List[str] = []
-
-    try:
-        from importlib import metadata
-        from packaging.requirements import Requirement
-        from packaging.version import Version
-        from packaging.markers import Marker
-    except ModuleNotFoundError:
-        pip_install(["packaging"])
-        from importlib import metadata
-        from packaging.requirements import Requirement
-        from packaging.version import Version
-        from packaging.markers import Marker
-
-    try:
-        with open(req_file, "r", encoding="utf-8") as f:
-            lines = [l.strip() for l in f if l.strip() and not l.startswith("#")]
-    except OSError:
-        return True, []
-
-    for line in lines:
-        try:
-            req = Requirement(line)
-        except Exception:
-            missing.append(line)
-            continue
-
-        if req.marker and not Marker(str(req.marker)).evaluate():
-            continue
-
-        try:
-            installed = Version(metadata.version(req.name))
-            if req.specifier and not req.specifier.contains(installed, prereleases=True):
-                missing.append(f"{req} (installed {installed})")
-        except metadata.PackageNotFoundError:
-            missing.append(str(req))
-
-    result = (not missing, missing)
-    _REQ_CACHE[req_file] = result
-    return result
-
-
-def install_requirements_file(req_file: str, label: str) -> bool:
-    if req_file in _INSTALLED_REQ_FILES:
-        return True
-
-    ok, missing = requirements_satisfied(req_file)
-    if ok:
-        return True
-
-    print(f"\n[{label}] Missing dependencies:")
-    for m in missing:
-        print(f"  - {m}")
-
-    if not prompt_yes_no("Install missing requirements?"):
-        return False
-
-    try:
-        subprocess.check_call(
-            [sys.executable, "-m", "pip", "install",
-             "--disable-pip-version-check", "-r", req_file]
-        )
-        _INSTALLED_REQ_FILES.add(req_file)
-        return True
-    except subprocess.CalledProcessError:
-        logger.error(f"{label}: install failed")
-        return False
 
 
 def get_module_dir(module_name: str) -> Path:
@@ -861,8 +781,29 @@ def _launch_tools_concurrent(tool_ids: List[str]) -> None:
 # Interactive Loop
 # ──────────────────────────────────────────────────────────────
 
+def print_banner():
+    print(r"""
+██████╗ ███████╗███╗   ██╗ ██████╗██╗  ██╗██╗      █████╗ ██████╗
+██╔══██╗██╔════╝████╗  ██║██╔════╝██║  ██║██║     ██╔══██╗██╔══██╗
+██████╔╝█████╗  ██╔██╗ ██║██║     ███████║██║     ███████║██████╔╝
+██╔══██╗██╔══╝  ██║╚██╗██║██║     ██╔══██║██║     ██╔══██║██╔══██╗
+██████╔╝███████╗██║ ╚████║╚██████╗██║  ██║███████╗██║  ██║██████╔╝
+╚═════╝ ╚══════╝╚═╝  ╚═══╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═════╝
+
+        ██████╗ ██╗   ██╗████████╗ ██████╗  ██████╗ ██╗     ███████╗  
+        ██╔══██╗╚██╗ ██╔╝╚══██╔══╝██╔═══██╗██╔═══██╗██║     ██╔════╝
+        ██████╔╝ ╚████╔╝    ██║   ██║   ██║██║   ██║██║     ███████╗
+        ██╔═══╝   ╚██╔╝     ██║   ██║   ██║██║   ██║██║     ╚════██║
+        ██║        ██║      ██║   ╚██████╔╝╚██████╔╝███████╗███████║
+        ╚═╝        ╚═╝      ╚═╝    ╚═════╝  ╚═════╝ ╚══════╝╚══════╝
+""")
+
+
 def interactive_loop() -> None:
     """Main interactive menu loop."""
+    clear_screen()
+    print_banner()
+    
     while True:
         try:
             mode = show_step1_menu()
@@ -880,10 +821,7 @@ def interactive_loop() -> None:
                 step2_multi_tool()
 
             input("\n  Press Enter to continue... ")
-            if os.name == "nt":
-                os.system("cls")
-            else:
-                os.system("clear")
+            clear_screen()
         except (EOFError, KeyboardInterrupt):
             print("Goodbye!")
             _cleanup_all_services()
