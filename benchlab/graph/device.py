@@ -106,9 +106,11 @@ def _datasource_loop(app):
                 app.active_device["uid"] = uid
             else:
                 app.active_device = {"port": target.get("port", "?"), "uid": uid}
+                # Preserve the full device list in the combo — don't overwrite with one item
+                all_ports = [d["port"] for d in app.devices] if app.devices else [app.active_device["port"]]
                 if dpg.does_item_exist("##device_combo"):
                     dpg.configure_item("##device_combo",
-                                       items=[app.active_device["port"]],
+                                       items=all_ports,
                                        default_value=app.active_device["port"])
 
         # Main poll loop

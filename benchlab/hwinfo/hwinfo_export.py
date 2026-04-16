@@ -66,7 +66,7 @@ def write_hwinfo_sensor(device_name, sensor_type, idx, name, value, unit=None):
             if isinstance(value, float):
                 winreg.SetValueEx(key, "Value", 0, winreg.REG_SZ, f"{value:.3f}")
             else:
-                winreg.SetValueEx(key, "Value", 0, winreg.REG_DWORD, value)
+                winreg.SetValueEx(key, "Value", 0, winreg.REG_SZ, str(value))
 
             # Force-overwrite Unit safely
             try:

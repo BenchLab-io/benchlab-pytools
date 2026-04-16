@@ -8,15 +8,11 @@ benchlab-pycore>=0.2.1
 # FastAPI Data Source
 fastapi==0.111.1
 uvicorn[standard]==0.24.0
-pyserial>=3.5
 python-dotenv==1.1.1
-pydantic>=2.0.0  # For better data validation
+pydantic>=2.0.0  
 
 # MQTT Data Source
-pyserial>=3.5,<4.0
 paho-mqtt>=2.0,<3.0
-amqtt>=0.11.0,<1.0  # embedded MQTT broker for testing
-pyyaml>=6.0,<7.0    # embedded broker config
 
 # Curses-based TUI
 windows-curses>=2.4.1; platform_system=="Windows"

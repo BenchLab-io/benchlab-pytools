@@ -153,9 +153,10 @@ class GraphApp:
                     self.active_device["uid"] = uid
                 else:
                     self.active_device = {"port": target.get("port", "?"), "uid": uid}
+                    all_ports = [d["port"] for d in self.devices] if self.devices else [self.active_device["port"]]
                     if dpg.does_item_exist("##device_combo"):
                         dpg.configure_item("##device_combo",
-                                           items=[self.active_device["port"]],
+                                           items=all_ports,
                                            default_value=self.active_device["port"])
 
             while not self.stop_event.is_set():

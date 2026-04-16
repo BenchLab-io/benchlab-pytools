@@ -121,6 +121,7 @@ class DirectDataSource(DataSource):
         self._device_info: Dict[str, Dict[str, Any]] = {}
         self._worker_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
+        self._ser_handles: Dict[str, Any] = {}
         
         # Import pycore
         try:
@@ -143,59 +144,54 @@ class DirectDataSource(DataSource):
     
     @retry(RetryPolicy(max_retries=3, backoff_factor=2.0, base_delay=0.5, allowed_exceptions=(Exception,)))
     def connect(self) -> bool:
-        """Connect to the serial device with retry logic."""
         if self._pycore is None:
-            logger.error("pycore not available")
             return False
-        
         if self._connected:
             return True
-        
-        # Guard against duplicate worker thread
-        if self._worker_thread and self._worker_thread.is_alive():
-            logger.warning("Worker thread already running, reusing connection")
-            self._connected = True
-            return True
-        
-        # Auto-detect port if not specified
-        if self.port is None:
-            ports = self._pycore['get_benchlab_ports']()
-            if ports:
-                self.port = ports[0].get('port')
-                logger.info(f"Auto-detected port: {self.port}")
-            else:
-                logger.error("No BenchLab devices found")
-                return False
-        
-        try:
-            self._ser = self._pycore['open_serial_connection'](self.port)
-            if self._ser:
-                # Read device info
-                info = self._pycore['read_device'](self._ser)
-                uid = self._pycore['read_uid'](self._ser)
+
+        ports = self._pycore['get_benchlab_ports']()
+        if self.port is not None:
+            # Caller specified a port — only connect to that one
+            ports = [p for p in ports if p.get('port') == self.port]
+
+        if not ports:
+            logger.error("No BenchLab devices found")
+            return False
+
+        # Open a connection to every detected port
+        for port_info in ports:
+            port = port_info.get('port')
+            if not port:
+                continue
+            try:
+                ser = self._pycore['open_serial_connection'](port)
+                if not ser:
+                    continue
+                uid = self._pycore['read_uid'](ser)
+                info = self._pycore['read_device'](ser) or {}
                 if uid:
-                    self._device_info[uid] = info or {}
-                    self._device_info[uid]['uid'] = uid
-                    self._device_info[uid]['port'] = self.port
-                    
-                    # Start background worker
-                    self._stop_event.clear()
-                    self._worker_thread = threading.Thread(
-                        target=self._worker_loop, daemon=True
-                    )
-                    self._worker_thread.start()
-                    
-                    self._connected = True
-                    logger.info(f"Connected to device {uid} on {self.port}")
-                    return True
+                    self._device_info[uid] = {**info, 'uid': uid, 'port': port}
+                    self._ser_handles[uid] = ser   # store per-uid handle
+                    logger.info(f"Connected to device {uid} on {port}")
                 else:
-                    self._ser.close()
-                    self._ser = None
-                    logger.error("Failed to read UID from device")
-        except Exception as e:
-            logger.error(f"Failed to connect: {e}")
-        
-        return False
+                    ser.close()
+            except Exception as e:
+                logger.debug(f"Failed to probe {port}: {e}")
+
+        if not self._device_info:
+            logger.error("Could not connect to any BenchLab device")
+            return False
+
+        # Keep self._ser pointing at the first device for legacy callers
+        self.port = next(iter(self._device_info.values()))['port']
+        first_uid = next(iter(self._device_info))
+        self._ser = self._ser_handles[first_uid]
+
+        self._stop_event.clear()
+        self._worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
+        self._worker_thread.start()
+        self._connected = True
+        return True
     
     def disconnect(self) -> None:
         """Disconnect from the serial device."""
@@ -268,35 +264,22 @@ class DirectDataSource(DataSource):
         return "direct"
     
     def _worker_loop(self):
-        """Background worker that reads sensor data."""
         while not self._stop_event.is_set():
-            if self._ser and self._connected:
+            for uid, ser in list(self._ser_handles.items()):
                 try:
-                    sensors = self._pycore['read_sensors'](self._ser)
+                    sensors = self._pycore['read_sensors'](ser)
                     if sensors:
                         data = self._pycore['translate_sensor_struct'](sensors)
                         data['timestamp'] = datetime.now(UTC).isoformat()
-                        
-                        # Get UID from device info
-                        uid = None
-                        for u in self._device_info:
-                            uid = u
-                            break
-                        
-                        if uid:
-                            with self._lock:
-                                self._latest_data[uid] = data
+                        with self._lock:
+                            self._latest_data[uid] = data
                 except Exception as e:
-                    logger.warning(f"Error reading sensors: {e}")
-                    # Try to reconnect
+                    logger.warning(f"Error reading sensors from {uid}: {e}")
                     try:
-                        self._ser.close()
+                        ser.close()
                     except Exception:
                         pass
-                    self._ser = None
-                    time.sleep(1.0)
-                    continue
-            
+                    self._ser_handles.pop(uid, None)
             time.sleep(self.poll_interval)
 
 
@@ -360,10 +343,16 @@ class FastAPIDataSource(DataSource):
         return False
     
     def disconnect(self) -> None:
-        """Disconnect from the FastAPI server."""
-        if self._session:
-            self._session.close()
-            self._session = None
+        self._stop_event.set()
+        if self._worker_thread and self._worker_thread.is_alive():
+            self._worker_thread.join(timeout=2.0)
+        for ser in self._ser_handles.values():
+            try:
+                ser.close()
+            except Exception:
+                pass
+        self._ser_handles.clear()
+        self._ser = None
         self._connected = False
         logger.info("Disconnected from FastAPI server")
     

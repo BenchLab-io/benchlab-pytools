@@ -25,10 +25,15 @@ import threading
 import time
 import traceback
 import logging
+from pathlib import Path
 from typing import List, Optional
 
 from benchlab.core.process_manager import ProcessManager
 from benchlab.core.device_registry import DeviceRegistry
+
+# cache to avoid reinstalling same requirements file multiple times
+_REQ_CACHE = {}
+_INSTALLED_REQ_FILES = set()
 
 # Set up a module‑level logger consistent with the rest of the project.
 logger = logging.getLogger("benchlab.launcher")
@@ -39,26 +44,13 @@ logger = logging.getLogger("benchlab.launcher")
 # ──────────────────────────────────────────────────────────────
 
 CONSUMER_TOOLS = {
-    "link": {
-        "name": "Benchlab Link",
-        "description": "Publish telemetry to cloud MQTT broker",
-        "flag": "-link",
-        "module": "benchlab.link.link_main",
-        "function": "run_link",
-    },
-    "tui": {
-        "name": "TUI",
-        "description": "Interactive terminal user interface",
-        "flag": "-tui",
-        "module": "benchlab.tui.tui_main",
-        "function": "tui_main",
-    },
     "csv_log": {
         "name": "CSV Logger",
         "description": "Log device telemetry to CSV files",
         "flag": "-logfleet",
         "module": "benchlab.csv_log.csv_logger_enhanced",
         "function": "run_enhanced_csv_logger",
+        "requirements": "requirements.txt"
     },
     "graph": {
         "name": "DearPyGui Graph",
@@ -66,6 +58,7 @@ CONSUMER_TOOLS = {
         "flag": "-graph",
         "module": "benchlab.graph.runner",
         "function": "run_graph_mode",
+        "requirements": "requirements.txt"
     },
     "hwinfo": {
         "name": "HWiNFO Export",
@@ -73,6 +66,23 @@ CONSUMER_TOOLS = {
         "flag": "-hwinfo",
         "module": "benchlab.hwinfo.hwinfo_export",
         "function": "export_all_devices",
+        "requirements": "requirements.txt"
+    },
+    "link": {
+        "name": "Link",
+        "description": "Publish telemetry to BENCHLAB SaaS",
+        "flag": "-link",
+        "module": "link_main",
+        "function": "run_link",
+        "requirements": "requirements.txt"
+    },
+    "tui": {
+        "name": "TUI",
+        "description": "Interactive terminal user interface",
+        "flag": "-tui",
+        "module": "benchlab.tui.tui_main",
+        "function": "tui_main",
+        "requirements": "requirements.txt"
     },
     "vu": {
         "name": "VU Dials",
@@ -80,6 +90,7 @@ CONSUMER_TOOLS = {
         "flag": "-vu",
         "module": "benchlab.vu.vu_updater",
         "function": "run_updater",
+        "requirements": "requirements.txt"
     },
     "vuconfig": {
         "name": "VU Config",
@@ -87,22 +98,134 @@ CONSUMER_TOOLS = {
         "flag": "-vuconfig",
         "module": "benchlab.vu.vu_tui",
         "function": "launch_vu_config",
+        "requirements": "requirements.txt"
     },
     "wigidash": {
         "name": "WigiDash",
-        "description": "Display telemetry on WigiDash device",
+        "description": "Display telemetry on G.SKILL WigiDash device",
         "flag": "-wigidash",
         "module": "benchlab.wigidash.wigidash_manager",
         "function": "main",
+        "requirements": "requirements.txt"
     },
     "xeneon": {
         "name": "Xeneon Dashboard",
-        "description": "Web-based telemetry dashboard",
+        "description": "Web-based telemetry dashboard for Corsair Xeneon Edge",
         "flag": "-xeneon",
         "module": "benchlab.xeneon.xeneon_main",
-        "function": "app",  # uvicorn.run(app) entry point
+        "function": "app",
+        "requirements": "requirements.txt"
     },
 }
+
+# ──────────────────────────────────────────────────────────────
+# Tool Dependency Helpers
+# ──────────────────────────────────────────────────────────────
+
+
+def prompt_yes_no(msg: str, default: bool = True) -> bool:
+    suffix = " [Y/n]: " if default else " [y/N]: "
+    while True:
+        choice = input(msg + suffix).strip().lower()
+        if not choice:
+            return default
+        if choice in ("y", "yes"):
+            return True
+        if choice in ("n", "no"):
+            return False
+
+def requirements_satisfied(req_file: str) -> Tuple[bool, List[str]]:
+    if req_file in _REQ_CACHE:
+        return _REQ_CACHE[req_file]
+
+    missing: List[str] = []
+
+    try:
+        from importlib import metadata
+        from packaging.requirements import Requirement
+        from packaging.version import Version
+        from packaging.markers import Marker
+    except ModuleNotFoundError:
+        pip_install(["packaging"])
+        from importlib import metadata
+        from packaging.requirements import Requirement
+        from packaging.version import Version
+        from packaging.markers import Marker
+
+    try:
+        with open(req_file, "r", encoding="utf-8") as f:
+            lines = [l.strip() for l in f if l.strip() and not l.startswith("#")]
+    except OSError:
+        return True, []
+
+    for line in lines:
+        try:
+            req = Requirement(line)
+        except Exception:
+            missing.append(line)
+            continue
+
+        if req.marker and not Marker(str(req.marker)).evaluate():
+            continue
+
+        try:
+            installed = Version(metadata.version(req.name))
+            if req.specifier and not req.specifier.contains(installed, prereleases=True):
+                missing.append(f"{req} (installed {installed})")
+        except metadata.PackageNotFoundError:
+            missing.append(str(req))
+
+    result = (not missing, missing)
+    _REQ_CACHE[req_file] = result
+    return result
+
+
+def install_requirements_file(req_file: str, label: str) -> bool:
+    if req_file in _INSTALLED_REQ_FILES:
+        return True
+
+    ok, missing = requirements_satisfied(req_file)
+    if ok:
+        return True
+
+    print(f"\n[{label}] Missing dependencies:")
+    for m in missing:
+        print(f"  - {m}")
+
+    if not prompt_yes_no("Install missing requirements?"):
+        return False
+
+    try:
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install",
+             "--disable-pip-version-check", "-r", req_file]
+        )
+        _INSTALLED_REQ_FILES.add(req_file)
+        return True
+    except subprocess.CalledProcessError:
+        logger.error(f"{label}: install failed")
+        return False
+
+
+def get_module_dir(module_name: str) -> Path:
+    spec = importlib.util.find_spec(module_name)
+    if not spec or not spec.origin:
+        raise ImportError(f"Cannot locate module: {module_name}")
+    return Path(spec.origin).parent
+
+
+def ensure_tool_dependencies(tool_id: str) -> None:
+    tool = CONSUMER_TOOLS[tool_id]
+    req = tool.get("requirements")
+
+    if not req:
+        return
+
+    module_dir = get_module_dir(tool["module"])
+    req_file = module_dir / req
+
+    if req_file.exists():
+        install_requirements_file(str(req_file), tool["name"])
 
 
 # ──────────────────────────────────────────────────────────────
@@ -404,6 +527,7 @@ def show_step1_menu() -> Optional[str]:
 
 def step2_data_provider() -> None:
     """Step 2a: Select and start a data provider."""
+    print()   
     print("=== Data Provider ===")
     print("1. FastAPI Server  - REST API + WebSocket on port 8000")
     print("2. MQTT Publisher  - Publish telemetry to MQTT broker")
@@ -442,6 +566,7 @@ def step2_data_provider() -> None:
 
 def step2_single_tool() -> None:
     """Step 2b: Select one tool and its data source."""
+    print()
     print("=== Select Tool ===")
     consumer_list = list(CONSUMER_TOOLS.items())
     for i, (tid, t) in enumerate(consumer_list, 1):
@@ -465,6 +590,7 @@ def step2_single_tool() -> None:
 
 def step2_multi_tool() -> None:
     """Step 2c: Select multiple tools and shared data source. (Experimental!)"""
+    print()    
     print("=== Select Tools ===")
     print("Enter tool numbers separated by commas (e.g., 1,3,5)")
     print("Or 'all' to select all.")
@@ -506,6 +632,7 @@ def step2_multi_tool() -> None:
 def step3_select_source(tool_ids: List[str], tool_names: List[str]) -> None:
     """Step 3: Select data source, check/start it, then launch tools."""
     is_multi = len(tool_ids) > 1
+    print()    
     print("=== Data Source ===")
     if is_multi:
         print(f"Tools: {', '.join(tool_names)}")
@@ -556,6 +683,7 @@ def step3_select_source(tool_ids: List[str], tool_names: List[str]) -> None:
         print(f"\n  ✗ Could not set up {source_type} data source.")
         return
 
+    print()
     print("=== Launch Summary ===")
     print(f"Tools: {', '.join(tool_names)}")
     print(f"Data source: {source_type}")
@@ -601,6 +729,8 @@ def _launch_single_tool(tool_id: str) -> None:
     )
 
     try:
+        ensure_tool_dependencies(tool_id)
+
         module = importlib.import_module(tool["module"])
         func = getattr(module, tool["function"])
 
