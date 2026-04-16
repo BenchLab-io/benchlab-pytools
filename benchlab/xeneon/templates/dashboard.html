@@ -4,21 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Xeneon Dashboard - BenchLab Telemetry</title>
-    
+
     <!-- Favicon -->
     <link rel="icon" href="/xeneon/static/favicon.ico" type="image/x-icon">
-    
+
+    <!--
+        Google Fonts - loaded once here via <link> (fastest approach).
+        The duplicate @import that was inside dashboard.css has been removed.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
     <!-- CSS -->
     <link rel="stylesheet" href="/xeneon/static/css/dashboard.css">
-    
-    <!-- Font: Monospace for TUI aesthetic -->
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Consolas&display=swap" rel="stylesheet">
 </head>
 <body>
     <!-- Header -->
     <header class="dashboard-header">
         <div class="header-content">
-            <h1 class="dashboard-title">Xeneon Dashboard</h1>
+            <h1 class="dashboard-title" id="page-title">BENCHLAB XENEON</h1>
             <div class="header-status">
                 <span class="status-indicator" id="connection-status">●</span>
                 <span class="status-text" id="status-text">Connecting...</span>
@@ -26,320 +31,121 @@
         </div>
     </header>
 
-    <!-- Navigation Tabs -->
-    <nav class="dashboard-nav">
-        <div class="nav-container">
-            <button class="tab-button active" data-tab="fleet">
-                <span class="tab-icon">📡</span>
-                <span class="tab-text">Fleet</span>
-            </button>
-            <button class="tab-button" data-tab="device">
-                <span class="tab-icon">🖥️</span>
-                <span class="tab-text">Device</span>
-            </button>
-            <button class="tab-button" data-tab="system">
-                <span class="tab-icon">⚡</span>
-                <span class="tab-text">System</span>
-            </button>
-            <button class="tab-button" data-tab="voltage">
-                <span class="tab-icon">🔋</span>
-                <span class="tab-text">Voltage</span>
-            </button>
-            <button class="tab-button" data-tab="temperature">
-                <span class="tab-icon">🌡️</span>
-                <span class="tab-text">Temperature</span>
-            </button>
-            <button class="tab-button" data-tab="fans">
-                <span class="tab-icon">🌀</span>
-                <span class="tab-text">Fans</span>
-            </button>
-        </div>
-    </nav>
-
-    <!-- Main Content -->
+    <!-- Main Content - Three Section Layout -->
     <main class="dashboard-main">
-        <!-- Fleet Tab -->
-        <section id="fleet-tab" class="tab-content active">
-            <div class="section-header">
-                <h2>📡 Fleet Management</h2>
-                <div class="section-actions">
-                    <button class="btn btn-secondary" id="refresh-fleet">Refresh Fleet</button>
+
+        <!-- Left Section (A) - Fleet and Device Selection -->
+        <aside class="dashboard-sidebar">
+            <div class="sidebar-header">
+                <div class="logo-container">
+                    <h2 class="logo-text">BENCHLAB</h2>
+                    <span class="logo-subtext">XENEON</span>
                 </div>
             </div>
-            
-            <div class="fleet-grid">
-                <div class="card">
-                    <div class="card-header">
-                        <h3>Connected Devices</h3>
-                    </div>
-                    <div class="card-content">
-                        <div class="device-list" id="device-list">
-                            <div class="device-item placeholder">
-                                <div class="device-info">
-                                    <span class="device-name">Scanning for devices...</span>
-                                </div>
-                            </div>
+
+            <div class="device-selector">
+                <h3 class="section-title">Devices</h3>
+                <div class="device-list" id="fleet-device-list">
+                    <div class="device-item placeholder">
+                        <div class="device-info">
+                            <span class="device-name">Scanning for devices...</span>
                         </div>
                     </div>
                 </div>
-                
-                <div class="card">
+            </div>
+        </aside>
+
+        <!-- Middle Section (B) - Sensor Display -->
+        <section class="dashboard-center">
+            <div class="sensor-grid">
+
+                <!-- Summary -->
+                <div class="sensor-card">
                     <div class="card-header">
-                        <h3>Connection Status</h3>
+                        <h3>SUMMARY</h3>
                     </div>
-                    <div class="card-content">
-                        <div class="status-grid">
-                            <div class="status-item">
-                                <span class="status-label">Active Device:</span>
-                                <span class="status-value" id="active-device">None</span>
-                            </div>
-                            <div class="status-item">
-                                <span class="status-label">Connection:</span>
-                                <span class="status-value" id="connection-state">Disconnected</span>
-                            </div>
-                            <div class="status-item">
-                                <span class="status-label">Uptime:</span>
-                                <span class="status-value" id="uptime">00:00:00</span>
-                            </div>
-                        </div>
-                    </div>
+                    <div class="card-content" id="card-summary"></div>
                 </div>
+
+                <!-- Temperature -->
+                <div class="sensor-card">
+                    <div class="card-header">
+                        <h3>TEMPERATURES</h3>
+                    </div>
+                    <div class="card-content" id="card-temperatures"></div>
+                </div>
+
+                <!-- Fans -->
+                <div class="sensor-card">
+                    <div class="card-header">
+                        <h3>FANS</h3>
+                    </div>
+                    <div class="card-content" id="card-fans"></div>
+                </div>
+
+                <!-- Power -->
+                <div class="sensor-card">
+                    <div class="card-header">
+                        <h3>POWER</h3>
+                    </div>
+                    <div class="card-content" id="card-power"></div>
+                </div>
+
+                <!-- Current -->
+                <div class="sensor-card">
+                    <div class="card-header">
+                        <h3>CURRENT</h3>
+                    </div>
+                    <div class="card-content" id="card-current"></div>
+                </div>
+
+                <!-- Voltage -->
+                <div class="sensor-card">
+                    <div class="card-header">
+                        <h3>VOLTAGE</h3>
+                    </div>
+                    <div class="card-content" id="card-voltage"></div>
+                </div>
+
+                <!-- Voltage Inputs -->
+                <div class="sensor-card">
+                    <div class="card-header">
+                        <h3>VOLTAGE INPUTS</h3>
+                    </div>
+                    <div class="card-content" id="card-vins"></div>
+                </div>
+
             </div>
         </section>
 
-        <!-- Device Tab -->
-        <section id="device-tab" class="tab-content">
-            <div class="section-header">
-                <h2>🖥️ Device Information</h2>
-            </div>
-            
-            <div class="device-grid">
-                <div class="card">
-                    <div class="card-header">
-                        <h3>Connection Details</h3>
-                    </div>
-                    <div class="card-content">
-                        <div class="info-grid">
-                            <div class="info-item">
-                                <span class="info-label">Port:</span>
-                                <span class="info-value" id="device-port">-</span>
-                            </div>
-                            <div class="info-item">
-                                <span class="info-label">UID:</span>
-                                <span class="info-value" id="device-uid">-</span>
-                            </div>
-                            <div class="info-item">
-                                <span class="info-label">Firmware:</span>
-                                <span class="info-value" id="device-fw">-</span>
-                            </div>
-                        </div>
+        <!-- Right Section (C) - Graph Display -->
+        <aside class="dashboard-graph">
+            <div class="graph-container">
+                <div class="graph-header">
+                    <h3 class="section-title">Telemetry History</h3>
+                    <div class="graph-controls">
+                        <button class="btn btn-small" id="btn-clear-graph">Clear</button>
                     </div>
                 </div>
-                
-                <div class="card">
-                    <div class="card-header">
-                        <h3>Configuration</h3>
-                    </div>
-                    <div class="card-content">
-                        <div class="config-grid">
-                            <div class="config-item">
-                                <span class="config-label">Fan Switch:</span>
-                                <span class="config-value" id="fan-switch">-</span>
-                            </div>
-                            <div class="config-item">
-                                <span class="config-label">RGB Switch:</span>
-                                <span class="config-value" id="rgb-switch">-</span>
-                            </div>
-                            <div class="config-item">
-                                <span class="config-label">RGB Ext:</span>
-                                <span class="config-value" id="rgb-ext">-</span>
-                            </div>
-                        </div>
-                    </div>
+                <div class="graph-canvas-container">
+                    <!--
+                        width/height attributes set the drawing-buffer resolution.
+                        dashboard.js syncs these to the element's CSS layout size on
+                        load and on window resize so the canvas renders at full sharpness.
+                    -->
+                    <canvas id="graph-canvas" width="300" height="150"></canvas>
                 </div>
             </div>
-        </section>
+        </aside>
 
-        <!-- System Tab -->
-        <section id="system-tab" class="tab-content">
-            <div class="section-header">
-                <h2>⚡ System Telemetry</h2>
-            </div>
-            
-            <div class="telemetry-grid">
-                <div class="card">
-                    <div class="card-header">
-                        <h3>Summary</h3>
-                    </div>
-                    <div class="card-content">
-                        <div class="telemetry-list" id="summary-telemetry">
-                            <!-- Dynamic content -->
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header">
-                        <h3>Power Telemetry</h3>
-                    </div>
-                    <div class="card-content">
-                        <div class="telemetry-list" id="power-telemetry">
-                            <!-- Dynamic content -->
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header">
-                        <h3>Current Telemetry</h3>
-                    </div>
-                    <div class="card-content">
-                        <div class="telemetry-list" id="current-telemetry">
-                            <!-- Dynamic content -->
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header">
-                        <h3>Voltage Telemetry</h3>
-                    </div>
-                    <div class="card-content">
-                        <div class="telemetry-list" id="voltage-telemetry">
-                            <!-- Dynamic content -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Voltage Tab -->
-        <section id="voltage-tab" class="tab-content">
-            <div class="section-header">
-                <h2>🔋 Voltage Measurements</h2>
-            </div>
-            
-            <div class="voltage-grid">
-                <div class="card">
-                    <div class="card-header">
-                        <h3>Board Voltages</h3>
-                    </div>
-                    <div class="card-content">
-                        <div class="voltage-list" id="board-voltages">
-                            <!-- Dynamic content -->
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header">
-                        <h3>VIN Measurements</h3>
-                    </div>
-                    <div class="card-content">
-                        <div class="voltage-list" id="vin-voltages">
-                            <!-- Dynamic content -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Temperature Tab -->
-        <section id="temperature-tab" class="tab-content">
-            <div class="section-header">
-                <h2>🌡️ Temperature Monitoring</h2>
-            </div>
-            
-            <div class="temp-grid">
-                <div class="card">
-                    <div class="card-header">
-                        <h3>Board Temperature</h3>
-                    </div>
-                    <div class="card-content">
-                        <div class="temp-item" id="chip-temp">
-                            <span class="temp-label">Chip Temp:</span>
-                            <span class="temp-value">-- °C</span>
-                            <div class="temp-bar-container">
-                                <div class="temp-bar" id="chip-temp-bar"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header">
-                        <h3>System Environment</h3>
-                    </div>
-                    <div class="card-content">
-                        <div class="env-grid">
-                            <div class="env-item">
-                                <span class="env-label">Ambient Temp:</span>
-                                <span class="env-value" id="ambient-temp">-- °C</span>
-                            </div>
-                            <div class="env-item">
-                                <span class="env-label">Humidity:</span>
-                                <span class="env-value" id="humidity">-- %</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header">
-                        <h3>Sensor Temperatures</h3>
-                    </div>
-                    <div class="card-content">
-                        <div class="sensor-list" id="sensor-temps">
-                            <!-- Dynamic content -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Fans Tab -->
-        <section id="fans-tab" class="tab-content">
-            <div class="section-header">
-                <h2>🌀 Fan Control & Monitoring</h2>
-            </div>
-            
-            <div class="fans-grid">
-                <div class="card">
-                    <div class="card-header">
-                        <h3>Fan Status</h3>
-                    </div>
-                    <div class="card-content">
-                        <div class="fan-list" id="fan-list">
-                            <!-- Dynamic content -->
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header">
-                        <h3>External Fan</h3>
-                    </div>
-                    <div class="card-content">
-                        <div class="ext-fan-control">
-                            <div class="ext-fan-item">
-                                <span class="ext-fan-label">Duty Cycle:</span>
-                                <span class="ext-fan-value" id="ext-fan-duty">-- %</span>
-                            </div>
-                            <div class="ext-fan-bar-container">
-                                <div class="ext-fan-bar" id="ext-fan-bar"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
     </main>
 
     <!-- Footer -->
     <footer class="dashboard-footer">
         <div class="footer-content">
-            <span class="footer-text">Xeneon Dashboard v0.1.0 | BenchLab Telemetry</span>
+            <span class="footer-text" id="footer-info">Port: N/A | UID: N/A</span>
             <span class="footer-actions">
+                <button class="btn btn-small btn-danger" id="btn-shutdown">SHUTDOWN</button>
                 <span class="last-update" id="last-update">Last update: --</span>
             </span>
         </div>

@@ -1,39 +1,36 @@
-/* Xeneon Dashboard CSS - TUI-inspired styling */
+/* Xeneon Dashboard CSS - WigiDash exact port */
 
-/* CSS Variables for TUI Color Scheme */
+/* CSS Variables - WigiDash UITheme Standard */
 :root {
-    /* TUI Colors */
-    --color-primary: #2ecc71;    /* Green - OK/Connected/Normal */
+    /* WigiDash Color Palette */
+    --color-primary: #FCE477;    /* Gold - WigiDash primary */
     --color-danger: #e74c3c;     /* Red - Error/Disconnected/High temp */
-    --color-warning: #f1c40f;    /* Yellow - Caution/Power data */
-    --color-info: #3498db;       /* Cyan - Temperature/Fan data */
-    --color-muted: #34495e;      /* Blue - Voltage/Info */
-    --color-text: #ecf0f1;       /* White - Default text */
-    --color-bg: #2c3e50;         /* Dark background */
-    --color-card-bg: #34495e;    /* Card background */
-    --color-border: #7f8c8d;     /* Border color */
-    
+    --color-warning: #f1c40f;    /* Yellow - Caution */
+    --color-info: #3498db;       /* Cyan - Info */
+    --color-muted: #808080;      /* Grey - Muted */
+    --color-text: #EEEEEE;       /* White - Default text */
+    --color-bg: #000000;         /* Pure black background */
+    --color-card-bg: #0F0F0F;    /* Dark card background */
+    --color-border: #C8C8C8;     /* Light grey border */
+    --color-section: #FCE477;    /* Section header gold */
+
     /* Typography */
-    --font-family: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+    --font-family: 'Inter', system-ui, -apple-system, sans-serif;
     --font-size: 14px;
     --line-height: 1.4;
-    
-    /* Layout */
+
+    /* Layout - WigiDash Standards */
     --header-height: 60px;
-    --nav-height: 50px;
-    --border-radius: 4px;
-    --spacing: 1rem;
-    --card-padding: 1rem;
+    --footer-height: 56px;
+    --border-radius: 12px;
+    --spacing: 8px;
+    --card-padding: 12px;
 }
 
-/* Dark theme override for better contrast */
-@media (prefers-color-scheme: dark) {
-    :root {
-        --color-text: #ecf0f1;
-        --color-bg: #2c3e50;
-        --color-card-bg: #34495e;
-    }
-}
+/*
+ * NOTE: Google Fonts is loaded via <link> in dashboard.html.
+ * The @import that was here previously caused the font to be fetched twice — removed.
+ */
 
 /* Reset and Base Styles */
 * {
@@ -52,18 +49,21 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    /* Correct vendor-prefixed font smoothing (unprefixed has no effect) */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
-/* Header */
+/* Header - WigiDash style golden bar */
 .dashboard-header {
     height: var(--header-height);
-    background-color: var(--color-muted);
-    border-bottom: 2px solid var(--color-border);
+    background-color: var(--color-section);
     display: flex;
     align-items: center;
     padding: 0 var(--spacing);
     position: relative;
     z-index: 100;
+    flex-shrink: 0;
 }
 
 .header-content {
@@ -74,11 +74,9 @@ body {
 }
 
 .dashboard-title {
-    font-size: 1.2rem;
+    font-size: 30px;
     font-weight: 700;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: var(--color-text);
+    color: #000000;
 }
 
 .header-status {
@@ -95,123 +93,94 @@ body {
 
 .status-text {
     font-weight: 600;
+    color: #000000;
 }
 
 @keyframes pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.5; }
+    0%   { opacity: 1; }
+    50%  { opacity: 0.5; }
     100% { opacity: 1; }
 }
 
-/* Navigation */
-.dashboard-nav {
-    height: var(--nav-height);
-    background-color: var(--color-bg);
-    border-bottom: 1px solid var(--color-border);
-    display: flex;
-    align-items: center;
-    padding: 0 var(--spacing);
-    position: relative;
-    z-index: 90;
-}
-
-.nav-container {
-    display: flex;
-    gap: 0.5rem;
-    width: 100%;
-    overflow-x: auto;
-}
-
-.tab-button {
-    background: transparent;
-    border: 1px solid var(--color-border);
-    color: var(--color-text);
-    padding: 0.5rem 1rem;
-    cursor: pointer;
-    font-family: var(--font-family);
-    font-size: 0.9rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    border-radius: var(--border-radius);
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    min-width: 120px;
-    justify-content: center;
-}
-
-.tab-button:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    border-color: var(--color-text);
-}
-
-.tab-button.active {
-    background-color: var(--color-muted);
-    border-color: var(--color-muted);
-    color: var(--color-bg);
-    font-weight: 700;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-.tab-icon {
-    font-size: 1.1rem;
-}
-
-/* Main Content */
+/* Main Content - Three Section Layout */
 .dashboard-main {
     flex: 1;
-    overflow-y: auto;
+    overflow: hidden;
     padding: var(--spacing);
     background-color: var(--color-bg);
+    display: grid;
+    grid-template-columns: 1fr 2fr 1fr;
+    gap: var(--spacing);
+    height: calc(100vh - var(--header-height) - var(--footer-height));
 }
 
-.tab-content {
-    display: none;
-    animation: fadeIn 0.3s ease;
+/* Left Sidebar (A) */
+.dashboard-sidebar {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--color-card-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    overflow: hidden;
 }
 
-.tab-content.active {
-    display: block;
+/* Center Section (B) */
+.dashboard-center {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--color-card-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+}
+
+/* Right Graph Section (C) */
+.dashboard-graph {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--color-card-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+}
+
+/* Responsive: Stack on mobile */
+@media (max-width: 768px) {
+    .dashboard-main {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr auto;
+        overflow-y: auto;
+    }
+
+    .dashboard-sidebar,
+    .dashboard-center,
+    .dashboard-graph {
+        grid-column: 1 / -1;
+    }
+
+    .dashboard-sidebar { order: 1; }
+    .dashboard-center  { order: 2; }
+    .dashboard-graph   { order: 3; }
 }
 
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Section Header */
-.section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--spacing);
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--color-border);
-}
-
-.section-header h2 {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--color-info);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-.section-actions {
-    display: flex;
-    gap: 0.5rem;
-}
-
-/* Cards */
+/* Cards - WigiDash rounded card style */
 .card {
     background-color: var(--color-card-bg);
     border: 1px solid var(--color-border);
     border-radius: var(--border-radius);
-    margin-bottom: var(--spacing);
     overflow: hidden;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    transition: all 0.15s ease;
+}
+
+.card.clickable:hover {
+    border-color: var(--color-primary);
+    transform: translateY(-2px);
+    cursor: pointer;
 }
 
 .card-header {
@@ -221,160 +190,104 @@ body {
 }
 
 .card-header h3 {
-    font-size: 0.9rem;
-    font-weight: 700;
-    color: var(--color-text);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--color-section);
 }
 
 .card-content {
     padding: var(--card-padding);
 }
 
-/* Grid Layouts */
-.fleet-grid {
-    display: grid;
-    grid-template-columns: 2fr 1fr;
-    gap: var(--spacing);
+/* ===================== SIDEBAR STYLES ===================== */
+
+.sidebar-header {
+    padding: var(--card-padding);
+    border-bottom: 1px solid var(--color-border);
+    background-color: rgba(255, 255, 255, 0.05);
 }
 
-.device-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--spacing);
+.logo-container {
+    text-align: center;
+    padding: 20px 0;
 }
 
-.telemetry-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--spacing);
+.logo-text {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--color-primary);
+    margin: 0;
 }
 
-.voltage-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--spacing);
+.logo-subtext {
+    font-size: 14px;
+    color: var(--color-text);
+    opacity: 0.8;
 }
 
-.temp-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: var(--spacing);
+.device-selector {
+    flex: 1;
+    padding: var(--card-padding);
+    overflow-y: auto;
 }
 
-.fans-grid {
-    display: grid;
-    grid-template-columns: 2fr 1fr;
-    gap: var(--spacing);
-}
-
-/* Responsive Design */
-@media (max-width: 1200px) {
-    .fleet-grid, .telemetry-grid, .voltage-grid, .fans-grid {
-        grid-template-columns: 1fr;
-    }
-    
-    .device-grid, .temp-grid {
-        grid-template-columns: 1fr;
-    }
-}
-
-@media (max-width: 768px) {
-    body {
-        font-size: 12px;
-    }
-    
-    .dashboard-title {
-        font-size: 1rem;
-    }
-    
-    .tab-button {
-        min-width: 80px;
-        padding: 0.4rem 0.5rem;
-        font-size: 0.8rem;
-    }
-    
-    .section-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.5rem;
-    }
-}
-
-@media (max-width: 480px) {
-    body {
-        font-size: 11px;
-    }
-    
-    .dashboard-header {
-        height: 50px;
-    }
-    
-    .dashboard-nav {
-        height: 40px;
-    }
-    
-    .tab-button {
-        min-width: 60px;
-        padding: 0.3rem 0.4rem;
-        font-size: 0.7rem;
-    }
-    
-    .tab-icon {
-        font-size: 0.9rem;
-    }
-}
-
-/* Device List */
 .device-list {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 12px;
 }
 
 .device-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.75rem;
+    padding: 12px;
     border: 1px solid var(--color-border);
     border-radius: var(--border-radius);
-    background-color: rgba(255, 255, 255, 0.05);
+    background-color: rgba(60, 60, 60, 0.5);
+    transition: all 0.15s ease;
+    cursor: pointer;
 }
 
-.device-item.placeholder {
-    opacity: 0.6;
-    font-style: italic;
+.device-item:hover {
+    background-color: rgba(80, 80, 80, 0.5);
+    border-color: var(--color-primary);
+}
+
+.device-item.selected {
+    background-color: rgba(252, 228, 119, 0.2);
+    color: var(--color-primary);
+    border-color: var(--color-primary);
 }
 
 .device-info {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
+    gap: 5px;
 }
 
 .device-name {
     font-weight: 600;
     color: var(--color-text);
+    font-size: 18px;
 }
 
 .device-details {
-    font-size: 0.8rem;
+    font-size: 14px;
     color: var(--color-text);
     opacity: 0.8;
 }
 
 .device-status {
-    font-size: 0.8rem;
-    padding: 0.25rem 0.5rem;
+    font-size: 14px;
+    padding: 4px 8px;
     border-radius: 4px;
     font-weight: 700;
     text-transform: uppercase;
 }
 
 .device-status.connected {
-    background-color: rgba(46, 204, 113, 0.2);
+    background-color: rgba(252, 228, 119, 0.2);
     color: var(--color-primary);
     border: 1px solid var(--color-primary);
 }
@@ -385,378 +298,112 @@ body {
     border: 1px solid var(--color-danger);
 }
 
-/* Status Grid */
-.status-grid {
+/* ===================== SENSOR GRID STYLES ===================== */
+
+.sensor-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 0.5rem;
+    gap: var(--spacing);
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--card-padding);
 }
 
-.status-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem;
-    background-color: rgba(255, 255, 255, 0.05);
+/*
+ * .sensor-card uses .card-header / .card-content children (matching dashboard.html).
+ * The old .sensor-card-header / .sensor-card-content selectors were renamed here
+ * to match what the HTML actually emits.
+ */
+.sensor-card {
+    background-color: var(--color-card-bg);
     border: 1px solid var(--color-border);
     border-radius: var(--border-radius);
+    overflow: hidden;
+    transition: all 0.15s ease;
 }
 
-.status-label {
-    font-size: 0.8rem;
-    color: var(--color-text);
-    opacity: 0.8;
+.sensor-card:hover {
+    border-color: var(--color-primary);
 }
 
-.status-value {
-    font-weight: 700;
-    font-family: var(--font-family);
-}
+/* .card-header inside a sensor-card — inherits the shared .card-header rule above */
 
-/* Info Grid */
-.info-grid, .config-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 0.5rem;
-}
-
-.info-item, .config-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem;
-    background-color: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
-}
-
-.info-label, .config-label {
-    font-size: 0.8rem;
-    color: var(--color-text);
-    opacity: 0.8;
-}
-
-.info-value, .config-value {
-    font-weight: 700;
-    font-family: var(--font-family);
-}
-
-/* Telemetry List */
-.telemetry-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
+/* ===================== TELEMETRY ITEMS ===================== */
 
 .telemetry-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.5rem;
-    background-color: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.telemetry-item:last-child {
+    border-bottom: none;
 }
 
 .telemetry-label {
-    font-size: 0.8rem;
-    color: var(--color-text);
-    opacity: 0.8;
-    min-width: 120px;
-}
-
-.telemetry-value {
-    font-weight: 700;
-    font-family: var(--font-family);
-    font-size: 0.9rem;
-}
-
-/* Voltage List */
-.voltage-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.voltage-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem;
-    background-color: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
-}
-
-.voltage-label {
-    font-size: 0.8rem;
-    color: var(--color-text);
-    opacity: 0.8;
+    font-size: 13px;
+    color: var(--color-muted);
+    font-weight: 500;
     min-width: 80px;
 }
 
-.voltage-value {
-    font-weight: 700;
-    font-family: var(--font-family);
-    font-size: 0.9rem;
-}
-
-/* Temperature Items */
-.temp-item {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.temp-label {
-    font-size: 0.8rem;
+.telemetry-value {
+    font-size: 13px;
     color: var(--color-text);
-    opacity: 0.8;
-}
-
-.temp-value {
-    font-weight: 700;
-    font-family: var(--font-family);
-    font-size: 1.1rem;
-    color: var(--color-info);
-}
-
-.temp-bar-container {
-    width: 100%;
-    height: 10px;
-    background-color: rgba(255, 255, 255, 0.1);
-    border-radius: 5px;
-    overflow: hidden;
-    border: 1px solid var(--color-border);
-}
-
-.temp-bar {
-    height: 100%;
-    background-color: var(--color-info);
-    width: 0%;
-    transition: width 0.3s ease, background-color 0.3s ease;
-}
-
-.temp-bar.warning {
-    background-color: var(--color-warning);
-}
-
-.temp-bar.danger {
-    background-color: var(--color-danger);
-}
-
-/* Environment Grid */
-.env-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.5rem;
-}
-
-.env-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem;
-    background-color: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
-}
-
-.env-label {
-    font-size: 0.8rem;
-    color: var(--color-text);
-    opacity: 0.8;
-}
-
-.env-value {
-    font-weight: 700;
-    font-family: var(--font-family);
-}
-
-/* Sensor List */
-.sensor-list {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.5rem;
-}
-
-.sensor-item {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    padding: 0.5rem;
-    background-color: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
-}
-
-.sensor-label {
-    font-size: 0.8rem;
-    color: var(--color-text);
-    opacity: 0.8;
-}
-
-.sensor-value {
-    font-weight: 700;
-    font-family: var(--font-family);
-    font-size: 0.9rem;
-}
-
-/* Fan List */
-.fan-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.fan-item {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr 2fr;
-    gap: 0.5rem;
-    align-items: center;
-    padding: 0.5rem;
-    background-color: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
-}
-
-.fan-name {
-    font-size: 0.8rem;
-    color: var(--color-text);
-    opacity: 0.8;
-    font-weight: 700;
-}
-
-.fan-value {
-    font-weight: 700;
-    font-family: var(--font-family);
-    font-size: 0.9rem;
-}
-
-/* External Fan */
-.ext-fan-control {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.ext-fan-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem;
-    background-color: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
-}
-
-.ext-fan-label {
-    font-size: 0.8rem;
-    color: var(--color-text);
-    opacity: 0.8;
-}
-
-.ext-fan-value {
-    font-weight: 700;
-    font-family: var(--font-family);
-    font-size: 0.9rem;
-}
-
-.ext-fan-bar-container {
-    width: 100%;
-    height: 10px;
-    background-color: rgba(255, 255, 255, 0.1);
-    border-radius: 5px;
-    overflow: hidden;
-    border: 1px solid var(--color-border);
-}
-
-.ext-fan-bar {
-    height: 100%;
-    background-color: var(--color-info);
-    width: 0%;
-    transition: width 0.3s ease;
-}
-
-/* Progress Bars */
-.progress-bar {
-    width: 100%;
-    height: 12px;
-    background-color: rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    overflow: hidden;
-    border: 1px solid var(--color-border);
-    margin-top: 0.25rem;
-}
-
-.progress-fill {
-    height: 100%;
-    background-color: var(--color-info);
-    width: 0%;
-    transition: width 0.3s ease, background-color 0.3s ease;
-}
-
-.progress-fill.warning {
-    background-color: var(--color-warning);
-}
-
-.progress-fill.danger {
-    background-color: var(--color-danger);
-}
-
-/* Status Indicators */
-.status-connected {
-    color: var(--color-primary);
-}
-
-.status-disconnected {
-    color: var(--color-danger);
-}
-
-.status-warning {
-    color: var(--color-warning);
-}
-
-.status-info {
-    color: var(--color-info);
-}
-
-/* Buttons */
-.btn {
-    background-color: transparent;
-    border: 1px solid var(--color-border);
-    color: var(--color-text);
-    padding: 0.5rem 1rem;
-    cursor: pointer;
-    font-family: var(--font-family);
-    font-size: 0.8rem;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    border-radius: var(--border-radius);
-    transition: all 0.2s ease;
+    text-align: right;
 }
 
-.btn:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    border-color: var(--color-text);
+/* ===================== GRAPH SECTION ===================== */
+
+.graph-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
 }
 
-.btn-secondary {
-    background-color: var(--color-muted);
-    border-color: var(--color-muted);
-    color: var(--color-bg);
+.graph-header {
+    padding: var(--card-padding);
+    border-bottom: 1px solid var(--color-border);
+    background-color: rgba(255, 255, 255, 0.05);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
-.btn-secondary:hover {
-    background-color: var(--color-info);
-    border-color: var(--color-info);
-    color: var(--color-bg);
+.graph-header h3,
+.graph-header .section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-section);
+    margin: 0;
+}
+
+.graph-controls {
+    display: flex;
+    gap: 8px;
+}
+
+.graph-canvas-container {
+    position: relative;
+    flex: 1;
+    width: 100%;
+    /* Ensure the container has a real height so the canvas can measure offsetWidth/Height */
+    min-height: 0;
+}
+
+#graph-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background-color: var(--color-card-bg);
 }
 
 /* Footer */
 .dashboard-footer {
-    height: 40px;
+    height: var(--footer-height);
     background-color: var(--color-bg);
     border-top: 1px solid var(--color-border);
     display: flex;
@@ -764,7 +411,7 @@ body {
     padding: 0 var(--spacing);
     font-size: 0.8rem;
     color: var(--color-text);
-    opacity: 0.8;
+    flex-shrink: 0;
 }
 
 .footer-content {
@@ -780,12 +427,62 @@ body {
 
 .footer-actions {
     display: flex;
-    gap: 1rem;
+    gap: 8px;
+    align-items: center;
 }
 
 .last-update {
     font-family: var(--font-family);
     font-size: 0.7rem;
+}
+
+/* Buttons */
+.btn {
+    background-color: transparent;
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+    padding: 6px 12px;
+    cursor: pointer;
+    font-family: var(--font-family);
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-radius: var(--border-radius);
+    transition: all 0.2s ease;
+}
+
+.btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: var(--color-text);
+}
+
+.btn-small {
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+.btn-secondary {
+    background-color: var(--color-section);
+    border-color: var(--color-section);
+    color: #000000;
+}
+
+.btn-secondary:hover {
+    background-color: #FFEE88;
+    border-color: #FFEE88;
+    color: #000000;
+}
+
+.btn-danger {
+    background-color: var(--color-danger);
+    border-color: var(--color-danger);
+    color: #FFFFFF;
+}
+
+.btn-danger:hover {
+    background-color: #ff6b6b;
+    border-color: #ff6b6b;
 }
 
 /* Scrollbar styling */
@@ -807,74 +504,32 @@ body {
     background: rgba(255, 255, 255, 0.5);
 }
 
-/* Loading animations */
-.loading {
-    opacity: 0.6;
-    pointer-events: none;
-}
-
-.loading::after {
-    content: '';
-    display: inline-block;
-    width: 12px;
-    height: 12px;
-    border: 2px solid var(--color-text);
-    border-radius: 50%;
-    border-top-color: transparent;
-    animation: spin 1s linear infinite;
-    margin-left: 0.5rem;
-}
-
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
+/* Status Indicators */
+.status-connected    { color: var(--color-primary); }
+.status-disconnected { color: var(--color-danger); }
+.status-error        { color: var(--color-danger); }
+.status-warning      { color: var(--color-warning); }
+.status-info         { color: var(--color-info); }
 
 /* Utility classes */
-.hidden {
-    display: none !important;
-}
+.hidden { display: none !important; }
 
 .text-primary { color: var(--color-primary); }
-.text-danger { color: var(--color-danger); }
+.text-danger  { color: var(--color-danger); }
 .text-warning { color: var(--color-warning); }
-.text-info { color: var(--color-info); }
-.text-muted { color: var(--color-muted); }
+.text-info    { color: var(--color-info); }
+.text-muted   { color: var(--color-muted); }
 
 .bg-primary { background-color: var(--color-primary); }
-.bg-danger { background-color: var(--color-danger); }
+.bg-danger  { background-color: var(--color-danger); }
 .bg-warning { background-color: var(--color-warning); }
-.bg-info { background-color: var(--color-info); }
-.bg-muted { background-color: var(--color-muted); }
+.bg-info    { background-color: var(--color-info); }
+.bg-muted   { background-color: var(--color-muted); }
 
-/* For iframe embedding optimization */
-iframe {
-    border: none;
-    width: 100%;
-    height: 100%;
-}
-
-/* High contrast mode support */
-@media (prefers-contrast: high) {
-    :root {
-        --color-border: #ffffff;
-        --color-text: #ffffff;
-    }
-}
-
-/* Print styles */
-@media print {
-    body {
-        background-color: white;
-        color: black;
-    }
-    
-    .dashboard-nav, .dashboard-footer {
-        display: none;
-    }
-    
-    .card {
-        border: 1px solid black;
-        background-color: white;
-        color: black;
-    }
+.section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-section);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
