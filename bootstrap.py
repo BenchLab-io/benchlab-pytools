@@ -132,6 +132,7 @@ def install_requirements_file(req_file: str, label: str) -> bool:
 
     try:
         pip_install(["--disable-pip-version-check", "-r", req_file])
+        _REQ_CACHE.pop(req_file, None)  # invalidate stale result
         _INSTALLED_REQ_FILES.add(req_file)
         return True
     except subprocess.CalledProcessError:
