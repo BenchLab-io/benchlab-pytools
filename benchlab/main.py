@@ -16,7 +16,10 @@ to keep track of discovered devices.
 
 import argparse
 import curses
+import inspect
 import importlib
+import json
+import logging
 import os
 import socket
 import subprocess
@@ -24,7 +27,8 @@ import sys
 import threading
 import time
 import traceback
-import logging
+import types as _types
+import urllib.request
 from pathlib import Path
 from typing import List, Optional
 
@@ -167,38 +171,17 @@ def ensure_tool_dependencies(tool_id: str) -> None:
 # Data Source Helpers
 # ──────────────────────────────────────────────────────────────
 
-def check_fastapi_running(host: str = "127.0.0.1", port: int = 8000) -> bool:
-    """Check if FastAPI server is already running and has devices."""
-    import urllib.request
-    import urllib.error
-    try:
-        url = f"http://{host}:{port}/devices"
-        req = urllib.request.Request(url, method="GET")
-        with urllib.request.urlopen(req, timeout=2) as resp:
-            if resp.status == 200:
-                import json
-                devices = json.loads(resp.read().decode())
-                return isinstance(devices, list) and len(devices) > 0
-    except Exception:
-        pass
-    return False
-
-
 def _port_in_use(host: str, port: int) -> bool:
-    """Return True if something is already bound to host:port."""
     try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(1)
-        result = sock.connect_ex((host, port))
-        sock.close()
-        return result == 0
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(1)
+            return sock.connect_ex((host, port)) == 0
     except Exception:
         return False
 
 
 def _trigger_fastapi_scan(host: str, port: int) -> None:
     """POST /scan to an already-running FastAPI server to force device discovery."""
-    import urllib.request
     try:
         req = urllib.request.Request(
             f"http://{host}:{port}/scan", method="POST", data=b""
@@ -210,20 +193,16 @@ def _trigger_fastapi_scan(host: str, port: int) -> None:
 
 
 def check_mqtt_running(host: str = "localhost", port: int = 1883) -> bool:
-    """Check if MQTT broker is accepting connections."""
     try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(2)
-        result = sock.connect_ex((host, port))
-        sock.close()
-        return result == 0
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(2)
+            return sock.connect_ex((host, port)) == 0
     except Exception:
         return False
 
 
 def _fastapi_health(host: str, port: int) -> bool:
     """Health check: /devices returns non-empty list."""
-    import urllib.request, json
     try:
         url = f"http://{host}:{port}/devices"
         with urllib.request.urlopen(url, timeout=3) as resp:
@@ -313,11 +292,9 @@ asyncio.run(main())
 '''
     def broker_port_check():
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(1)
-            result = sock.connect_ex(('127.0.0.1', port))
-            sock.close()
-            return result == 0
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(1)
+                return sock.connect_ex(('127.0.0.1', port)) == 0
         except Exception:
             return False
 
@@ -381,7 +358,7 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
         os.environ["BENCHLAB_API_URL"] = api_url
         os.environ["API_PORT"] = str(port)
 
-        if check_fastapi_running(host, port):
+        if _fastapi_health(host, port):
             logger.info(f"FastAPI already running at {api_url} (device(s) detected)")
             os.environ["BENCHLAB_DATA_SOURCE"] = "fastapi"
             return True
@@ -391,7 +368,7 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
         if _port_in_use(host, port):
             logger.info(f"Port {port} is in use — triggering /scan on existing server")
             _trigger_fastapi_scan(host, port)
-            if check_fastapi_running(host, port):
+            if _fastapi_health(host, port):
                 logger.info(f"FastAPI at {api_url} now has device(s)")
                 os.environ["BENCHLAB_DATA_SOURCE"] = "fastapi"
                 return True
@@ -399,7 +376,11 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
             return False
 
         logger.info(f"FastAPI not detected at {api_url}")
-        return start_fastapi_source(port)
+        
+        ok = start_fastapi_source(port)
+        if ok:
+            os.environ["BENCHLAB_DATA_SOURCE"] = "fastapi"
+        return ok
 
     if source_type == "mqtt":
         host = kwargs.get("broker", "localhost")
@@ -472,16 +453,26 @@ def step2_data_provider() -> None:
 
     if choice == "1":
         port_input = input("  Port [8000]: ").strip()
-        port = int(port_input) if port_input else 8000
+        try:
+            port = int(port_input) if port_input else 8000
+        except ValueError:
+            print("  Invalid port number.")
+            return
         os.environ["API_PORT"] = str(port)
-        check_and_setup_source("fastapi", port=port)
-        print("Press Ctrl+C to stop the provider.")
+        if not check_and_setup_source("fastapi", port=port):
+            logger.error("Could not start FastAPI server.")
+            return
+        print("FastAPI server running. Press Ctrl+C to stop the provider.")
         input("  (Press Enter to return to menu after verifying...) ")
 
     elif choice == "2":
         host = input("  Broker host [localhost]: ").strip() or "localhost"
         port_input = input("  Broker port [1883]: ").strip()
-        port = int(port_input) if port_input else 1883
+        try:
+            port = int(port_input) if port_input else 1883
+        except ValueError:
+            print("  Invalid port number.")
+            return
         if not check_mqtt_running(host, port):
             logger.warning(f"No MQTT broker at {host}:{port}")
             logger.info("Starting embedded broker...")
@@ -583,7 +574,7 @@ def step3_select_source(tool_ids: List[str], tool_names: List[str]) -> None:
         print("3. MQTT")
     print()
 
-    default = "1" if not is_multi else "1"
+    default = "1"
     choice = input(f"Choice [1-3] (default: {default}): ").strip() or default
 
     source_ready = False
@@ -653,7 +644,6 @@ def _launch_single_tool(tool_id: str) -> None:
 
     # Build standard args namespace from env vars so every tool
     # receives the same interface regardless of how it was invoked.
-    import types as _types
     args = _types.SimpleNamespace(
         source=os.environ.get("BENCHLAB_DATA_SOURCE", "direct"),
         interval=float(os.environ.get("POLL_INTERVAL", "1.0")),
@@ -675,12 +665,13 @@ def _launch_single_tool(tool_id: str) -> None:
             from benchlab.xeneon.xeneon_main import run_xeneon
             run_xeneon(args)
         else:
-            try:
+            sig = inspect.signature(func)
+            if sig.parameters:
                 func(args)
-            except TypeError:
+            else:
                 logger.warning(
-                    f"{tool['name']}: func(args) failed, retrying without args. "
-                    f"Update {tool['module']}.{tool['function']} to accept args."
+                    f"{tool['name']}: {tool['module']}.{tool['function']} takes no args. "
+                    f"Update it to accept an args parameter."
                 )
                 func()
 
@@ -737,8 +728,6 @@ def _spawn_tool_in_terminal(tool_id: str, args) -> subprocess.Popen:
 
 
 def _launch_tools_concurrent(tool_ids: List[str]) -> None:
-    import types as _types
-
     args = _types.SimpleNamespace(
         source=os.environ.get("BENCHLAB_DATA_SOURCE", "direct"),
         interval=float(os.environ.get("POLL_INTERVAL", "1.0")),
@@ -965,13 +954,12 @@ def launch_mode() -> None:
 
         print(f"Launching profile: {args.profile}")
 
-        # 🔥 IMPORTANT: reuse existing source pipeline
         profile_args = argparse.Namespace(
             source=source,
-            api_url="http://127.0.0.1:8000",
-            api_port=8000,
-            mqtt_broker="localhost",
-            mqtt_port=1883,
+            api_url=getattr(args, "api_url", "http://127.0.0.1:8000"),
+            api_port=getattr(args, "api_port", 8000),
+            mqtt_broker=getattr(args, "mqtt_broker", "localhost"),
+            mqtt_port=getattr(args, "mqtt_port", 1883),
         )
 
         if not _setup_source_from_args(profile_args):
