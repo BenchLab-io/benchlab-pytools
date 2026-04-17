@@ -74,7 +74,7 @@ CONSUMER_TOOLS = {
         "name": "Link",
         "description": "Publish telemetry to BENCHLAB SaaS",
         "flag": "-link",
-        "module": "link_main",
+        "module": "benchlab.link.link_main",
         "function": "run_link",
         "requirements": "requirements.txt"
     },
@@ -84,7 +84,8 @@ CONSUMER_TOOLS = {
         "flag": "-tui",
         "module": "benchlab.tui.tui_main",
         "function": "tui_main",
-        "requirements": "requirements.txt"
+        "requirements": "requirements.txt",
+        "terminal": {"cols": 220, "rows": 70}
     },
     "vu": {
         "name": "VU Dials",
@@ -120,12 +121,26 @@ CONSUMER_TOOLS = {
     },
 }
 
+
+# ──────────────────────────────────────────────────────────────
+# Launch Profiles
+# ──────────────────────────────────────────────────────────────
+
+LAUNCH_PROFILES = {
+    "gskill_ctex26": {
+        "tools": ["link", "tui", "vu", "wigidash"],
+        "source": "mqtt",
+    },
+    "corsair_ctex26": {
+        "tools": ["tui", "xeneon"],
+        "source": "mqtt",
+    },
+}
+
+
 # ──────────────────────────────────────────────────────────────
 # Tool Dependency Helpers
 # ──────────────────────────────────────────────────────────────
-
-
-
 
 def get_module_dir(module_name: str) -> Path:
     spec = importlib.util.find_spec(module_name)
@@ -264,7 +279,7 @@ def _mqtt_device_check(broker: str) -> bool:
 
 def start_mqtt_broker(port: int = 1883) -> bool:
     """Start embedded amqtt broker if no external broker detected."""
-    if check_mqtt_running(port=port):
+    if check_mqtt_running("localhost", port):
         return True  # Broker already running
 
     logger.info(f"Starting embedded MQTT broker on port {port}...")
@@ -676,14 +691,14 @@ def _launch_single_tool(tool_id: str) -> None:
         traceback.print_exc()
 
 
-def _spawn_tui_in_terminal(args) -> subprocess.Popen:
-    """Launch the TUI in a separate terminal window so it doesn't block the main console.
+def _spawn_tool_in_terminal(tool_id: str, args) -> subprocess.Popen:
+    tool = CONSUMER_TOOLS[tool_id]
+    tool_flag = tool["flag"]
+    term_cfg = tool.get("terminal", {})
 
-    Returns the Popen handle so the caller can wait on / terminate it.
-    """
     cmd = [
         sys.executable, "-m", "benchlab",
-        "-tui",
+        tool_flag,
         "--source", args.source,
         "--api-url", args.api_url,
         "--api-port", str(args.api_port),
@@ -691,38 +706,39 @@ def _spawn_tui_in_terminal(args) -> subprocess.Popen:
         "--mqtt-port", str(args.mqtt_port),
     ]
 
+    env = os.environ.copy()
+
     if os.name == "nt":
-        # Windows — open a new cmd window with a large enough console buffer
-        # mode con sets columns x lines before the TUI starts
-        setup = "mode con cols=220 lines=50 && "
-        inner = " ".join(f'"{c}"' if " " in c else c for c in cmd)
+        # Build proper Windows command line (NO nested quoting hell)
+        python_cmd = subprocess.list2cmdline(cmd)
+
+        if term_cfg:
+            cols = term_cfg.get("cols", 120)
+            rows = term_cfg.get("rows", 50)
+            setup = f"mode con cols={cols} lines={rows} && "
+        else:
+            setup = ""
+
+        full_cmd = f"{setup}{python_cmd}"
+
         return subprocess.Popen(
-            f'start "BENCHLAB TUI" cmd /k "{setup}{inner}"',
-            shell=True,
+            ["cmd", "/c", "start", f"BENCHLAB {tool['name']}", "cmd", "/k", full_cmd],
+            shell=False
         )
+
     else:
-        # Linux/macOS — try common terminal emulators
         for term in ("x-terminal-emulator", "gnome-terminal", "xterm"):
             try:
-                return subprocess.Popen([term, "--"] + cmd)
+                return subprocess.Popen([term, "--"] + cmd, env=env)
             except FileNotFoundError:
                 continue
-        # Fallback: run in background (no new window)
-        logger.warning("No terminal emulator found — TUI will run in background")
-        return subprocess.Popen(cmd)
+
+        return subprocess.Popen(cmd, env=env)
 
 
 def _launch_tools_concurrent(tool_ids: List[str]) -> None:
-    """Launch multiple tools, each in its own daemon thread.
-
-    TUI is special-cased to run in a separate terminal window so it
-    doesn't fight with the main console output.
-    """
-    threads: List[threading.Thread] = []
-    tui_proc: Optional[subprocess.Popen] = None
-
-    # Build args namespace from env for tools that need it
     import types as _types
+
     args = _types.SimpleNamespace(
         source=os.environ.get("BENCHLAB_DATA_SOURCE", "direct"),
         interval=float(os.environ.get("POLL_INTERVAL", "1.0")),
@@ -732,48 +748,42 @@ def _launch_tools_concurrent(tool_ids: List[str]) -> None:
         mqtt_port=int(os.environ.get("MQTT_PORT", "1883")),
     )
 
-    def run_tool(tid: str):
-        try:
-            _launch_single_tool(tid)
-        except Exception as e:
-            logger.error(f"[{CONSUMER_TOOLS.get(tid, {}).get('name', tid)}] Error: {e}")
+    processes = {}
 
     for tid in tool_ids:
-        if tid == "tui":
-            logger.info("Spawning TUI in a separate terminal window...")
-            tui_proc = _spawn_tui_in_terminal(args)
-            logger.info(f"TUI started (PID {tui_proc.pid})")
-        else:
-            t = threading.Thread(target=run_tool, args=(tid,), daemon=True)
-            t.start()
-            threads.append(t)
-            logger.info(f"Started: {CONSUMER_TOOLS.get(tid, {}).get('name', tid)}")
+        tool = CONSUMER_TOOLS[tid]
 
-    logger.info(f"Running {len(threads)} tool thread(s). Press Ctrl+C to stop all.")
+        logger.info(f"Launching {tool['name']} in terminal...")
+
+        proc = _spawn_tool_in_terminal(tid, args)
+        processes[tid] = proc
+
+    logger.info("All tools launched in terminals. Press Ctrl+C to stop launcher.")
 
     try:
         while True:
-            # Check if all threads are done
-            alive = [t for t in threads if t.is_alive()]
-            if not alive and tui_proc is None:
-                break
-            # Check if TUI process exited
-            if tui_proc is not None and tui_proc.poll() is not None:
-                tui_proc = None
             time.sleep(0.5)
+
     except (KeyboardInterrupt, EOFError):
         logger.info("Stopping all tools...")
+
     finally:
-        # Give threads a moment to finish naturally
-        for t in threads:
-            t.join(timeout=3)
-        # Kill TUI process if still running
-        if tui_proc is not None and tui_proc.poll() is None:
-            tui_proc.terminate()
+        for tid, proc in processes.items():
             try:
-                tui_proc.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                tui_proc.kill()
+                if proc and proc.poll() is None:
+                    proc.terminate()
+            except Exception:
+                pass
+
+        time.sleep(1)
+
+        for tid, proc in processes.items():
+            try:
+                if proc and proc.poll() is None:
+                    proc.kill()
+            except Exception:
+                pass
+
     logger.info("Done.")
 
 
@@ -865,13 +875,12 @@ def get_parser() -> argparse.ArgumentParser:
                         help="MQTT topic pattern with {uid} token (overrides LINK_TOPIC_PATTERN)")
     parser.add_argument("-tui", action="store_true",
                         help="Enable TUI (default)")
-    parser.add_argument(
-        "--source",
-        choices=["direct", "fastapi", "mqtt"],
-        default=None,
-        metavar="SOURCE",
-        help="Data source for -tui (and other tools): direct | fastapi | mqtt",
-    )
+    parser.add_argument("--source",
+                        help="Data source for -tui (and other tools): direct | fastapi | mqtt",
+                        choices=["direct", "fastapi", "mqtt"],
+                        default=None,
+                        metavar="SOURCE",
+                        )
     parser.add_argument("--api-url", default="http://127.0.0.1:8000",
                         dest="api_url",
                         help="FastAPI base URL (default: http://127.0.0.1:8000)")
@@ -892,6 +901,10 @@ def get_parser() -> argparse.ArgumentParser:
                         help="Connect to WigiDash")
     parser.add_argument("-xeneon", action="store_true",
                         help="Launch Xeneon web dashboard")
+    parser.add_argument("--profile",
+                        help="Launch predefined multi-tool profile",
+                        default=None,
+                        )
 
     return parser
 
@@ -936,11 +949,41 @@ def launch_mode() -> None:
     # If no flags, run interactive mode
     if not any([args.fastapi, args.graph, args.hwinfo, args.link, args.logfleet,
                 args.mqtt, args.tui, args.vu, args.vuconfig,
-                args.wigidash, args.xeneon]):
+                args.wigidash, args.xeneon, args.profile]):
         interactive_loop()
         return
 
-    if args.link:
+    if args.profile:
+        profile = LAUNCH_PROFILES.get(args.profile)
+
+        if not profile:
+            print(f"Unknown profile: {args.profile}")
+            return
+
+        tool_ids = profile["tools"]
+        source = profile.get("source", "direct")
+
+        print(f"Launching profile: {args.profile}")
+
+        # 🔥 IMPORTANT: reuse existing source pipeline
+        profile_args = argparse.Namespace(
+            source=source,
+            api_url="http://127.0.0.1:8000",
+            api_port=8000,
+            mqtt_broker="localhost",
+            mqtt_port=1883,
+        )
+
+        if not _setup_source_from_args(profile_args):
+            print("Failed to initialize data source")
+            return
+
+        os.environ["BENCHLAB_DATA_SOURCE"] = source
+
+        _launch_tools_concurrent(tool_ids)
+        return
+
+    elif args.link:
         if not _setup_source_from_args(args):
             return
         try:

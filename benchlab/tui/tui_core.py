@@ -37,6 +37,10 @@ class TUICore:
         self.current_tab = 0
         self.fleet_index = 0
         self.show_help_modal = False
+
+        self._help_win = None
+        self._help_win_size = None
+        self._last_size = None
         
         # Status message system
         self.status_msg = ""
@@ -78,7 +82,15 @@ class TUICore:
         if height < Config.MIN_TERMINAL_ROWS or width < Config.MIN_TERMINAL_COLS:
             self._render_size_warning(width, height)
             return False
-        
+
+        # Detect silent resize (windows-curses may not send KEY_RESIZE)
+        last = getattr(self, '_last_size', None)
+        if last != (height, width):
+            self._last_size = (height, width)
+            self._help_win = None
+            self._reset_input_settings()  
+            self.stdscr.clearok(True)
+            
         # Render UI components
         self._render_header(width)
         self._render_tabs(width)
@@ -123,7 +135,19 @@ class TUICore:
         elif key == 'f':
             action = {'type': 'rescan_fleet'}
         elif key == "KEY_RESIZE":
-            pass  # Handle gracefully
+            import shutil
+            real = shutil.get_terminal_size(fallback=(80, 24))
+            try:
+                if hasattr(curses, 'resizeterm'):
+                    curses.resizeterm(real.lines, real.columns)
+                elif hasattr(curses, '_curses') and hasattr(curses._curses, 'resize_term'):
+                    curses._curses.resize_term(real.lines, real.columns)
+            except Exception:
+                pass
+            self._reset_input_settings()   # ← add this
+            self.stdscr.clearok(True)
+            self._help_win = None
+            self._help_win_size = None
         
         # Tab-specific keys
         elif self.current_tab == 0:  # Fleet tab
@@ -166,11 +190,10 @@ class TUICore:
             self.fleet_index = 0
 
     def _render_size_warning(self, width: int, height: int):
-        """Render terminal too small warning."""
-        msg = (f" Terminal too small ({width}×{height})"
-               f" — resize to at least {Config.MIN_TERMINAL_COLS}×{Config.MIN_TERMINAL_ROWS} ")
+        msg = (f" Terminal too small ({width}x{height})"
+               f" — resize to {Config.MIN_TERMINAL_COLS}x{Config.MIN_TERMINAL_ROWS} ")
         try:
-            self.stdscr.addstr(0, 0, msg.center(width), 
+            self.stdscr.addstr(0, 0, msg[:width],   # ← truncate, don't center
                              curses.A_BOLD | curses.color_pair(Config.COLOR_PAIRS['error']))
         except curses.error:
             pass
@@ -203,7 +226,7 @@ class TUICore:
     def _render_separator(self, width: int):
         """Render separator line below tabs."""
         try:
-            self.stdscr.addstr(3, 0, "─" * width, curses.color_pair(Config.COLOR_PAIRS['default']))
+            self.stdscr.addstr(3, 0, "─" * (width - 1), curses.color_pair(Config.COLOR_PAIRS['default']))
         except curses.error:
             pass
 
@@ -231,7 +254,7 @@ class TUICore:
         """Render bottom status bar."""
         try:
             # Separator line
-            self.stdscr.addstr(height - 2, 0, "─" * width, 
+            self.stdscr.addstr(height - 2, 0, "─" * (width - 1), 
                              curses.color_pair(Config.COLOR_PAIRS['default']))
             
             # Left side: transient message or last error or help
@@ -258,10 +281,12 @@ class TUICore:
             con_col = (curses.color_pair(Config.COLOR_PAIRS['ok']) if snapshot.get('connected') 
                       else curses.color_pair(Config.COLOR_PAIRS['error']))
             right_msg = f"{uptime_part}{con_str}  {device_str}"
+            right_col = max(0, width - len(right_msg) - 2)
             
             # Draw status bar
             self.stdscr.addstr(height - 1, 2, left_msg[:width - len(right_msg) - 4], left_col)
             self.stdscr.addstr(height - 1, width - len(right_msg) - 2, right_msg, con_col)
+            self.stdscr.addstr(height - 1, right_col, right_msg[:width - right_col - 1], con_col)
             
         except curses.error:
             pass
@@ -270,22 +295,41 @@ class TUICore:
         """Render help modal overlay."""
         h = min(len(Config.HELP_TEXT) + 4, height - 2)
         w = min(60, width - 4)
+        
+        # Don't attempt to draw if terminal is too small for a modal
+        if h < 3 or w < 10:
+            return
+        
         sy = (height - h) // 2
         sx = (width - w) // 2
-        
-        win = curses.newwin(h, w, sy, sx)
-        win.attron(curses.color_pair(Config.COLOR_PAIRS['header']) | curses.A_BOLD)
-        win.border()
-        win.attroff(curses.color_pair(Config.COLOR_PAIRS['header']) | curses.A_BOLD)
-        
-        for i, line in enumerate(Config.HELP_TEXT):
-            if i < h - 2:
-                try:
+
+        # Cache window; only recreate if size changed (also prevents per-frame alloc)
+        if (not hasattr(self, '_help_win') or self._help_win is None
+                or getattr(self, '_help_win_size', None) != (h, w, sy, sx)):
+            try:
+                self._help_win = curses.newwin(h, w, sy, sx)
+            except curses.error:
+                return
+            self._help_win_size = (h, w, sy, sx)
+
+        win = self._help_win
+        try:
+            win.erase()
+            win.attron(curses.color_pair(Config.COLOR_PAIRS['header']) | curses.A_BOLD)
+            win.border()
+            win.attroff(curses.color_pair(Config.COLOR_PAIRS['header']) | curses.A_BOLD)
+            for i, line in enumerate(Config.HELP_TEXT):
+                if i < h - 2:
                     win.addstr(i + 1, 2, line[:w - 4])
-                except curses.error:
-                    pass
-        
-        win.refresh()
+            win.refresh()
+        except curses.error:
+            pass
+
+    def _reset_input_settings(self):
+        """Re-apply input settings — windows-curses resets these after resize."""
+        self.stdscr.nodelay(True)
+        self.stdscr.timeout(100)
+        curses.flushinp()  # discard any garbage keystrokes queued during resize
 
     # ═══════════════════════════════════════════════════════════════════════════════
     #  Tab Renderers
@@ -383,7 +427,7 @@ class TUICore:
         status_color = (curses.color_pair(Config.COLOR_PAIRS['ok']) if connected 
                        else curses.color_pair(Config.COLOR_PAIRS['error']))
         try:
-            self.stdscr.addstr(height - 3, 2, f"Status: {status_text}", status_color | curses.A_BOLD)
+            self.stdscr.addstr(height - 4, 2, f"Status: {status_text}", status_color | curses.A_BOLD)
             ct = snapshot.get('connection_time')
             if connected and ct:
                 uptime = str(datetime.now() - ct).split('.')[0]
@@ -619,7 +663,8 @@ class TUICore:
             pass
         
         # Determine number of fans
-        num_fans = 0
+        num_fans = sum(1 for k in sd if k.startswith('Fan') and k.endswith('_Duty') 
+               and k[3:-5].isdigit())
         while sd.get(f'Fan{num_fans+1}_Duty') is not None:
             num_fans += 1
         
@@ -709,6 +754,9 @@ class TUICore:
     def _draw_bar(self, y: int, x: int, label: str, value: float, unit: str, max_val: float, 
                  color: int, bar_width: int = None, decimals: int = 1, stat=None):
         """Draw progress bar with value and optional statistics."""
+        if value is None:
+            value = 0.0
+
         if bar_width is None:
             bar_width = Config.Layout.BAR_WIDTH
         

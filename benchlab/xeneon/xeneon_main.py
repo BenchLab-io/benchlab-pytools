@@ -54,7 +54,8 @@ async def lifespan(app: FastAPI):
     source = _args.source if _args else "direct"
 
     if source == "fastapi":
-        api_url = getattr(_args, "api_url", "http://127.0.0.1:8000")
+        # Default to 8001 so we don't collide with an existing server on 8000
+        api_url = getattr(_args, "api_url", "http://127.0.0.1:8001")
         logger.info(f"Xeneon: proxy mode -> {api_url}")
         _http_client = httpx.AsyncClient(base_url=api_url, timeout=10.0)
 
@@ -241,8 +242,24 @@ async def config():
 # ---------------------------
 # API
 # ---------------------------
+async def _proxy_get(path: str):
+    """Forward a GET request to the upstream FastAPI server in proxy mode."""
+    if not _http_client:
+        raise HTTPException(status_code=503, detail="Proxy client not initialised")
+    try:
+        resp = await _http_client.get(path)
+        resp.raise_for_status()
+        return resp.json()
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail=str(exc))
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"Upstream error: {exc}")
+
+
 @app.get("/api/devices")
 async def api_devices():
+    if _http_client:
+        return await _proxy_get("/api/devices")
     if _datasource_manager:
         return _dsm_list_devices()
     return []
@@ -250,6 +267,8 @@ async def api_devices():
 
 @app.get("/api/device/{uid}/telemetry")
 async def api_telemetry(uid: str):
+    if _http_client:
+        return await _proxy_get(f"/api/device/{uid}/telemetry")
     if _datasource_manager:
         return await _dsm_get_telemetry(uid)
     return {"error": "no data"}
@@ -257,6 +276,8 @@ async def api_telemetry(uid: str):
 
 @app.get("/api/device/{uid}/info")
 async def api_device_info(uid: str):
+    if _http_client:
+        return await _proxy_get(f"/api/device/{uid}/info")
     if _datasource_manager:
         info = await _dsm_get_info(uid)
         if not info:

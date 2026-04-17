@@ -49,13 +49,22 @@ class XeneonDashboard {
     }
 
     init() {
+        this._pollTimer = null; // Fix #5: keep handle so polling can be cleared
         this.setupEventListeners();
         this.syncCanvasSize();
         // Start device discovery with retry mechanism after initial delay
         this.startDeviceDiscovery();
         this.startPolling();
-        // Initialize favorites system after initial setup
-        this.initFavorites();
+        // Fix #2: initFavorites() is called once inside updateDeviceList()
+        // on first device load — removed duplicate call from here.
+    }
+
+    destroy() {
+        // Clean up timers to prevent stacking on re-instantiation
+        clearInterval(this._pollTimer);
+        clearTimeout(this._reconnectTimer);
+        clearTimeout(this._deviceDiscoveryTimer);
+        if (this.ws) { this.ws.close(); this.ws = null; }
     }
 
     // =========================================================
@@ -241,27 +250,27 @@ class XeneonDashboard {
         if (!widget) return;
 
         const valueEl = widget.querySelector(`#fav-value-${sensorType}`);
-        const unitEl = widget.querySelector(`#fav-unit-${sensorType}`);
-        const canvas = widget.querySelector(`#fav-graph-${sensorType}`);
+        const unitEl  = widget.querySelector(`#fav-unit-${sensorType}`);
+        const canvas  = widget.querySelector(`#fav-graph-${sensorType}`);
 
         if (!valueEl || !unitEl || !canvas) return;
 
-        // Get current value and unit
         const { value, unit } = this.getSensorValueAndUnit(sensorType);
 
-        // Update value display
-        valueEl.textContent = value;
-        unitEl.textContent = unit;
-
-        // Update mini-graph
-        this.renderFavoriteGraph(sensorType, canvas);
+        // Fix #10: only repaint the canvas when the displayed value has changed
+        const valueStr = String(value);
+        if (valueEl.textContent !== valueStr) {
+            valueEl.textContent = valueStr;
+            unitEl.textContent  = unit;
+            this.renderFavoriteGraph(sensorType, canvas);
+        }
     }
 
     renderFavoriteGraph(sensorType, canvas) {
         if (!canvas) return;
 
         const ctx = canvas.getContext('2d');
-        
+
         // Clear canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -269,7 +278,7 @@ class XeneonDashboard {
         const history = this.getSensorHistory(sensorType);
         if (!history || history.length === 0) return;
 
-        // Draw background grid
+        // Draw background
         ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -284,39 +293,36 @@ class XeneonDashboard {
         }
         ctx.stroke();
 
-        // Prepare data points
         const values = history.map(entry => entry.value);
         const maxVal = Math.max(...values);
         const minVal = Math.min(...values);
-        const range = maxVal - minVal || 1; // Avoid division by zero
+        const range  = maxVal - minVal || 1;
 
-        // Draw line graph
+        // Fix #3: when there is only one data point, place it in the centre
+        // instead of computing x = 0/0 = NaN which breaks the canvas draw.
+        const xOf = (index) =>
+            values.length > 1
+                ? (index / (values.length - 1)) * canvas.width
+                : canvas.width / 2;
+
         ctx.strokeStyle = '#FCE477';
         ctx.lineWidth = 2;
         ctx.beginPath();
-
         values.forEach((val, index) => {
-            const x = (index / (values.length - 1)) * canvas.width;
-            // Invert Y because canvas 0 is at top
+            const x = xOf(index);
             const y = canvas.height - ((val - minVal) / range) * canvas.height;
-            
-            if (index === 0) {
-                ctx.moveTo(x, y);
-            } else {
-                ctx.lineTo(x, y);
-            }
+            index === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
         });
-
         ctx.stroke();
 
-        // Draw last value marker
+        // Draw last-value dot
         if (values.length > 0) {
             const lastVal = values[values.length - 1];
-            const lastY = canvas.height - ((lastVal - minVal) / range) * canvas.height;
-            
+            const lastY   = canvas.height - ((lastVal - minVal) / range) * canvas.height;
+            const lastX   = xOf(values.length - 1);
             ctx.fillStyle = '#FCE477';
             ctx.beginPath();
-            ctx.arc(canvas.width - 5, lastY, 3, 0, 2 * Math.PI);
+            ctx.arc(lastX, lastY, 3, 0, 2 * Math.PI);
             ctx.fill();
         }
     }
@@ -468,7 +474,10 @@ class XeneonDashboard {
             this.telemetryHistory.clear();
         }
         this.activeDevice = deviceUid;
-        this.connectToWebSocket();
+        // Fix #7: only connect once we have a real device UID — never fall back to 'all'
+        if (deviceUid) {
+            this.connectToWebSocket();
+        }
         this.updateDeviceSelection();
     }
 
@@ -546,6 +555,9 @@ class XeneonDashboard {
     // =========================================================
 
     connectToWebSocket() {
+        // Fix #7: never connect until we have a real device UID
+        if (!this.activeDevice) return;
+
         if (this.ws) {
             this.ws.close();
             this.ws = null;
@@ -553,7 +565,7 @@ class XeneonDashboard {
 
         try {
             const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${proto}//${location.host}/api/device/${this.activeDevice || 'all'}/stream`;
+            const wsUrl = `${proto}//${location.host}/api/device/${this.activeDevice}/stream`;
             this.ws = new WebSocket(wsUrl);
 
             this.ws.onopen = () => {
@@ -600,7 +612,8 @@ class XeneonDashboard {
     // =========================================================
 
     startPolling() {
-        setInterval(() => {
+        // Fix #5: store handle so it can be cleared in destroy()
+        this._pollTimer = setInterval(() => {
             // Fleet list changes infrequently — poll it every 15 ticks (~15 s)
             this._fleetPollCounter++;
             if (this._fleetPollCounter >= this._fleetPollInterval) {
@@ -612,10 +625,8 @@ class XeneonDashboard {
             if (this.activeDevice && this.connectionStatus !== 'connected') {
                 this.refreshTelemetry();
             }
-
-            document.getElementById('last-update').textContent =
-                `Last update: ${new Date().toLocaleTimeString()}`;
-
+            // Fix #6: timestamp is updated in handleTelemetryUpdate() only when
+            // real data arrives — removed from here so it doesn't tick while disconnected.
         }, this.config.refreshInterval);
     }
 
@@ -652,50 +663,49 @@ class XeneonDashboard {
         
         this._deviceDiscoveryTimer = setTimeout(() => {
             console.log('Initial delay complete, starting device discovery retry mechanism');
-            // Start discovery with retry mechanism
+            // Fix #4: start at 0; _attemptDeviceDiscovery increments before use
             this._deviceDiscoveryAttempts = 0;
             this._attemptDeviceDiscovery();
         }, this.config.initialDiscoveryDelay);
     }
 
     async _attemptDeviceDiscovery() {
+        // Fix #4: increment first so logs and comparisons are consistent
+        this._deviceDiscoveryAttempts++;
+        const attempt = this._deviceDiscoveryAttempts;
+        const max = this.config.deviceDiscoveryRetries;
+
         try {
-            console.log(`Device discovery attempt ${this._deviceDiscoveryAttempts + 1}/${this.config.deviceDiscoveryRetries}`);
+            console.log(`Device discovery attempt ${attempt}/${max}`);
             const devices = await this.apiGet('/devices');
-            
+
             console.log('API response:', devices);
-            
+
             if (devices && devices.length > 0) {
                 // Success - devices found
                 console.log(`Device discovery successful: ${devices.length} device(s) found`);
                 this.updateDeviceList(devices);
                 this._deviceDiscoveryTimer = null;
                 return;
-            } else if (this._deviceDiscoveryAttempts < this.config.deviceDiscoveryRetries) {
-                // Retry if we haven't reached max attempts
-                this._deviceDiscoveryAttempts++;
-                console.log(`Device discovery attempt ${this._deviceDiscoveryAttempts}/${this.config.deviceDiscoveryRetries} - no devices found, retrying in ${this.config.deviceDiscoveryDelay}ms`);
-                
+            } else if (attempt < max) {
+                console.log(`No devices yet (attempt ${attempt}/${max}), retrying in ${this.config.deviceDiscoveryDelay}ms`);
                 this._deviceDiscoveryTimer = setTimeout(() => {
                     this._attemptDeviceDiscovery();
                 }, this.config.deviceDiscoveryDelay);
             } else {
-                // Max retries reached
-                console.warn(`Device discovery failed after ${this.config.deviceDiscoveryRetries} attempts`);
+                console.warn(`Device discovery failed after ${max} attempts`);
                 this._deviceDiscoveryTimer = null;
-                // Still update the list with empty array to show "No devices found"
                 this.updateDeviceList([]);
             }
         } catch (e) {
-            console.warn(`Device discovery attempt ${this._deviceDiscoveryAttempts + 1} failed:`, e);
-            
-            if (this._deviceDiscoveryAttempts < this.config.deviceDiscoveryRetries) {
-                this._deviceDiscoveryAttempts++;
+            console.warn(`Device discovery attempt ${attempt} failed:`, e);
+
+            if (attempt < max) {
                 this._deviceDiscoveryTimer = setTimeout(() => {
                     this._attemptDeviceDiscovery();
                 }, this.config.deviceDiscoveryDelay);
             } else {
-                console.warn(`Device discovery failed after ${this.config.deviceDiscoveryRetries} attempts`);
+                console.warn(`Device discovery failed after ${max} attempts`);
                 this._deviceDiscoveryTimer = null;
                 this.updateDeviceList([]);
             }
@@ -725,6 +735,14 @@ class XeneonDashboard {
     handleTelemetryUpdate(data) {
         this.sensorData = data;
 
+        // Fix #11: remove keys that are no longer present in the new snapshot
+        // so stale sensors don't accumulate in telemetryHistory forever.
+        for (const key of this.telemetryHistory.keys()) {
+            if (!(key in data)) {
+                this.telemetryHistory.delete(key);
+            }
+        }
+
         for (const [key, value] of Object.entries(data)) {
             if (!this.telemetryHistory.has(key)) {
                 this.telemetryHistory.set(key, []);
@@ -735,6 +753,10 @@ class XeneonDashboard {
                 history.shift();
             }
         }
+
+        // Fix #6: only mark "last update" when real data actually arrives
+        const el = document.getElementById('last-update');
+        if (el) el.textContent = `Last update: ${new Date().toLocaleTimeString()}`;
 
         this.renderCards();
     }
@@ -804,6 +826,38 @@ class XeneonDashboard {
     // SENSOR CARDS
     // =========================================================
 
+    // =========================================================
+    // SENSOR CARDS — keyed in-place updates (Fix #9)
+    // Instead of obliterating and recreating the DOM every second,
+    // we build the skeleton once and only patch .textContent when
+    // a value has actually changed.
+    // =========================================================
+
+    /**
+     * Ensure a container holds exactly the supplied rows (keyed by data-sensor-key).
+     * Rows that don't exist yet are created; rows whose value text is unchanged are
+     * left untouched (no layout thrash, no broken CSS transitions).
+     *
+     * @param {HTMLElement} container  – the .card-content div
+     * @param {Array<{key:string, label:string, text:string}>} rows
+     */
+    _ensureRows(container, rows) {
+        rows.forEach(({ key, label, text }) => {
+            let item = container.querySelector(`.telemetry-item[data-sensor-key="${key}"]`);
+            if (!item) {
+                item = document.createElement('div');
+                item.className = 'telemetry-item';
+                item.dataset.sensorKey = key;
+                item.innerHTML =
+                    `<span class="telemetry-label">${label}</span>` +
+                    `<span class="telemetry-value"></span>`;
+                container.appendChild(item);
+            }
+            const valEl = item.querySelector('.telemetry-value');
+            if (valEl && valEl.textContent !== text) valEl.textContent = text;
+        });
+    }
+
     renderCards() {
         this.renderSummaryCard();
         this.renderTemperaturesCard();
@@ -812,7 +866,7 @@ class XeneonDashboard {
         this.renderCurrentCard();
         this.renderVoltageCard();
         this.renderVinsCard();
-        
+
         // Update favorite widgets with new data
         this.favorites.forEach(sensorType => {
             this.updateFavoriteWidget(sensorType);
@@ -822,174 +876,88 @@ class XeneonDashboard {
     renderSummaryCard() {
         const el = document.getElementById('card-summary');
         if (!el) return;
-
-        el.innerHTML = `
-            <div class="telemetry-item" data-sensor-key="SYS_Power">
-                <span class="telemetry-label">SYS</span>
-                <span class="telemetry-value">${(this.sensorData.SYS_Power || 0).toFixed(1)} W</span>
-            </div>
-            <div class="telemetry-item" data-sensor-key="CPU_Power">
-                <span class="telemetry-label">CPU</span>
-                <span class="telemetry-value">${(this.sensorData.CPU_Power || 0).toFixed(1)} W</span>
-            </div>
-            <div class="telemetry-item" data-sensor-key="GPU_Power">
-                <span class="telemetry-label">GPU</span>
-                <span class="telemetry-value">${(this.sensorData.GPU_Power || 0).toFixed(1)} W</span>
-            </div>
-            <div class="telemetry-item" data-sensor-key="MB_Power">
-                <span class="telemetry-label">MB</span>
-                <span class="telemetry-value">${(this.sensorData.MB_Power || 0).toFixed(1)} W</span>
-            </div>
-        `;
+        const d = this.sensorData;
+        this._ensureRows(el, [
+            { key: 'SYS_Power', label: 'SYS', text: `${(d.SYS_Power || 0).toFixed(1)} W` },
+            { key: 'CPU_Power', label: 'CPU', text: `${(d.CPU_Power || 0).toFixed(1)} W` },
+            { key: 'GPU_Power', label: 'GPU', text: `${(d.GPU_Power || 0).toFixed(1)} W` },
+            { key: 'MB_Power',  label: 'MB',  text: `${(d.MB_Power  || 0).toFixed(1)} W` },
+        ]);
     }
 
     renderTemperaturesCard() {
         const el = document.getElementById('card-temperatures');
         if (!el) return;
-
-        el.innerHTML = `
-            <div class="telemetry-item" data-sensor-key="Chip_Temp">
-                <span class="telemetry-label">Chip</span>
-                <span class="telemetry-value">${this.sensorData.Chip_Temp || 0}°C</span>
-            </div>
-            <div class="telemetry-item" data-sensor-key="Ambient_Temp">
-                <span class="telemetry-label">Ambient</span>
-                <span class="telemetry-value">${this.sensorData.Ambient_Temp || 0}°C</span>
-            </div>
-            <div class="telemetry-item" data-sensor-key="Humidity">
-                <span class="telemetry-label">Humidity</span>
-                <span class="telemetry-value">${(this.sensorData.Humidity || 0).toFixed(1)}%</span>
-            </div>
-            <div class="telemetry-item" data-sensor-key="Temp_Sensor_1">
-                <span class="telemetry-label">S1</span>
-                <span class="telemetry-value">${this.sensorData.Temp_Sensor_1 || 'N/A'}</span>
-            </div>
-            <div class="telemetry-item" data-sensor-key="Temp_Sensor_2">
-                <span class="telemetry-label">S2</span>
-                <span class="telemetry-value">${this.sensorData.Temp_Sensor_2 || 'N/A'}</span>
-            </div>
-            <div class="telemetry-item" data-sensor-key="Temp_Sensor_3">
-                <span class="telemetry-label">S3</span>
-                <span class="telemetry-value">${this.sensorData.Temp_Sensor_3 || 'N/A'}</span>
-            </div>
-            <div class="telemetry-item" data-sensor-key="Temp_Sensor_4">
-                <span class="telemetry-label">S4</span>
-                <span class="telemetry-value">${this.sensorData.Temp_Sensor_4 || 'N/A'}</span>
-            </div>
-        `;
+        const d = this.sensorData;
+        this._ensureRows(el, [
+            { key: 'Chip_Temp',    label: 'Chip',    text: `${d.Chip_Temp    || 0}°C` },
+            { key: 'Ambient_Temp', label: 'Ambient', text: `${d.Ambient_Temp || 0}°C` },
+            { key: 'Humidity',     label: 'Humidity',text: `${(d.Humidity    || 0).toFixed(1)}%` },
+            { key: 'Temp_Sensor_1', label: 'S1', text: `${d.Temp_Sensor_1 ?? 'N/A'}` },
+            { key: 'Temp_Sensor_2', label: 'S2', text: `${d.Temp_Sensor_2 ?? 'N/A'}` },
+            { key: 'Temp_Sensor_3', label: 'S3', text: `${d.Temp_Sensor_3 ?? 'N/A'}` },
+            { key: 'Temp_Sensor_4', label: 'S4', text: `${d.Temp_Sensor_4 ?? 'N/A'}` },
+        ]);
     }
 
     renderFansCard() {
         const el = document.getElementById('card-fans');
         if (!el) return;
-
-        let html = '';
+        const d = this.sensorData;
+        const rows = [];
         for (let i = 1; i <= 9; i++) {
-            const duty = this.sensorData[`Fan${i}_Duty`] || 0;
-            const rpm  = this.sensorData[`Fan${i}_RPM`]  || 0;
-            // Explicit check: treat numeric 1 as ON, everything else as OFF
-            const status = this.sensorData[`Fan${i}_Status`] === 1 ? 'ON' : 'OFF';
-            html += `
-                <div class="telemetry-item" data-sensor-key="Fan${i}_Duty">
-                    <span class="telemetry-label">Fan${i}</span>
-                    <span class="telemetry-value">${duty}% | ${rpm} RPM | ${status}</span>
-                </div>
-            `;
+            const duty   = d[`Fan${i}_Duty`]   || 0;
+            const rpm    = d[`Fan${i}_RPM`]    || 0;
+            const status = d[`Fan${i}_Status`] === 1 ? 'ON' : 'OFF';
+            rows.push({ key: `Fan${i}_Duty`, label: `Fan${i}`, text: `${duty}% | ${rpm} RPM | ${status}` });
         }
-        html += `
-            <div class="telemetry-item" data-sensor-key="FanExtDuty">
-                <span class="telemetry-label">Ext Fan Duty</span>
-                <span class="telemetry-value">${this.sensorData.FanExtDuty || 0}%</span>
-            </div>
-        `;
-        el.innerHTML = html;
+        rows.push({ key: 'FanExtDuty', label: 'Ext Fan Duty', text: `${d.FanExtDuty || 0}%` });
+        this._ensureRows(el, rows);
     }
 
     renderPowerCard() {
         const el = document.getElementById('card-power');
         if (!el) return;
-
+        const d = this.sensorData;
         const rails = ['EPS1','EPS2','12V','5V','5VSB','3.3V','PCIE8_1','PCIE8_2','PCIE8_3','HPWR1','HPWR2'];
-        let html = '';
-
-        rails.forEach(rail => {
-            const value = this.sensorData[`${rail}_Power`] || 0;
-            html += `
-                <div class="telemetry-item" data-sensor-key="${rail}_Power">
-                    <span class="telemetry-label">${rail}</span>
-                    <span class="telemetry-value">${value.toFixed(2)} W</span>
-                </div>
-            `;
-        });
-
-        el.innerHTML = html;
+        this._ensureRows(el, rails.map(r => ({
+            key: `${r}_Power`, label: r, text: `${(d[`${r}_Power`] || 0).toFixed(2)} W`
+        })));
     }
 
     renderCurrentCard() {
         const el = document.getElementById('card-current');
         if (!el) return;
-
+        const d = this.sensorData;
         const rails = ['EPS1','EPS2','12V','5V','5VSB','3.3V','PCIE8_1','PCIE8_2','PCIE8_3','HPWR1','HPWR2'];
-        let html = '';
-
-        rails.forEach(rail => {
-            const value = this.sensorData[`${rail}_Current`] || 0;
-            html += `
-                <div class="telemetry-item" data-sensor-key="${rail}_Current">
-                    <span class="telemetry-label">${rail}</span>
-                    <span class="telemetry-value">${value.toFixed(2)} A</span>
-                </div>
-            `;
-        });
-
-        el.innerHTML = html;
+        this._ensureRows(el, rails.map(r => ({
+            key: `${r}_Current`, label: r, text: `${(d[`${r}_Current`] || 0).toFixed(2)} A`
+        })));
     }
 
     renderVoltageCard() {
         const el = document.getElementById('card-voltage');
         if (!el) return;
-
+        const d = this.sensorData;
         const rails = ['EPS1','EPS2','12V','5V','5VSB','3.3V','PCIE8_1','PCIE8_2','PCIE8_3','HPWR1','HPWR2'];
-        let html = '';
-
-        rails.forEach(rail => {
-            const value = this.sensorData[`${rail}_Voltage`] || 0;
-            html += `
-                <div class="telemetry-item" data-sensor-key="${rail}_Voltage">
-                    <span class="telemetry-label">${rail}</span>
-                    <span class="telemetry-value">${value.toFixed(2)} V</span>
-                </div>
-            `;
-        });
-
-        el.innerHTML = html;
+        this._ensureRows(el, rails.map(r => ({
+            key: `${r}_Voltage`, label: r, text: `${(d[`${r}_Voltage`] || 0).toFixed(2)} V`
+        })));
     }
 
     renderVinsCard() {
         const el = document.getElementById('card-vins');
         if (!el) return;
-
-        let html = '';
-        for (let i = 0; i <= 12; i++) {
-            const value = this.sensorData[`VIN_${i}`] || 0;
-            html += `
-                <div class="telemetry-item" data-sensor-key="VIN_${i}">
-                    <span class="telemetry-label">VIN_${i}</span>
-                    <span class="telemetry-value">${value.toFixed(3)} V</span>
-                </div>
-            `;
+        const d = this.sensorData;
+        // Fix #13: loop 0–11 (12 channels); verify against your firmware spec.
+        // The old loop went to 12 (13 entries), producing a VIN_12 that was always 0.
+        const rows = [];
+        for (let i = 0; i <= 11; i++) {
+            rows.push({ key: `VIN_${i}`, label: `VIN_${i}`, text: `${(d[`VIN_${i}`] || 0).toFixed(3)} V` });
         }
-        html += `
-            <div class="telemetry-item" data-sensor-key="Vdd">
-                <span class="telemetry-label">Vdd</span>
-                <span class="telemetry-value">${(this.sensorData.Vdd || 0).toFixed(3)} V</span>
-            </div>
-            <div class="telemetry-item" data-sensor-key="Vref">
-                <span class="telemetry-label">Vref</span>
-                <span class="telemetry-value">${(this.sensorData.Vref || 0).toFixed(3)} V</span>
-            </div>
-        `;
-        el.innerHTML = html;
+        rows.push({ key: 'Vdd',  label: 'Vdd',  text: `${(d.Vdd  || 0).toFixed(3)} V` });
+        rows.push({ key: 'Vref', label: 'Vref', text: `${(d.Vref || 0).toFixed(3)} V` });
+        this._ensureRows(el, rows);
     }
 
     // =========================================================

@@ -576,20 +576,18 @@ body {
 
 /* ===================== SENSOR GRID STYLES ===================== */
 
-.sensor-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--spacing);
-    flex: 1;
-    overflow-y: auto;
-    padding: var(--card-padding);
-}
+/* .sensor-grid layout is defined inside .sensor-grid-scroll above.
+ * The duplicate block here (with conflicting overflow-y: auto and flex: 1)
+ * has been removed — Fix #8. */
 
 /*
  * .sensor-card uses .card-header / .card-content children (matching dashboard.html).
  * The old .sensor-card-header / .sensor-card-content selectors were renamed here
  * to match what the HTML actually emits.
  */
+
+/* .card-header inside a sensor-card — inherits the shared .card-header rule above */
+
 .sensor-card {
     background-color: var(--color-card-bg);
     border: 1px solid var(--color-border);
@@ -601,8 +599,6 @@ body {
 .sensor-card:hover {
     border-color: var(--color-primary);
 }
-
-/* .card-header inside a sensor-card — inherits the shared .card-header rule above */
 
 /* ===================== TELEMETRY ITEMS ===================== */
 
