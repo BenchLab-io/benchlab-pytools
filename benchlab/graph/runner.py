@@ -34,8 +34,9 @@ def run_graph_mode(args=None):
 
     app = GraphApp(datasource=datasource)
     app.sensor_read_interval = args.interval
-
     try:
         app.run()
+    except KeyboardInterrupt:
+        pass
     finally:
         datasource.disconnect()

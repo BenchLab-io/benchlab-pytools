@@ -343,16 +343,12 @@ class FastAPIDataSource(DataSource):
         return False
     
     def disconnect(self) -> None:
-        self._stop_event.set()
-        if self._worker_thread and self._worker_thread.is_alive():
-            self._worker_thread.join(timeout=2.0)
-        for ser in self._ser_handles.values():
+        if self._session:
             try:
-                ser.close()
+                self._session.close()
             except Exception:
                 pass
-        self._ser_handles.clear()
-        self._ser = None
+            self._session = None
         self._connected = False
         logger.info("Disconnected from FastAPI server")
     
