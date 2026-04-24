@@ -14,6 +14,7 @@ requests>=2.33.1
 
 # MQTT Data Source
 paho-mqtt>=2.0,<3.0
+amqtt>=0.10,<1.0
 
 # Curses-based TUI
 windows-curses>=2.4.1; platform_system=="Windows"
