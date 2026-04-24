@@ -105,11 +105,11 @@ CONSUMER_TOOLS = {
 LAUNCH_PROFILES = {
     "gskill_ctex26": {
         "tools": ["link", "tui", "vu", "wigidash"],
-        "source": "mqtt",
+        "source": "fastapi",
     },
     "corsair_ctex26": {
         "tools": ["tui", "xeneon"],
-        "source": "mqtt",
+        "source": "fastapi",
     },
 }
 
