@@ -5,7 +5,6 @@ variables and to launch one or many consumer tools, either in-process
 or in spawned terminal windows.
 """
 
-import cmd
 import curses
 import importlib
 import inspect
