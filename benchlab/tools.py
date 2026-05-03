@@ -96,8 +96,8 @@ CONSUMER_TOOLS = {
 
 LAUNCH_PROFILES = {
     "gskill_ctex26": {
-        "tools": ["link", "tui", "vu", "wigidash"],
-        "source": "mqtt",
+        "tools": ["graph", "link", "tui", "vu", "wigidash"],
+        "source": "fastapi",
     },
 }
 
@@ -124,3 +124,16 @@ def ensure_tool_dependencies(tool_id: str) -> None:
     req_file = module_dir / req
     if req_file.exists():
         install_requirements_file(str(req_file), tool["name"])
+
+def ensure_profile_dependencies(profile_id: str) -> None:
+    """Install dependencies for all tools in a profile."""
+    profile = LAUNCH_PROFILES.get(profile_id)
+    if not profile:
+        raise ValueError(f"Unknown profile: {profile_id}")
+    
+    for tool_id in profile["tools"]:
+        if tool_id in CONSUMER_TOOLS:
+            try:
+                ensure_tool_dependencies(tool_id)
+            except Exception as e:
+                logger.warning(f"Failed to install dependencies for {tool_id}: {e}")

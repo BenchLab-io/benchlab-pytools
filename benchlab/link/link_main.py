@@ -5,32 +5,43 @@ Benchlab Link — cloud MQTT publisher.
 Reads telemetry from any DataSourceManager source (direct / fastapi / mqtt)
 and publishes JSON payloads to a remote (cloud) MQTT broker.
 
-Configuration is loaded from environment variables first, with a JSON config
-file as fallback.  Any env var overrides the corresponding file value.
+Configuration priority (highest first):
+  1. args namespace
+  2. Environment variables
+  3. .env file in the link/ directory
+  4. link.config JSON file
+  5. Defaults
 
 Environment variables
 ---------------------
-LINK_REMOTE_HOST      Cloud MQTT broker hostname
-LINK_REMOTE_PORT      Cloud MQTT broker port          (default: 8883)
-LINK_REMOTE_USER      MQTT username
-LINK_REMOTE_PASS      MQTT password
-LINK_REMOTE_TLS       Enable TLS: "true" / "false"    (default: true)
+REMOTE_MQTT_HOST      Cloud MQTT broker hostname
+REMOTE_MQTT_PORT      Cloud MQTT broker port          (default: 443)
+REMOTE_MQTT_USER      MQTT username
+REMOTE_MQTT_PASS      MQTT password
+REMOTE_MQTT_PATH      WebSocket path                  (default: /mqtt)
+REMOTE_MQTT_TRANSPORT Transport: websockets | tcp      (default: websockets)
+REMOTE_MQTT_PROTOCOL  Protocol: mqtt.MQTTv5 | mqtt.MQTTv311 (default: mqtt.MQTTv5)
+REMOTE_MQTT_QOS       QoS level: 0 | 1 | 2            (default: 1)
+REMOTE_MQTT_TLS       Enable TLS: "true" / "false"    (default: true)
+CLIENT_UUID           Device UUID for identification
+MQTT_POLL_RATE        Poll/publish interval in seconds (default: 2)
 LINK_TOPIC_PATTERN    Topic pattern with {uid} token   (default: benchlab/{uid}/telemetry)
-LINK_PUBLISH_INTERVAL Publish interval in seconds      (default: 1.0)
 LINK_CLIENT_ID        MQTT client ID                   (default: benchlab-link-<hostname>)
+
+.env file
+---------
+Place a .env file in benchlab/link/ with KEY=VALUE pairs.
+Copy .env.EXAMPLE as a starting point.
 
 Config file
 -----------
 Loaded from LINK_CONFIG_PATH env var or benchlab/link/link.config by default.
-Keys match env var names in lowercase (without the LINK_ prefix):
-  remote_host, remote_port, remote_user, remote_pass, remote_tls,
-  topic_pattern, publish_interval, client_id
+JSON file with keys matching env var names.
 """
 
 import json
 import logging
 import os
-import platform
 import socket
 import threading
 import time
@@ -45,17 +56,36 @@ from benchlab.core.datasource_manager import DataSourceManager
 logger = logging.getLogger("benchlab.link")
 
 DEFAULT_CONFIG_PATH = Path(__file__).parent / "link.config"
+DEFAULT_ENV_PATH    = Path(__file__).parent / ".env"
 DEFAULT_TOPIC       = "benchlab/{uid}/telemetry"
-DEFAULT_PORT        = 8883
-DEFAULT_INTERVAL    = 1.0
+DEFAULT_PORT        = 443
+DEFAULT_INTERVAL    = 2.0
+RECONNECT_DELAY     = 5.0   # seconds between reconnect attempts
 
 
 # ---------------------------------------------------------------------------
 # Config loading
 # ---------------------------------------------------------------------------
 
+def _load_env_file(env_path: Optional[Path] = None) -> None:
+    """Load .env file into os.environ as fallback (only sets vars not already set)."""
+    path = env_path or DEFAULT_ENV_PATH
+    if not path.exists():
+        return
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key   = key.strip()
+            value = value.strip()
+            if key and key not in os.environ:
+                os.environ[key] = value
+
+
 def _load_config(config_path: Optional[Path] = None) -> dict:
-    """Load config file, return empty dict on failure."""
+    """Load JSON config file, return empty dict on failure."""
     path = config_path or Path(
         os.environ.get("LINK_CONFIG_PATH", str(DEFAULT_CONFIG_PATH))
     )
@@ -69,48 +99,55 @@ def _load_config(config_path: Optional[Path] = None) -> dict:
 
 
 def _resolve_config(args=None) -> dict:
-    """Merge config file values with env var overrides.
-
-    Priority (highest first): args > env vars > config file > defaults.
-    """
+    """Merge all config sources. Priority: args > env vars > .env > config file > defaults."""
+    _load_env_file()
     file_cfg = _load_config()
 
     def _get(env_key: str, file_key: str, default):
-        # args namespace takes priority if the attribute is set
         if args is not None:
             val = getattr(args, file_key.replace("-", "_"), None)
             if val is not None:
                 return val
-        # env var next
         env_val = os.environ.get(env_key)
         if env_val is not None:
             return env_val
-        # config file
         if file_key in file_cfg:
             return file_cfg[file_key]
         return default
 
-    host     = _get("LINK_REMOTE_HOST",      "remote_host",      None)
-    port     = int(_get("LINK_REMOTE_PORT",  "remote_port",      DEFAULT_PORT))
-    user     = _get("LINK_REMOTE_USER",      "remote_user",      None)
-    password = _get("LINK_REMOTE_PASS",      "remote_pass",      None)
-    tls_raw  = _get("LINK_REMOTE_TLS",       "remote_tls",       "true")
-    tls      = str(tls_raw).lower() not in ("false", "0", "no")
-    topic    = _get("LINK_TOPIC_PATTERN",    "topic_pattern",    DEFAULT_TOPIC)
-    interval = float(_get("LINK_PUBLISH_INTERVAL", "publish_interval", DEFAULT_INTERVAL))
-    hostname = socket.gethostname()
-    client_id = _get("LINK_CLIENT_ID",       "client_id",
-                     f"benchlab-link-{hostname}")
+    hostname  = socket.gethostname()
+    client_uuid = _get("CLIENT_UUID",          "client_uuid",      None)
+
+    host      = _get("REMOTE_MQTT_HOST",       "remote_host",      None)
+    port      = int(_get("REMOTE_MQTT_PORT",   "remote_port",      DEFAULT_PORT))
+    user      = _get("REMOTE_MQTT_USER",       "remote_user",      None)
+    password  = _get("REMOTE_MQTT_PASS",       "remote_pass",      None)
+    path      = _get("REMOTE_MQTT_PATH",       "remote_path",      "/mqtt")
+    transport = _get("REMOTE_MQTT_TRANSPORT",  "remote_transport", "websockets")
+    protocol  = _get("REMOTE_MQTT_PROTOCOL",   "remote_protocol",  "mqtt.MQTTv5")
+    qos       = int(_get("REMOTE_MQTT_QOS",    "remote_qos",       "1"))
+    tls_raw   = _get("REMOTE_MQTT_TLS",        "remote_tls",       "true")
+    tls       = str(tls_raw).lower() not in ("false", "0", "no")
+
+    topic     = _get("LINK_TOPIC_PATTERN",     "topic_pattern",    DEFAULT_TOPIC)
+    interval  = float(_get("MQTT_POLL_RATE",   "publish_interval", DEFAULT_INTERVAL))
+    client_id = _get("LINK_CLIENT_ID",         "client_id",
+                     f"benchlab-link-{client_uuid or hostname}")
 
     return {
-        "host":      host,
-        "port":      port,
-        "user":      user,
-        "password":  password,
-        "tls":       tls,
-        "topic":     topic,
-        "interval":  interval,
-        "client_id": client_id,
+        "host":        host,
+        "port":        port,
+        "user":        user,
+        "password":    password,
+        "path":        path,
+        "transport":   transport,
+        "protocol":    protocol,
+        "qos":         qos,
+        "tls":         tls,
+        "topic":       topic,
+        "interval":    interval,
+        "client_id":   client_id,
+        "client_uuid": client_uuid,
     }
 
 
@@ -122,32 +159,45 @@ class CloudMQTTClient:
     """Thin wrapper around paho-mqtt for publishing to a remote broker."""
 
     def __init__(self, cfg: dict):
-        self.cfg      = cfg
-        self._client  = mqtt.Client(client_id=cfg["client_id"],
-                                    transport="websockets",
-                                    protocol=mqtt.MQTTv311)
-        self._client.ws_set_options(path="/mqtt")
+        self.cfg        = cfg
         self._connected = False
         self._lock      = threading.Lock()
+        self._client    = self._build_client()
 
-        if cfg.get("user"):
-            self._client.username_pw_set(cfg["user"], cfg.get("password"))
+    def _build_client(self) -> mqtt.Client:
+        """Build and configure the paho MQTT client from cfg."""
+        protocol_str = self.cfg.get("protocol", "mqtt.MQTTv5")
+        protocol     = mqtt.MQTTv5 if "5" in protocol_str else mqtt.MQTTv311
+        transport    = self.cfg.get("transport", "websockets")
 
-        if cfg.get("tls"):
-            self._client.tls_set()   # uses system CA bundle by default
+        client = mqtt.Client(
+            client_id=self.cfg["client_id"],
+            transport=transport,
+            protocol=protocol,
+        )
 
-        self._client.on_connect    = self._on_connect
-        self._client.on_disconnect = self._on_disconnect
+        if transport == "websockets":
+            client.ws_set_options(path=self.cfg.get("path", "/mqtt"))
+
+        if self.cfg.get("user"):
+            client.username_pw_set(self.cfg["user"], self.cfg.get("password"))
+
+        if self.cfg.get("tls"):
+            client.tls_set()
+
+        client.on_connect    = self._on_connect
+        client.on_disconnect = self._on_disconnect
+
+        return client
 
     def connect(self) -> bool:
         host = self.cfg.get("host")
         if not host:
-            logger.error("LINK_REMOTE_HOST is not configured — cannot connect")
+            logger.error("REMOTE_MQTT_HOST is not configured — cannot connect")
             return False
         try:
             self._client.connect(host, self.cfg["port"], keepalive=60)
             self._client.loop_start()
-            # Give the broker a moment to accept the connection
             deadline = time.time() + 10
             while not self._connected and time.time() < deadline:
                 time.sleep(0.1)
@@ -160,22 +210,39 @@ class CloudMQTTClient:
             logger.error(f"Failed to connect to cloud broker: {e}")
             return False
 
-    def disconnect(self):
-        self._client.loop_stop()
-        self._client.disconnect()
+    def reconnect(self) -> bool:
+        """Attempt to reconnect using a fresh client."""
+        logger.info(f"Reconnecting to cloud broker {self.cfg['host']}:{self.cfg['port']}...")
+        try:
+            self._client.loop_stop()
+        except Exception:
+            pass
+        self._client = self._build_client()
+        return self.connect()
 
-    def publish(self, topic: str, payload: dict) -> bool:
+    def disconnect(self):
+        try:
+            self._client.loop_stop()
+            self._client.disconnect()
+        except Exception:
+            pass
+
+    def publish(self, topic: str, payload: dict, qos: int = 1) -> bool:
         if not self._connected:
             logger.warning("Not connected — skipping publish")
             return False
         try:
             result = self._client.publish(
-                topic, json.dumps(payload), qos=1, retain=False
+                topic, json.dumps(payload), qos=qos, retain=False
             )
             return result.rc == mqtt.MQTT_ERR_SUCCESS
         except Exception as e:
             logger.error(f"Publish failed: {e}")
             return False
+
+    @property
+    def is_connected(self) -> bool:
+        return self._connected
 
     def _on_connect(self, client, userdata, flags, rc, properties=None):
         if rc == 0:
@@ -189,7 +256,7 @@ class CloudMQTTClient:
         with self._lock:
             self._connected = False
         if rc != 0:
-            logger.warning(f"Cloud broker: unexpected disconnect (rc={rc}) — will reconnect")
+            logger.warning(f"Cloud broker: unexpected disconnect (rc={rc})")
 
 
 # ---------------------------------------------------------------------------
@@ -201,13 +268,13 @@ class BenchlabLink:
 
     def __init__(self, datasource: DataSourceManager,
                  cloud: CloudMQTTClient, cfg: dict):
-        self.datasource   = datasource
-        self.cloud        = cloud
-        self.cfg          = cfg
-        self._stop        = threading.Event()
-        self._snapshots   = {}   # uid → latest telemetry dict
-        self._snap_lock   = threading.Lock()
-        self._worker      = threading.Thread(
+        self.datasource = datasource
+        self.cloud      = cloud
+        self.cfg        = cfg
+        self._stop      = threading.Event()
+        self._snapshots = {}
+        self._snap_lock = threading.Lock()
+        self._worker    = threading.Thread(
             target=self._poll_loop, daemon=True, name="LinkPoller"
         )
 
@@ -223,7 +290,7 @@ class BenchlabLink:
         """Background thread: keeps telemetry snapshots fresh."""
         while not self._stop.is_set():
             try:
-                raw = self.datasource.list_devices()
+                raw  = self.datasource.list_devices()
                 uids = list(raw.keys()) if isinstance(raw, dict) \
                     else [d.get("uid") for d in raw if d.get("uid")]
 
@@ -245,9 +312,11 @@ class BenchlabLink:
 
             self._stop.wait(self.cfg["interval"])
 
-    def publish_all(self):
-        """Publish latest snapshot for every known device."""
+    def publish_all(self) -> int:
+        """Publish latest snapshot for every known device. Returns count published."""
         topic_pattern = self.cfg["topic"]
+        qos           = self.cfg.get("qos", 1)
+
         with self._snap_lock:
             snapshots = dict(self._snapshots)
 
@@ -257,7 +326,7 @@ class BenchlabLink:
                 continue
             topic   = topic_pattern.format(uid=uid)
             payload = {"uid": uid, **data}
-            if self.cloud.publish(topic, payload):
+            if self.cloud.publish(topic, payload, qos=qos):
                 published += 1
                 logger.debug(f"Published {len(data)} sensors to {topic}")
             else:
@@ -271,28 +340,7 @@ class BenchlabLink:
 # ---------------------------------------------------------------------------
 
 def run_link(args=None):
-    """Run the Benchlab Link cloud publisher.
-
-    Parameters
-    ----------
-    args:
-        Standard benchlab args namespace.  Fields used:
-            source      – "direct" | "fastapi" | "mqtt"
-            interval    – poll/publish interval in seconds
-            api_url     – FastAPI base URL (fastapi source)
-            mqtt_broker – local MQTT broker host (mqtt source)
-            mqtt_port   – local MQTT broker port (mqtt source)
-
-        Link-specific fields (optional, fall back to env vars / config file):
-            remote_host      – cloud MQTT broker hostname
-            remote_port      – cloud MQTT broker port
-            remote_user      – cloud MQTT username
-            remote_pass      – cloud MQTT password
-            remote_tls       – enable TLS ("true"/"false")
-            topic_pattern    – MQTT topic pattern with {uid}
-            publish_interval – publish interval in seconds
-            client_id        – MQTT client ID
-    """
+    """Run the Benchlab Link cloud publisher."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
@@ -301,7 +349,7 @@ def run_link(args=None):
     if args is None:
         args = types.SimpleNamespace(
             source=os.environ.get("BENCHLAB_DATA_SOURCE", "direct"),
-            interval=float(os.environ.get("POLL_INTERVAL", "1.0")),
+            interval=float(os.environ.get("MQTT_POLL_RATE", "2.0")),
             api_url=os.environ.get("BENCHLAB_API_URL", "http://127.0.0.1:8000"),
             mqtt_broker=os.environ.get("MQTT_BROKER", "localhost"),
             mqtt_port=int(os.environ.get("MQTT_PORT", "1883")),
@@ -312,7 +360,7 @@ def run_link(args=None):
     if not cfg["host"]:
         logger.error(
             "No remote MQTT host configured.\n"
-            "Set LINK_REMOTE_HOST env var or add 'remote_host' to link.config"
+            "Set REMOTE_MQTT_HOST in environment, .env file, or link.config"
         )
         return
 
@@ -343,16 +391,25 @@ def run_link(args=None):
     logger.info(
         f"Benchlab Link running  |  source={source}  "
         f"broker={cfg['host']}:{cfg['port']}  "
-        f"topic={cfg['topic']}  interval={cfg['interval']}s"
+        f"transport={cfg['transport']}  topic={cfg['topic']}  "
+        f"interval={cfg['interval']}s  qos={cfg['qos']}"
     )
     logger.info("Press Ctrl+C to stop")
 
     try:
         while True:
+            # Reconnect if dropped
+            if not cloud.is_connected:
+                logger.warning(f"Cloud broker disconnected — retrying in {RECONNECT_DELAY}s")
+                time.sleep(RECONNECT_DELAY)
+                cloud.reconnect()
+                continue
+
             n = link.publish_all()
             if n:
                 logger.debug(f"Published {n} device(s)")
             time.sleep(cfg["interval"])
+
     except KeyboardInterrupt:
         logger.info("Stopping...")
     finally:

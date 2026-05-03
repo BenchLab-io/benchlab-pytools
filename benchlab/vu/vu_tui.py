@@ -14,7 +14,7 @@ from benchlab.vu.vu_server_manager import start_vu_server, check_vu_server, term
 
 # --- Logger setup ---
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 # Make sure logs go to console
 ch = logging.StreamHandler(sys.stdout)
@@ -115,8 +115,30 @@ class VUTUI:
 
     # -------------------- CONFIG / DIALS --------------------
     def reload_configs(self):
+        template_server = VU_SERVER_CONFIG.parent / "vu_server.config_template"
+        template_dial   = VU_DIAL_CONFIG.parent   / "vu_dial.config_template"
+
+        if not VU_SERVER_CONFIG.exists():
+            src = template_server if template_server.exists() else None
+            cfg = load_json(src, {"vu_server_url": "http://localhost:5340", "api_key": "", "logo_file": ""}) if src else {"vu_server_url": "http://localhost:5340", "api_key": "", "logo_file": ""}
+            save_json(VU_SERVER_CONFIG, cfg)
+            logger.info("Created VU server config from template" if src else "Created default VU server config")
+
+        if not VU_DIAL_CONFIG.exists():
+            if template_dial.exists():
+                entries = load_json(template_dial, [])
+                for e in entries:
+                    e["benchlab_port"] = ""
+                    e["benchlab_uid"]  = ""
+                    e["sensor"]        = ""
+                save_json(VU_DIAL_CONFIG, entries)
+                logger.info("Created VU dial config from template")
+            else:
+                save_json(VU_DIAL_CONFIG, [])
+                logger.info("Created empty VU dial config")
+
         self.server_cfg = load_json(VU_SERVER_CONFIG, {})
-        self.dial_cfg = load_json(VU_DIAL_CONFIG, [])
+        self.dial_cfg   = load_json(VU_DIAL_CONFIG, [])
         self.benchlabs = devices.get_benchlab_devices(self.datasource)
 
         self.vu_server_running = devices.vu_server_check(
@@ -315,7 +337,7 @@ class VUTUI:
         elif key in (ord('p'), ord('P')):
             self.stdscr.addstr(self.h-3, 0, "Scanning and provisioning new devices...".ljust(self.w))
             self.stdscr.refresh()
-            newly_provisioned = devices.provision_missing_vu_dials(
+            success = devices.provision_vu_dials(
                 self.server_cfg.get("vu_server_url", "http://localhost:5340"),
                 self.server_cfg.get("api_key", "")
             )
@@ -323,7 +345,7 @@ class VUTUI:
                 self.server_cfg.get("vu_server_url", "http://localhost:5340"),
                 self.server_cfg.get("api_key", "")
             )
-            msg = f"New devices provisioned: {newly_provisioned}" if newly_provisioned else "No new devices found."
+            msg = "Provisioning successful." if success else "Provisioning failed or no new devices found."
             self.stdscr.addstr(self.h-3, 0, msg.ljust(self.w))
             self.stdscr.refresh()
             curses.napms(1000)

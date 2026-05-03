@@ -139,6 +139,16 @@ def _setup_source_from_args(args) -> bool:
 
 def _run_with_source(args, import_path: str, func_name: str, call_fn, tool_label: str) -> None:
     """Set up source, call call_fn, then clean up."""
+    # Install tool dependencies before running
+    from .tools import CONSUMER_TOOLS, ensure_tool_dependencies
+    tool_id = next((tid for tid, t in CONSUMER_TOOLS.items() 
+                    if t["module"] == import_path), None)
+    if tool_id:
+        try:
+            ensure_tool_dependencies(tool_id)
+        except Exception as e:
+            logger.warning(f"Failed to install dependencies for {tool_label}: {e}")
+
     if not _setup_source_from_args(args):
         return
     try:
@@ -175,8 +185,12 @@ def launch_mode() -> None:
         if not profile:
             print(f"Unknown profile: {args.profile}")
             return
-
         print(f"Launching profile: {args.profile}")
+        
+        # Ensure all tool dependencies are installed before launching
+        from .tools import ensure_profile_dependencies
+        ensure_profile_dependencies(args.profile)
+        
         profile_args = argparse.Namespace(
             source=profile.get("source", "direct"),
             api_url=getattr(args, "api_url", "http://127.0.0.1:8000"),

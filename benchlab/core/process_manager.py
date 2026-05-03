@@ -142,14 +142,22 @@ class ProcessManager:
 
         try:
             env = env or os.environ.copy()
+            # Open log files and store file handles for later cleanup
+            stdout_file = open(stdout_path, "w", encoding="utf-8")
+            stderr_file = open(stderr_path, "w", encoding="utf-8")
             mp.process = subprocess.Popen(
                 cmd_list,
-                stdout=open(stdout_path, "w", encoding="utf-8"),
-                stderr=open(stderr_path, "w", encoding="utf-8"),
+                stdout=stdout_file,
+                stderr=stderr_file,
                 cwd=cwd,
                 env=env,
                 shell=use_shell,
+                # On Linux, ensure the process doesn't inherit unnecessary file descriptors
+                close_fds=True,
             )
+            # Store file handles for cleanup when service stops
+            mp._stdout_file = stdout_file
+            mp._stderr_file = stderr_file
         except Exception as exc:
             logger.error("Failed to start service %s: %s", name, exc)
             return False
@@ -246,10 +254,13 @@ class ProcessManager:
         """Terminate or kill a single ManagedProcess."""
         proc = mp.process
         if proc is None:
+            # Clean up any open file handles
+            self._close_log_files(mp)
             return True
 
         if proc.poll() is not None:
             logger.info("Service %s already exited (code %d)", mp.name, proc.returncode)
+            self._close_log_files(mp)
             return True
 
         # Graceful: SIGTERM / taskkill
@@ -259,6 +270,7 @@ class ProcessManager:
         try:
             proc.wait(timeout=graceful_timeout)
             logger.info("Service %s stopped gracefully", mp.name)
+            self._close_log_files(mp)
             return True
         except subprocess.TimeoutExpired:
             pass
@@ -269,10 +281,26 @@ class ProcessManager:
             self._send_kill(proc)
             proc.wait(timeout=3)
             logger.info("Service %s killed", mp.name)
+            self._close_log_files(mp)
             return True
         except Exception:
             logger.error("Failed to kill service %s", mp.name)
+            self._close_log_files(mp)
             return False
+
+    @staticmethod
+    def _close_log_files(mp: ManagedProcess) -> None:
+        """Close any open log file handles to prevent file descriptor leaks."""
+        for attr in ('_stdout_file', '_stderr_file'):
+            f = getattr(mp, attr, None)
+            if f is not None:
+                try:
+                    f.flush()
+                    f.close()
+                except Exception:
+                    pass
+                finally:
+                    setattr(mp, attr, None)
 
     @staticmethod
     def _send_terminate(proc: subprocess.Popen) -> None:

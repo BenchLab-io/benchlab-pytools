@@ -10,9 +10,11 @@ fastapi==0.111.1
 uvicorn[standard]==0.24.0
 python-dotenv==1.1.1
 pydantic>=2.0.0  
+requests>=2.33.1
 
 # MQTT Data Source
 paho-mqtt>=2.0,<3.0
+amqtt>=0.10,<1.0
 
 # Curses-based TUI
 windows-curses>=2.4.1; platform_system=="Windows"

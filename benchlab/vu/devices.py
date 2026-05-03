@@ -14,12 +14,26 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), "vu_server.config")
 DUMMY_UID  = "0000000000000000"
 DUMMY_DIAL = (DUMMY_UID, "No Dial")
 
+CONFIG_PATH   = os.path.join(os.path.dirname(__file__), "vu_server.config")
+TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "vu_server.config_template")
+
+# --- Load VU server config ---
 try:
     with open(CONFIG_PATH, "r") as f:
         VU_CONFIG = json.load(f)
+except FileNotFoundError:
+    if os.path.exists(TEMPLATE_PATH):
+        with open(TEMPLATE_PATH, "r") as f:
+            VU_CONFIG = json.load(f)
+        logger.info("Created VU server config from template")
+    else:
+        VU_CONFIG = {"vu_server_url": "http://localhost:5340", "api_key": "", "logo_file": ""}
+        logger.info("Created default VU server config")
+    with open(CONFIG_PATH, "w") as f:
+        json.dump(VU_CONFIG, f, indent=2)
 except Exception as e:
     logger.error(f"Failed to load VU server config: {e}")
-    VU_CONFIG = {"vu_server_url": "http://localhost:5340", "api_key": ""}
+    VU_CONFIG = {"vu_server_url": "http://localhost:5340", "api_key": "", "logo_file": ""}
 
 VU_SERVER_URL = VU_CONFIG.get("vu_server_url", "http://localhost:5340")
 API_KEY       = VU_CONFIG.get("api_key", "")
@@ -121,6 +135,6 @@ def vu_server_check(vu_server_url=VU_SERVER_URL, api_key=API_KEY, timeout=0.5):
     try:
         r = requests.get(f"{vu_server_url}/api/v0/dial/list",
                          params={"key": api_key}, timeout=timeout)
-        return r.status_code == 200
+        return r.status_code in (200, 403)
     except requests.RequestException:
         return False

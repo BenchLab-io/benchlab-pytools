@@ -186,7 +186,7 @@ class BenchlabVUUpdater:
         self.standard_logo_path = Path(__file__).parent / server_config.get("logo_file", "")
 
         if not self.mappings:
-            raise ValueError("No dial mappings found in vu_dial.config")
+            logger.warning("No dial mappings found in vu_dial.config — run -vuconfig to configure dials. Waiting for config...")
 
         # uid → latest telemetry snapshot dict
         self._snapshots: dict = {}

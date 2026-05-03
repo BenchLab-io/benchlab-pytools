@@ -44,7 +44,24 @@ def check_mqtt_running(host: str = "localhost", port: int = 1883) -> bool:
 # ──────────────────────────────────────────────────────────────
 
 def _fastapi_health(host: str, port: int) -> bool:
-    """Return True if /devices returns a non-empty list."""
+    """Return True if the FastAPI server is responding to HTTP requests.
+    
+    This checks the /health endpoint to verify the server is fully ready
+    to accept connections, not just that the port is open.
+    """
+    try:
+        url = f"http://{host}:{port}/health"
+        with urllib.request.urlopen(url, timeout=3) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode())
+                return data.get("status") == "healthy"
+    except Exception as e:
+        logger.debug(f"FastAPI health check failed: {e}")
+    return False
+
+
+def _fastapi_devices_available(host: str, port: int) -> bool:
+    """Return True if the FastAPI server has devices available."""
     try:
         url = f"http://{host}:{port}/devices"
         with urllib.request.urlopen(url, timeout=3) as resp:
@@ -83,7 +100,12 @@ def start_fastapi_source(port: int = 8000) -> bool:
     )
 
     if ok:
-        logger.info(f"FastAPI server ready with device(s) on port {port}")
+        # Check device availability and log appropriate message
+        devices_available = _fastapi_devices_available("127.0.0.1", port)
+        if devices_available:
+            logger.info(f"FastAPI server ready on port {port} with device(s)")
+        else:
+            logger.warning(f"FastAPI server ready on port {port} but no devices detected")
     else:
         svc = pm.get_service("fastapi")
         if svc and (svc.stderr_log or svc.stdout_log):
@@ -216,7 +238,8 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
         os.environ["API_PORT"] = str(port)
 
         if _fastapi_health(host, port):
-            logger.info(f"FastAPI already running at {api_url} (device(s) detected)")
+            devices_msg = "with device(s)" if _fastapi_devices_available(host, port) else "but no devices detected"
+            logger.info(f"FastAPI already running at {api_url} {devices_msg}")
             os.environ["BENCHLAB_DATA_SOURCE"] = "fastapi"
             return True
 
@@ -224,15 +247,18 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
             logger.info(f"Port {port} is in use — triggering /scan on existing server")
             _trigger_fastapi_scan(host, port)
             if _fastapi_health(host, port):
-                logger.info(f"FastAPI at {api_url} now has device(s)")
+                devices_msg = "with device(s)" if _fastapi_devices_available(host, port) else "but no devices detected"
+                logger.info(f"FastAPI at {api_url} is healthy {devices_msg}")
                 os.environ["BENCHLAB_DATA_SOURCE"] = "fastapi"
                 return True
-            logger.error(f"Port {port} is occupied but FastAPI has no devices — cannot start")
+            logger.error(f"Port {port} is occupied but server is not responding — cannot start")
             return False
 
         logger.info(f"FastAPI not detected at {api_url}")
         ok = start_fastapi_source(port)
         if ok:
+            devices_msg = "with device(s)" if _fastapi_devices_available(host, port) else "but no devices detected"
+            logger.info(f"FastAPI server started on port {port} {devices_msg}")
             os.environ["BENCHLAB_DATA_SOURCE"] = "fastapi"
         return ok
 

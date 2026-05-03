@@ -10,8 +10,12 @@ import importlib
 import inspect
 import logging
 import os
+import shlex
+import shutil
+import signal
 import subprocess
 import sys
+import threading
 import time
 import traceback
 import types as _types
@@ -37,6 +41,13 @@ def _build_args_namespace() -> _types.SimpleNamespace:
         mqtt_broker=os.environ.get("MQTT_BROKER", "localhost"),
         mqtt_port=int(os.environ.get("MQTT_PORT", "1883")),
     )
+
+def _monitor_process(tool_name: str, proc: subprocess.Popen) -> None:
+    """Read stderr from a child process and log it to the parent terminal."""
+    for line in proc.stderr:
+        line = line.decode(errors="replace").rstrip()
+        if line:
+            logger.error(f"[{tool_name}] {line}")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -81,15 +92,37 @@ def launch_single_tool(tool_id: str) -> None:
 # Multi-tool Launch (spawned terminal windows)
 # ──────────────────────────────────────────────────────────────
 
-def _spawn_tool_in_terminal(tool_id: str, args: _types.SimpleNamespace) -> subprocess.Popen:
-    """Spawn a tool in a new terminal window and return the Popen handle."""
-    tool = CONSUMER_TOOLS[tool_id]
-    tool_flag = tool["flag"]
-    term_cfg = tool.get("terminal", {})
+def _detect_terminal() -> str | None:
+    candidates = [
+        "ptyxis",
+        "kitty",
+        "alacritty",
+        "gnome-terminal",
+        "konsole",
+        "xfce4-terminal",
+        "x-terminal-emulator",
+        "xterm",
+    ]
 
+    # only accept valid user override if it exists
+    user_term = os.environ.get("TERMINAL")
+    if user_term and shutil.which(user_term):
+        return user_term
+
+    for term in candidates:
+        if shutil.which(term):
+            return term
+
+    return None
+
+
+def _spawn_tool_in_terminal(tool_id: str, args: _types.SimpleNamespace) -> subprocess.Popen:
+    """Spawn tool in a new isolated terminal window (Linux-first, robust)."""
+
+    tool = CONSUMER_TOOLS[tool_id]
     cmd = [
         sys.executable, "-m", "benchlab",
-        tool_flag,
+        tool["flag"],
         "--source", args.source,
         "--api-url", args.api_url,
         "--api-port", str(args.api_port),
@@ -98,40 +131,102 @@ def _spawn_tool_in_terminal(tool_id: str, args: _types.SimpleNamespace) -> subpr
     ]
 
     env = os.environ.copy()
+    term = _detect_terminal()
+    if not term:
+        raise RuntimeError("No valid terminal emulator found")
 
-    if os.name == "nt":
-        python_cmd = subprocess.list2cmdline(cmd)
-        if term_cfg:
-            cols = term_cfg.get("cols", 120)
-            rows = term_cfg.get("rows", 50)
-            setup = f"mode con cols={cols} lines={rows} && "
-        else:
-            setup = ""
-        full_cmd = f"{setup}{python_cmd}"
+    title = f"BENCHLAB - {tool['name']}"
+
+    # --- Ptyxis ---
+    if term == "ptyxis":
         return subprocess.Popen(
-            ["cmd", "/c", "start", f"BENCHLAB {tool['name']}", "cmd", "/k", full_cmd],
-            shell=False,
+            [term, "-s", "-T", title, "-x", shlex.join(cmd)],
+            env=env,
+            preexec_fn=os.setsid,
+            stderr=subprocess.PIPE,
         )
 
-    for term in ("x-terminal-emulator", "gnome-terminal", "xterm"):
-        try:
-            return subprocess.Popen([term, "--"] + cmd, env=env)
-        except FileNotFoundError:
-            continue
+    # --- GNOME Terminal ---
+    if term == "gnome-terminal":
+        return subprocess.Popen(
+            [term, "--title", title, "--", *cmd],
+            env=env,
+            preexec_fn=os.setsid,
+            stderr=subprocess.PIPE,
+        )
 
-    # Fallback: run in current terminal (no new window)
-    return subprocess.Popen(cmd, env=env)
+    # --- KDE Konsole ---
+    if term == "konsole":
+        return subprocess.Popen(
+            [term, "--new-tab", "-p", f"tabtitle={title}", "-e", *cmd],
+            env=env,
+            preexec_fn=os.setsid,
+            stderr=subprocess.PIPE,
+        )
+
+    # --- XFCE Terminal ---
+    if term == "xfce4-terminal":
+        return subprocess.Popen(
+            [term, "--title", title, "--command", f"bash -lc '{shlex.join(cmd)}; exec bash'"],
+            env=env,
+            preexec_fn=os.setsid,
+            shell=False,
+            stderr=subprocess.PIPE,
+        )
+
+    # --- Kitty ---
+    if term == "kitty":
+        return subprocess.Popen(
+            [term, "--title", title, *cmd],
+            env=env,
+            preexec_fn=os.setsid,
+            stderr=subprocess.PIPE,
+        )
+
+    # --- Alacritty ---
+    if term == "alacritty":
+        return subprocess.Popen(
+            [term, "--title", title, "-e", *cmd],
+            env=env,
+            preexec_fn=os.setsid,
+            stderr=subprocess.PIPE,
+        )
+
+    # --- Generic fallback (xterm / x-terminal-emulator) ---
+    return subprocess.Popen(
+        [term, "-T", title, "-e", *cmd],
+        env=env,
+        preexec_fn=os.setsid,
+        stderr=subprocess.PIPE,
+    )
 
 
 def launch_tools_concurrent(tool_ids: List[str]) -> None:
     """Spawn each tool in its own terminal window, then wait until interrupted."""
     args = _build_args_namespace()
     processes: dict = {}
+    monitors: list = []
 
     for tid in tool_ids:
         tool = CONSUMER_TOOLS[tid]
         logger.info(f"Launching {tool['name']} in terminal...")
-        processes[tid] = _spawn_tool_in_terminal(tid, args)
+        proc = _spawn_tool_in_terminal(tid, args)
+
+        time.sleep(0.5)  # grace period for fast failures
+        if proc.poll() is not None:
+            logger.error(f"{tool['name']} terminal failed to launch (exit code {proc.returncode})")
+            continue
+
+        processes[tid] = proc
+
+        # start a background thread to read stderr
+        t = threading.Thread(
+            target=_monitor_process,
+            args=(tool["name"], proc),
+            daemon=True,
+        )
+        t.start()
+        monitors.append(t)
 
     logger.info("All tools launched in terminals. Press Ctrl+C to stop launcher.")
 
@@ -141,10 +236,12 @@ def launch_tools_concurrent(tool_ids: List[str]) -> None:
     except (KeyboardInterrupt, EOFError):
         logger.info("Stopping all tools...")
     finally:
+        logger.info("Stopping all tools...")
+
         for proc in processes.values():
             try:
                 if proc and proc.poll() is None:
-                    proc.terminate()
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
             except Exception:
                 pass
 
@@ -153,7 +250,7 @@ def launch_tools_concurrent(tool_ids: List[str]) -> None:
         for proc in processes.values():
             try:
                 if proc and proc.poll() is None:
-                    proc.kill()
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
             except Exception:
                 pass
 
