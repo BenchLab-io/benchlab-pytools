@@ -13,8 +13,6 @@ Special cases
              We bypass curses and call tui_main(stdscr=None, _, args) directly
              inside the thread. tui_main must tolerate stdscr=None for one tick
              before the timeout kills it.
-- xeneon   : exposes a FastAPI `app` object, not a plain func(args). We run it
-             via uvicorn in a thread and shut it down after the timeout.
 
 Run with::
 
@@ -176,10 +174,6 @@ def _run_tool_in_thread(
         try:
             if tool_id == "tui":
                 pytest.skip("tui requires a real terminal; cannot integration-test in pytest")
-            elif tool_id == "xeneon":
-                import uvicorn
-                cfg = uvicorn.Config(func, host="127.0.0.1", port=8001, log_level="error")
-                uvicorn.Server(cfg).run()
             else:
                 func(args)
         except KeyboardInterrupt:

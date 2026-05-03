@@ -138,7 +138,6 @@ Tools need to be refactored to use the DataSource abstraction:
 - [ ] **Graph** - Needs refactoring
 - [ ] **VU Dials** - Needs refactoring
 - [ ] **WigiDash** - Needs refactoring
-- [ ] **Xeneon** - Needs refactoring
 
 ### Refactoring Pattern
 

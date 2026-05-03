@@ -90,8 +90,6 @@ def get_parser() -> argparse.ArgumentParser:
                         help="Launch VU configuration interface")
     parser.add_argument("-wigidash", action="store_true",
                         help="Connect to WigiDash")
-    parser.add_argument("-xeneon", action="store_true",
-                        help="Launch Xeneon web dashboard")
     parser.add_argument("--profile",
                         help="Launch predefined multi-tool profile",
                         default=None)
@@ -165,7 +163,7 @@ def launch_mode() -> None:
     no_flags = not any([
         args.fastapi, args.graph, args.hwinfo, args.link, args.logfleet,
         args.mqtt, args.tui, args.vu, args.vuconfig,
-        args.wigidash, args.xeneon, args.profile,
+        args.wigidash, args.profile,
     ])
     if no_flags:
         interactive_loop()
@@ -242,11 +240,6 @@ def launch_mode() -> None:
         _run_with_source(args,
                          "benchlab.wigidash.wigidash_manager", "main",
                          lambda fn: fn(args), "WigiDash")
-
-    elif args.xeneon:
-        _run_with_source(args,
-                         "benchlab.xeneon.xeneon_main", "run_xeneon",
-                         lambda fn: fn(args), "Xeneon dashboard")
 
     elif args.tui:
         if not _setup_source_from_args(args):

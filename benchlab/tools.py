@@ -87,14 +87,6 @@ CONSUMER_TOOLS = {
         "function": "main",
         "requirements": "requirements.txt",
     },
-    "xeneon": {
-        "name": "Xeneon Dashboard",
-        "description": "Web-based telemetry dashboard for Corsair Xeneon Edge",
-        "flag": "-xeneon",
-        "module": "benchlab.xeneon.xeneon_main",
-        "function": "app",
-        "requirements": "requirements.txt",
-    },
 }
 
 
@@ -105,10 +97,6 @@ CONSUMER_TOOLS = {
 LAUNCH_PROFILES = {
     "gskill_ctex26": {
         "tools": ["link", "tui", "vu", "wigidash"],
-        "source": "mqtt",
-    },
-    "corsair_ctex26": {
-        "tools": ["tui", "xeneon"],
         "source": "mqtt",
     },
 }

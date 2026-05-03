@@ -59,9 +59,6 @@ def launch_single_tool(tool_id: str) -> None:
 
         if tool_id == "tui":
             curses.wrapper(lambda stdscr: func(stdscr, None, args))
-        elif tool_id == "xeneon":
-            from benchlab.xeneon.xeneon_main import run_xeneon
-            run_xeneon(args)
         else:
             sig = inspect.signature(func)
             if sig.parameters:

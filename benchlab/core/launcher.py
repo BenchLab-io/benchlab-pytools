@@ -122,15 +122,6 @@ TOOLS = {
         "platforms": ["windows", "linux", "mac"],
         "architectures": ["x86", "arm"],
     },
-    "xeneon": {
-        "name": "Xeneon Dashboard",
-        "description": "Web-based telemetry dashboard",
-        "flag": "-xeneon",
-        "module": "benchlab.xeneon.xeneon_main",
-        "function": "run_server",
-        "platforms": ["windows", "linux", "mac"],
-        "architectures": ["x86", "arm"],
-    },
 }
 
 
