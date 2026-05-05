@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pathlib import Path
 
-from benchlab_pycore.core import read_sensors, read_device, read_uid, translate_sensor_struct
+from benchlab_pycore.core import read_sensors, read_device, read_uid, translate_sensor_struct, BENCHLAB_ORIGINAL_PRODUCT_ID, BENCHLAB_CFE_PRODUCT_ID
 from benchlab_pycore.core.serial_io import get_fleet_info, open_serial_connection
 
 # Import DeviceRegistry so the FastAPI server publishes device lifecycle events
@@ -108,6 +108,9 @@ async def lifespan(app: FastAPI):
                 ser = open_serial_connection(port)
                 if ser:
                     device_info = read_device(ser) or {}
+                    # Determine device variant from ProductId
+                    product_id = device_info.get('ProductId', BENCHLAB_ORIGINAL_PRODUCT_ID)
+                    device_info['variant'] = 'CFE' if product_id == BENCHLAB_CFE_PRODUCT_ID else 'ORIGINAL'
                     ser.close()
             except Exception as e:
                 logger.debug("Could not read device info for %s: %s", uid, e)
@@ -193,6 +196,7 @@ def read_device_loop(port, uid):
     ser = None
     consecutive_errors = 0
     max_consecutive_errors = 10  # After this many errors, attempt reconnect
+    product_id = None  # Will be set once we read device info
 
     while not shutdown_event.is_set():
         # --- (Re)connect ---
@@ -203,6 +207,18 @@ def read_device_loop(port, uid):
                     raise OSError("open_serial_connection returned None")
                 ser = new_ser
                 consecutive_errors = 0  # Reset error counter on successful connect
+                
+                # Read device info to get product_id for sensor reading
+                try:
+                    device_info = read_device(ser)
+                    if device_info:
+                        product_id = device_info.get('ProductId', BENCHLAB_ORIGINAL_PRODUCT_ID)
+                        logger.info("[%s] Device variant: %s (ProductId=0x%02X)", uid, 
+                                   'CFE' if product_id == BENCHLAB_CFE_PRODUCT_ID else 'ORIGINAL',
+                                   product_id)
+                except Exception:
+                    pass
+                
                 logger.info("Connected to device %s on %s", uid, port)
             except Exception as exc:
                 ser = None  # Ensure ser is None on error
@@ -218,7 +234,7 @@ def read_device_loop(port, uid):
                 logger.warning("[%s] Serial connection unexpectedly None", uid)
                 shutdown_event.wait(1)
                 continue
-            sensors = read_sensors(ser)
+            sensors = read_sensors(ser, product_id=product_id)
             if sensors:
                 translated = translate_sensor_struct(sensors)
                 translated["timestamp"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -301,17 +317,33 @@ def read_device_info_from_port(port):
 # --- API endpoints ---
 @app.get("/devices")
 def list_devices():
-    return [{"uid": uid, "port": info["port"]} for uid, info in devices_data.items()]
+    """List all connected devices with basic info including variant."""
+    result = []
+    for uid, info in devices_data.items():
+        device_info = info.get("info", {}) or {}
+        result.append({
+            "uid": uid,
+            "port": info.get("port", "unknown"),
+            "firmware": device_info.get("FwVersion", "?"),
+            "variant": device_info.get("variant", "ORIGINAL"),
+            "VendorId": device_info.get("VendorId", 0),
+            "ProductId": device_info.get("ProductId", 0),
+        })
+    return result
 
 @app.get("/device/{uid}/info")
 def get_device_info(uid: str):
+    """Get detailed device information including variant."""
     device = devices_data.get(uid)
     if not device:
         # Return mock info if device not present (useful for tests)
         return {
             "UID": uid,
             "port": None,
-            "FwVersion": "v1.0"
+            "FwVersion": "v1.0",
+            "variant": "ORIGINAL",
+            "VendorId": 0,
+            "ProductId": 0,
         }
     info = device.get("info", {}) or {}
     info_out = info.copy()
@@ -453,6 +485,9 @@ def start_device_thread(port, uid):
         ser = open_serial_connection(port)
         if ser:
             info = read_device(ser) or {}
+            # Determine device variant from ProductId
+            product_id = info.get('ProductId', BENCHLAB_ORIGINAL_PRODUCT_ID)
+            info['variant'] = 'CFE' if product_id == BENCHLAB_CFE_PRODUCT_ID else 'ORIGINAL'
             devices_data[uid]["info"] = info
             ser.close()
     except Exception as e:

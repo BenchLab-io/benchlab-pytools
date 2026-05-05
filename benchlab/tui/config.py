@@ -18,7 +18,7 @@ MIN_TERMINAL_ROWS = 35
 MIN_TERMINAL_COLS = 100
 
 # Tab configuration
-TAB_NAMES = ["Fleet", "Device", "System", "Voltage", "Temperature", "Fans"]
+TAB_NAMES = ["Fleet", "Device", "System", "12VHPWR", "Voltage", "Temperature", "Fans"]
 
 # Statistics display width
 STAT_COLUMN_WIDTH = 10
@@ -110,9 +110,17 @@ class ThermalStatus:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class Channels:
-    """Telemetry channel definitions and groupings."""
+    """Telemetry channel definitions and groupings.
     
-    # Power summary channels (Tab 2 summary section)
+    Supports both ORIGINAL and CFE device variants. Use get_* methods
+    with sensor_data dict to get variant-appropriate channel lists.
+    """
+    
+    # ──────────────────────────────────────────────────────────────────
+    # ORIGINAL Variant Channels (baseline)
+    # ──────────────────────────────────────────────────────────────────
+    
+    # Power summary channels (Tab 2 summary section) - same for both variants
     POWER_SUMMARY = [
         ('SYS_Power', 'SYS Power'),
         ('CPU_Power', 'CPU Power'), 
@@ -120,35 +128,125 @@ class Channels:
         ('MB_Power', 'MB Power'),
     ]
     
-    # Rail channels for power/current/voltage (shared across System tab)
-    RAIL_CHANNELS = [
+    # Rail channels for ORIGINAL variant (11 power sensors total, 7 shown here)
+    # Note: ORIGINAL also has ATX3V, ATX5V, ATX5VSB, ATX12V, PCIE1-3 which are board voltages
+    RAIL_CHANNELS_ORIGINAL = [
         ('EPS1', 'EPS_1'),
         ('EPS2', 'EPS_2'),
-        ('PCIE8_1', 'PCIE8_1'),
-        ('PCIE8_2', 'PCIE8_2'),
-        ('PCIE8_3', 'PCIE8_3'),
+        ('PCIE1', 'PCIE_1'),
+        ('PCIE2', 'PCIE_2'),
+        ('PCIE3', 'PCIE_3'),
         ('HPWR1', '12V_HPWR_1'),
         ('HPWR2', '12V_HPWR_2'),
     ]
     
-    # Board voltage channels (Voltage tab)
+    # Rail channels for CFE variant (7 main rails, same as ORIGINAL)
+    # The 12 additional HPWR_Wx sense lines are shown in a separate tab
+    RAIL_CHANNELS_CFE = [
+        ('EPS1', 'EPS_1'),
+        ('EPS2', 'EPS_2'),
+        ('PCIE1', 'PCIE_1'),
+        ('PCIE2', 'PCIE_2'),
+        ('PCIE3', 'PCIE_3'),
+        ('HPWR1', '12V_HPWR_1'),
+        ('HPWR2', '12V_HPWR_2'),
+    ]
+    
+    # CFE-specific HPWR_Wx sense lines (shown in separate 12VHPWR tab)
+    HPWR_SENSE_CHANNELS = [
+        ('HPWR1_W1', 'HPWR1_W1'),
+        ('HPWR1_W2', 'HPWR1_W2'),
+        ('HPWR1_W3', 'HPWR1_W3'),
+        ('HPWR1_W4', 'HPWR1_W4'),
+        ('HPWR1_W5', 'HPWR1_W5'),
+        ('HPWR1_W6', 'HPWR1_W6'),
+        ('HPWR2_W1', 'HPWR2_W1'),
+        ('HPWR2_W2', 'HPWR2_W2'),
+        ('HPWR2_W3', 'HPWR2_W3'),
+        ('HPWR2_W4', 'HPWR2_W4'),
+        ('HPWR2_W5', 'HPWR2_W5'),
+        ('HPWR2_W6', 'HPWR2_W6'),
+    ]
+    
+    # Board voltage channels (Voltage tab) - same for both variants
     BOARD_VOLTAGES = [
         ('Vdd', 'Vdd', VoltageBands.VDD),
         ('Vref', 'Vref', VoltageBands.VREF),
     ]
     
-    # VIN voltage measurement channels (Voltage tab)
+    # VIN voltage measurement channels (Voltage tab) - same for both variants
     VIN_CHANNELS = [f'VIN_{i}' for i in range(13)]  # VIN_0 through VIN_12
     
-    # Temperature channels
-    TEMPERATURE_SENSORS = [f'Temp_Sensor_{i+1}' for i in range(4)]  # Temp_Sensor_1 to 4
+    # Temperature sensors for ORIGINAL variant (4 sensors: TS_1 to TS_4)
+    TEMPERATURE_SENSORS_ORIGINAL = [f'TS_{i}' for i in range(1, 5)]
     
-    # System environment channels
+    # Temperature sensors for CFE variant (8 sensors: TS_1-4 + TS_HPWR1_IN/OUT, TS_HPWR2_IN/OUT)
+    TEMPERATURE_SENSORS_CFE = [
+        'TS_1', 'TS_2', 'TS_3', 'TS_4',
+        'TS_HPWR1_IN', 'TS_HPWR1_OUT',
+        'TS_HPWR2_IN', 'TS_HPWR2_OUT',
+    ]
+    
+    # System environment channels - same for both variants
     ENVIRONMENT_CHANNELS = [
         ('Chip_Temp', 'Chip Temp'),
         ('Ambient_Temp', 'Ambient Temp'),
         ('Humidity', 'Humidity'),
     ]
+    
+    # ──────────────────────────────────────────────────────────────────
+    # Dynamic Channel Resolution
+    # ──────────────────────────────────────────────────────────────────
+    
+    @staticmethod
+    def get_rail_channels(variant: str = 'ORIGINAL') -> list:
+        """Get rail channels based on device variant.
+        
+        Args:
+            variant: 'ORIGINAL' or 'CFE'
+            
+        Returns:
+            List of (key_prefix, label) tuples
+        """
+        if variant == 'CFE':
+            return Channels.RAIL_CHANNELS_CFE
+        return Channels.RAIL_CHANNELS_ORIGINAL
+    
+    @staticmethod
+    def get_temperature_sensors(variant: str = 'ORIGINAL') -> list:
+        """Get temperature sensor keys based on device variant.
+        
+        Args:
+            variant: 'ORIGINAL' or 'CFE'
+            
+        Returns:
+            List of sensor key strings
+        """
+        if variant == 'CFE':
+            return Channels.TEMPERATURE_SENSORS_CFE
+        return Channels.TEMPERATURE_SENSORS_ORIGINAL
+    
+    @staticmethod
+    def detect_variant(sensor_data: dict) -> str:
+        """Detect device variant from available sensor data.
+        
+        Args:
+            sensor_data: Telemetry dictionary from datasource
+            
+        Returns:
+            'CFE' if CFE-specific sensors detected, 'ORIGINAL' otherwise
+        """
+        # Check for CFE-specific sensors (HPWR sense lines or HPWR temperature sensors)
+        # Power sensors use keys like 'HPWR1_W1_Power', temperature sensors use 'TS_HPWR1_IN'
+        cfe_indicators = [
+            'HPWR1_W1_Power', 'HPWR1_W2_Power',  # CFE power sense lines
+            'TS_HPWR1_IN', 'TS_HPWR1_OUT',  # CFE temperature sensors
+            'TS_HPWR2_IN', 'TS_HPWR2_OUT',
+        ]
+        for key in cfe_indicators:
+            if key in sensor_data:
+                return 'CFE'
+        return 'ORIGINAL'
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

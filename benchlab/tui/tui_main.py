@@ -263,45 +263,18 @@ class TUIApplication:
             self.fleet_cache = []
 
     def _scan_local_fleet(self) -> List[Dict[str, Any]]:
-        """Scan for local devices via serial ports."""
+        """Scan for local devices via serial ports using the core discovery module."""
         fleet = []
         try:
-            # Import here to avoid import errors if pycore not available
-            from benchlab_pycore.core.serial_io import get_benchlab_ports, open_serial_connection
-            from benchlab_pycore.core import read_device, read_uid
-            
-            ports = get_benchlab_ports()
-            for port_info in ports:
-                portname = port_info.get("port", "Unknown")
-                try:
-                    ser = open_serial_connection(portname)
-                    if ser is None:
-                        # Port exists but is held by another process
-                        fleet.append({
-                            "port": portname,
-                            "firmware": "?",
-                            "uid": "BUSY",
-                        })
-                        continue
-                    
-                    device_info = read_device(ser)
-                    uid = read_uid(ser)
-                    fleet.append({
-                        "port": portname,
-                        "firmware": device_info.get("FwVersion") if device_info else "?",
-                        "uid": uid,
-                    })
-                    ser.close()
-                except Exception as e:
-                    err_str = str(e).lower()
-                    if "permission" in err_str or "access" in err_str or err_str == "":
-                        fleet.append({
-                            "port": portname,
-                            "firmware": "?",
-                            "uid": "BUSY",
-                        })
-        except ImportError:
-            logger.warning("benchlab_pycore not available for local fleet scan")
+            # Use the centralized discovery mechanism instead of direct pycore imports
+            devices = self.datasource_manager.discover_devices()
+            for device in devices:
+                fleet.append({
+                    "port": device.get("port", "Unknown"),
+                    "firmware": device.get("fw", "?"),
+                    "uid": device.get("uid", "Unknown"),
+                    "variant": device.get("variant", "ORIGINAL"),
+                })
         except Exception as e:
             logger.error(f"Error during local fleet scan: {e}")
         

@@ -111,13 +111,22 @@ class DataSourceManager:
                 self._last_error = "No valid device UID found"
                 return False
             
-            # Update device info
+            # Update device info - get full device info for each device
             with self._lock:
                 self._devices.clear()
                 for device in devices:
                     device_uid = device.get('uid')
                     if device_uid:
-                        self._devices[device_uid] = device
+                        # Start with basic device info from list_devices
+                        device_entry = device.copy()
+                        # Augment with full device info if available
+                        try:
+                            full_info = self._datasource.get_device_info(device_uid)
+                            if full_info:
+                                device_entry.update(full_info)
+                        except Exception:
+                            pass
+                        self._devices[device_uid] = device_entry
                 
                 self._connected = True
                 self._connection_time = datetime.now()

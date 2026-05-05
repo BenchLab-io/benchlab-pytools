@@ -127,7 +127,8 @@ class DirectDataSource(DataSource):
         try:
             from benchlab_pycore.core import (
                 read_sensors, read_device, read_uid, 
-                translate_sensor_struct, get_benchlab_ports
+                translate_sensor_struct, get_benchlab_ports,
+                BENCHLAB_ORIGINAL_PRODUCT_ID, BENCHLAB_CFE_PRODUCT_ID
             )
             from benchlab_pycore.core.serial_io import open_serial_connection
             self._pycore = {
@@ -137,6 +138,8 @@ class DirectDataSource(DataSource):
                 'translate_sensor_struct': translate_sensor_struct,
                 'get_benchlab_ports': get_benchlab_ports,
                 'open_serial_connection': open_serial_connection,
+                'BENCHLAB_ORIGINAL_PRODUCT_ID': BENCHLAB_ORIGINAL_PRODUCT_ID,
+                'BENCHLAB_CFE_PRODUCT_ID': BENCHLAB_CFE_PRODUCT_ID,
             }
         except ImportError as e:
             logger.error(f"Failed to import benchlab_pycore: {e}")
@@ -170,7 +173,10 @@ class DirectDataSource(DataSource):
                 uid = self._pycore['read_uid'](ser)
                 info = self._pycore['read_device'](ser) or {}
                 if uid:
-                    self._device_info[uid] = {**info, 'uid': uid, 'port': port}
+                    # Determine device variant from ProductId
+                    product_id = info.get('ProductId', self._pycore['BENCHLAB_ORIGINAL_PRODUCT_ID'])
+                    variant = "CFE" if product_id == self._pycore['BENCHLAB_CFE_PRODUCT_ID'] else "ORIGINAL"
+                    self._device_info[uid] = {**info, 'uid': uid, 'port': port, 'variant': variant}
                     self._ser_handles[uid] = ser   # store per-uid handle
                     logger.info(f"Connected to device {uid} on {port}")
                 else:
@@ -216,15 +222,19 @@ class DirectDataSource(DataSource):
         if self._pycore is None:
             return []
         
-        # If already connected, return the device we're connected to
-        # without trying to open the port again (which would fail)
+        # If already connected, return the full device info
         if self._connected and self._device_info:
             devices = []
             for uid, info in self._device_info.items():
+                # Return full device info including VendorId, ProductId, FwVersion
                 devices.append({
                     'uid': uid,
                     'port': info.get('port', self.port),
                     'firmware': info.get('FwVersion', '?'),
+                    'variant': info.get('variant', 'ORIGINAL'),
+                    'VendorId': info.get('VendorId', 0),
+                    'ProductId': info.get('ProductId', 0),
+                    'FwVersion': info.get('FwVersion', 0),
                 })
             return devices
         
@@ -238,13 +248,17 @@ class DirectDataSource(DataSource):
                     ser = self._pycore['open_serial_connection'](port)
                     if ser:
                         uid = self._pycore['read_uid'](ser)
-                        info = self._pycore['read_device'](ser)
+                        info = self._pycore['read_device'](ser) or {}
                         ser.close()
                         if uid:
+                            # Determine device variant from ProductId
+                            product_id = info.get('ProductId', self._pycore['BENCHLAB_ORIGINAL_PRODUCT_ID'])
+                            variant = "CFE" if product_id == self._pycore['BENCHLAB_CFE_PRODUCT_ID'] else "ORIGINAL"
                             devices.append({
                                 'uid': uid,
                                 'port': port,
-                                'firmware': info.get('FwVersion', '?') if info else '?',
+                                'firmware': info.get('FwVersion', '?'),
+                                'variant': variant,
                             })
                 except Exception as e:
                     logger.debug(f"Failed to probe {port}: {e}")

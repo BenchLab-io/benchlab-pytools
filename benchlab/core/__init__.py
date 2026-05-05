@@ -8,6 +8,10 @@ Provides:
 - ProcessManager singleton for infrastructure service management
 - ChannelStats for thread-safe telemetry statistics tracking
 - InfrastructureManager for higher-level orchestration
+
+PyCore v0.3.0 Multi-Variant Support:
+- ORIGINAL (0x10): 11 power sensors, 4 temperature sensors
+- CFE (0x11): 23 power sensors, 8 temperature sensors
 """
 
 from benchlab.core.datasource import (
@@ -25,6 +29,18 @@ from benchlab.core.statistics import (
     StatsFormatter,
     create_stats_callback,
 )
+
+# PyCore v0.3.0 variant constants for tools that need to detect device capabilities
+# Import from pycore to make them easily accessible to tools
+try:
+    from benchlab_pycore.core import (
+        BENCHLAB_ORIGINAL_PRODUCT_ID,
+        BENCHLAB_CFE_PRODUCT_ID,
+    )
+except ImportError:
+    # Fallback defaults if pycore not installed
+    BENCHLAB_ORIGINAL_PRODUCT_ID = 0x10
+    BENCHLAB_CFE_PRODUCT_ID = 0x11
 
 __version__ = "2.0.0"
 
@@ -46,4 +62,7 @@ __all__ = [
     "DeviceInfo",
     "ProcessManager",
     "ManagedProcess",
+    # PyCore v0.3.0 variant constants
+    "BENCHLAB_ORIGINAL_PRODUCT_ID",
+    "BENCHLAB_CFE_PRODUCT_ID",
 ]

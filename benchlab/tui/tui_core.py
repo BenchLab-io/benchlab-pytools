@@ -242,10 +242,12 @@ class TUICore:
             elif self.current_tab == 2:
                 self._render_system_tab(snapshot, stats)
             elif self.current_tab == 3:
-                self._render_voltage_tab(snapshot, stats)
+                self._render_hpwr_tab(snapshot, stats)
             elif self.current_tab == 4:
-                self._render_temperature_tab(snapshot, stats)
+                self._render_voltage_tab(snapshot, stats)
             elif self.current_tab == 5:
+                self._render_temperature_tab(snapshot, stats)
+            elif self.current_tab == 6:
                 self._render_fans_tab(snapshot, stats)
         except curses.error:
             pass
@@ -494,6 +496,15 @@ class TUICore:
         
         sd = snapshot['sensor_data']
         uid = snapshot.get('uid', '')
+        device_info = snapshot.get('device_info') or {}
+        
+        # Detect device variant from device info (Product ID) or sensor data
+        product_id = device_info.get('ProductId')
+        if product_id is not None:
+            variant = 'CFE' if product_id == 0x11 else 'ORIGINAL'
+        else:
+            variant = Config.Channels.detect_variant(sd)
+        rail_channels = Config.Channels.get_rail_channels(variant)
         
         # Summary section
         row = 4
@@ -515,11 +526,11 @@ class TUICore:
         self._draw_section(row, 2, "Power Telemetry")  
         row += 1
         
-        pwr_vals = [sd.get(f'{k}_Power', 0.0) for k, _ in Config.Channels.RAIL_CHANNELS]
+        pwr_vals = [sd.get(f'{k}_Power', 0.0) for k, _ in rail_channels]
         max_pwr = (Config.BarScales.POWER_MAX or 
                   max(Config.BarScales.POWER_AUTO_FLOOR, max(pwr_vals) * 1.2))
         
-        for (key_pfx, label), val in zip(Config.Channels.RAIL_CHANNELS, pwr_vals):
+        for (key_pfx, label), val in zip(rail_channels, pwr_vals):
             stat = stats.get(uid, f'{key_pfx}_Power')
             self._draw_bar(row, 4, label, val, 'W', max_pwr,
                          curses.color_pair(Config.COLOR_PAIRS['caution']), stat=stat)
@@ -530,11 +541,11 @@ class TUICore:
         self._draw_section(row, 2, "Current Telemetry")
         row += 1
         
-        cur_vals = [sd.get(f'{k}_Current', 0.0) for k, _ in Config.Channels.RAIL_CHANNELS]
+        cur_vals = [sd.get(f'{k}_Current', 0.0) for k, _ in rail_channels]
         max_cur = (Config.BarScales.CURRENT_MAX or 
                   max(Config.BarScales.CURRENT_AUTO_FLOOR, max(cur_vals) * 1.2))
         
-        for (key_pfx, label), val in zip(Config.Channels.RAIL_CHANNELS, cur_vals):
+        for (key_pfx, label), val in zip(rail_channels, cur_vals):
             stat = stats.get(uid, f'{key_pfx}_Current')
             self._draw_bar(row, 4, label, val, 'A', max_cur,
                          curses.color_pair(Config.COLOR_PAIRS['info']), stat=stat, decimals=2)
@@ -545,8 +556,76 @@ class TUICore:
         self._draw_section(row, 2, "Voltage Telemetry")
         row += 1
         
-        for (key_pfx, label), val in zip(Config.Channels.RAIL_CHANNELS, 
-                                       [sd.get(f'{k}_Voltage', 0.0) for k, _ in Config.Channels.RAIL_CHANNELS]):
+        for (key_pfx, label), val in zip(rail_channels, 
+                                       [sd.get(f'{k}_Voltage', 0.0) for k, _ in rail_channels]):
+            stat = stats.get(uid, f'{key_pfx}_Voltage')
+            self._draw_bar(row, 4, label, val, 'V', Config.BarScales.RAIL_VOLTAGE_MAX,
+                         curses.color_pair(Config.COLOR_PAIRS['voltage']), stat=stat, decimals=2)
+            row += 1
+
+    def _render_hpwr_tab(self, snapshot: Dict[str, Any], stats: ChannelStats):
+        """Render 12VHPWR tab (CFE-specific HPWR_Wx sense lines)."""
+        if not snapshot.get('connected') or not snapshot.get('sensor_data'):
+            self._draw_disconnected("12VHPWR")
+            return
+        
+        sd = snapshot['sensor_data']
+        uid = snapshot.get('uid', '')
+        device_info = snapshot.get('device_info') or {}
+        
+        # Detect device variant from device info (Product ID)
+        product_id = device_info.get('ProductId')
+        if product_id is not None:
+            variant = 'CFE' if product_id == 0x11 else 'ORIGINAL'
+        else:
+            variant = Config.Channels.detect_variant(sd)
+        
+        # Only show HPWR_Wx sensors for CFE devices
+        if variant != 'CFE':
+            self._draw_section(4, 2, "12VHPWR Sense Lines")
+            try:
+                self.stdscr.addstr(6, 4, "HPWR_Wx sense lines are only available on CFE devices.",
+                                 curses.color_pair(Config.COLOR_PAIRS['info']))
+            except curses.error:
+                pass
+            return
+        
+        hpwr_channels = Config.Channels.HPWR_SENSE_CHANNELS
+        
+        row = 4
+        self._draw_section(row, 2, "12VHPWR Sense Lines (CFE)")
+        row += 1
+        
+        # Power readings
+        self._draw_section(row, 2, "Power")
+        row += 1
+        
+        for (key_pfx, label) in hpwr_channels:
+            val = sd.get(f'{key_pfx}_Power', 0.0)
+            stat = stats.get(uid, f'{key_pfx}_Power')
+            self._draw_bar(row, 4, label, val, 'W', Config.BarScales.POWER_MAX,
+                         curses.color_pair(Config.COLOR_PAIRS['caution']), stat=stat)
+            row += 1
+        
+        # Current readings
+        row += 1
+        self._draw_section(row, 2, "Current")
+        row += 1
+        
+        for (key_pfx, label) in hpwr_channels:
+            val = sd.get(f'{key_pfx}_Current', 0.0)
+            stat = stats.get(uid, f'{key_pfx}_Current')
+            self._draw_bar(row, 4, label, val, 'A', Config.BarScales.CURRENT_MAX,
+                         curses.color_pair(Config.COLOR_PAIRS['info']), stat=stat, decimals=2)
+            row += 1
+        
+        # Voltage readings
+        row += 1
+        self._draw_section(row, 2, "Voltage")
+        row += 1
+        
+        for (key_pfx, label) in hpwr_channels:
+            val = sd.get(f'{key_pfx}_Voltage', 0.0)
             stat = stats.get(uid, f'{key_pfx}_Voltage')
             self._draw_bar(row, 4, label, val, 'V', Config.BarScales.RAIL_VOLTAGE_MAX,
                          curses.color_pair(Config.COLOR_PAIRS['voltage']), stat=stat, decimals=2)
@@ -593,6 +672,16 @@ class TUICore:
         
         sd = snapshot['sensor_data']
         uid = snapshot.get('uid', '')
+        device_info = snapshot.get('device_info') or {}
+        
+        # Detect device variant from device info (Product ID) or sensor data
+        product_id = device_info.get('ProductId')
+        if product_id is not None:
+            variant = 'CFE' if product_id == 0x11 else 'ORIGINAL'
+        else:
+            variant = Config.Channels.detect_variant(sd)
+        temp_sensors = Config.Channels.get_temperature_sensors(variant)
+        
         row = 4
         
         # Board
@@ -624,18 +713,23 @@ class TUICore:
         
         row += 1
         
-        # Sensors
-        self._draw_section(row, 2, "Sensors")
+        # Sensors - dynamic based on variant (only show variant label for CFE)
+        if variant == 'CFE':
+            self._draw_section(row, 2, f"Sensors (CFE)")
+        else:
+            self._draw_section(row, 2, "Sensors")
         row += 1
         
-        for i, sensor_key in enumerate(Config.Channels.TEMPERATURE_SENSORS):
+        for i, sensor_key in enumerate(temp_sensors):
             val = sd.get(sensor_key, 0.0)
             # Handle None values from sensor data
             if val is None:
                 val = 0.0
             stat = stats.get(uid, sensor_key)
             s_color = Config.get_temperature_color(val, Config.BarScales.SENSOR_TEMP_WARN)
-            self._draw_bar(row, 4, f'Sensor {i+1}', val, '°C', Config.BarScales.SENSOR_TEMP_MAX,
+            # Use actual sensor name for display
+            label = sensor_key if '_' in sensor_key else f'Sensor {i+1}'
+            self._draw_bar(row, 4, label, val, '°C', Config.BarScales.SENSOR_TEMP_MAX,
                          curses.color_pair(s_color), stat=stat, decimals=1)
             row += 1
 
