@@ -75,7 +75,7 @@ api_host = Config.API_HOST
 api_port = Config.API_PORT
 
 # --- Global state ---
-devices_data = {}      # { uid: { "port": str, "latest": dict, "history": deque } }
+devices_data = {}      # { uid: { "port": str, "latest": dict, "history": deque, "connected": bool } }
 clients = {}           # { uid: set([WebSocket, ...]) }
 main_loop = None       # Will store main asyncio loop
 shutdown_event = threading.Event()  # Graceful shutdown flag
@@ -84,6 +84,53 @@ connection_locks = {}    # { uid: threading.Lock } - Prevent duplicate connectio
 device_threads = {}    # { uid: threading.Thread } - Track device reader threads
 scan_lock = threading.Lock()  # Prevent concurrent scans
 data_lock = threading.Lock()  # Protect concurrent access to devices_data
+scanner_thread = None  # Background device scanner thread
+
+def device_scanner_loop():
+    """Background thread that periodically scans for new/disconnected devices."""
+    logger.info("Device scanner started (scan interval: %ds)", Config.SCAN_INTERVAL)
+    
+    while not shutdown_event.is_set():
+        # Wait for scan interval
+        shutdown_event.wait(Config.SCAN_INTERVAL)
+        if shutdown_event.is_set():
+            break
+        
+        try:
+            logger.debug("Scanner: attempting to acquire scan_lock...")
+            with scan_lock:
+                logger.debug("Scanner: acquired scan_lock, scanning for devices...")
+                # Find all currently connected BenchLab devices
+                found_devices = find_benchlab_devices()
+                existing_uids = set(devices_data.keys())
+                current_ports = {dev["port"]: dev["uid"] for dev in found_devices}
+                
+                logger.debug("Scanner: found %d devices, tracking %d existing", 
+                           len(found_devices), len(existing_uids))
+                
+                # Check for new devices
+                for dev in found_devices:
+                    port = dev["port"]
+                    uid = dev["uid"]
+                    
+                    if uid not in existing_uids:
+                        logger.info("New device discovered during scan: %s on %s", uid, port)
+                        start_device_thread(port, uid)
+                        existing_uids.add(uid)  # Prevent duplicate starts
+                
+                # Check for disconnected devices - mark them as such
+                for uid, data in devices_data.items():
+                    port = data.get("port")
+                    if port and port not in current_ports:
+                        logger.info("Device %s appears disconnected (port %s not found)", uid, port)
+                        # The read_device_loop will detect this and mark as disconnected
+                        
+                logger.debug("Scanner: scan complete")
+                        
+        except Exception as e:
+            logger.debug("Error during periodic device scan: %s", e)
+    
+    logger.info("Device scanner stopped")
 
 # --- Lifespan (FIX #7: replaces deprecated @app.on_event) ---
 @asynccontextmanager
@@ -139,6 +186,11 @@ async def lifespan(app: FastAPI):
 
         logger.info("Started %d device threads", len(found))
 
+    # Start background device scanner
+    global scanner_thread
+    scanner_thread = threading.Thread(target=device_scanner_loop, daemon=True)
+    scanner_thread.start()
+
     yield
 
     # Shutdown
@@ -191,16 +243,90 @@ def schedule_update(uid, data):
 
 RECONNECT_DELAY = 2.0  # seconds
 
+def create_empty_telemetry():
+    """Create an empty telemetry dict with all values set to 0.
+    
+    Includes all possible sensors for both ORIGINAL and CFE variants.
+    This ensures that applications always see the same set of keys regardless
+    of device variant or connection status.
+    """
+    telemetry = {
+        # Power summary
+        "SYS_Power": 0.0, "CPU_Power": 0.0, "GPU_Power": 0.0, "MB_Power": 0.0,
+        # Temperature
+        "Chip_Temp": 0, "Ambient_Temp": 0.0, "Humidity": 0.0,
+        "TS_1": 0.0, "TS_2": 0.0, "TS_3": 0.0, "TS_4": 0.0,
+        # CFE-specific temperature sensors
+        "TS_HPWR1_IN": 0.0, "TS_HPWR1_OUT": 0.0,
+        "TS_HPWR2_IN": 0.0, "TS_HPWR2_OUT": 0.0,
+        # Power rails (ORIGINAL + CFE)
+        "EPS1_Voltage": 0.0, "EPS1_Current": 0.0, "EPS1_Power": 0.0,
+        "EPS2_Voltage": 0.0, "EPS2_Current": 0.0, "EPS2_Power": 0.0,
+        "ATX3V_Voltage": 0.0, "ATX3V_Current": 0.0, "ATX3V_Power": 0.0,
+        "ATX5V_Voltage": 0.0, "ATX5V_Current": 0.0, "ATX5V_Power": 0.0,
+        "ATX5VSB_Voltage": 0.0, "ATX5VSB_Current": 0.0, "ATX5VSB_Power": 0.0,
+        "ATX12V_Voltage": 0.0, "ATX12V_Current": 0.0, "ATX12V_Power": 0.0,
+        "PCIE1_Voltage": 0.0, "PCIE1_Current": 0.0, "PCIE1_Power": 0.0,
+        "PCIE2_Voltage": 0.0, "PCIE2_Current": 0.0, "PCIE2_Power": 0.0,
+        "PCIE3_Voltage": 0.0, "PCIE3_Current": 0.0, "PCIE3_Power": 0.0,
+        "HPWR1_Voltage": 0.0, "HPWR1_Current": 0.0, "HPWR1_Power": 0.0,
+        "HPWR2_Voltage": 0.0, "HPWR2_Current": 0.0, "HPWR2_Power": 0.0,
+        # CFE-specific HPWR sense lines
+        "HPWR1_W1_Voltage": 0.0, "HPWR1_W1_Current": 0.0, "HPWR1_W1_Power": 0.0,
+        "HPWR1_W2_Voltage": 0.0, "HPWR1_W2_Current": 0.0, "HPWR1_W2_Power": 0.0,
+        "HPWR1_W3_Voltage": 0.0, "HPWR1_W3_Current": 0.0, "HPWR1_W3_Power": 0.0,
+        "HPWR1_W4_Voltage": 0.0, "HPWR1_W4_Current": 0.0, "HPWR1_W4_Power": 0.0,
+        "HPWR1_W5_Voltage": 0.0, "HPWR1_W5_Current": 0.0, "HPWR1_W5_Power": 0.0,
+        "HPWR1_W6_Voltage": 0.0, "HPWR1_W6_Current": 0.0, "HPWR1_W6_Power": 0.0,
+        "HPWR2_W1_Voltage": 0.0, "HPWR2_W1_Current": 0.0, "HPWR2_W1_Power": 0.0,
+        "HPWR2_W2_Voltage": 0.0, "HPWR2_W2_Current": 0.0, "HPWR2_W2_Power": 0.0,
+        "HPWR2_W3_Voltage": 0.0, "HPWR2_W3_Current": 0.0, "HPWR2_W3_Power": 0.0,
+        "HPWR2_W4_Voltage": 0.0, "HPWR2_W4_Current": 0.0, "HPWR2_W4_Power": 0.0,
+        "HPWR2_W5_Voltage": 0.0, "HPWR2_W5_Current": 0.0, "HPWR2_W5_Power": 0.0,
+        "HPWR2_W6_Voltage": 0.0, "HPWR2_W6_Current": 0.0, "HPWR2_W6_Power": 0.0,
+        # VIN measurements (all 13 channels)
+        "VIN_0": 0.0, "VIN_1": 0.0, "VIN_2": 0.0, "VIN_3": 0.0,
+        "VIN_4": 0.0, "VIN_5": 0.0, "VIN_6": 0.0, "VIN_7": 0.0,
+        "VIN_8": 0.0, "VIN_9": 0.0, "VIN_10": 0.0, "VIN_11": 0.0, "VIN_12": 0.0,
+        # Board voltages
+        "Vdd": 0.0, "Vref": 0.0,
+        # Fans (9 fans + external duty)
+        "Fan1_Duty": 0, "Fan1_RPM": 0, "Fan1_Status": 0,
+        "Fan2_Duty": 0, "Fan2_RPM": 0, "Fan2_Status": 0,
+        "Fan3_Duty": 0, "Fan3_RPM": 0, "Fan3_Status": 0,
+        "Fan4_Duty": 0, "Fan4_RPM": 0, "Fan4_Status": 0,
+        "Fan5_Duty": 0, "Fan5_RPM": 0, "Fan5_Status": 0,
+        "Fan6_Duty": 0, "Fan6_RPM": 0, "Fan6_Status": 0,
+        "Fan7_Duty": 0, "Fan7_RPM": 0, "Fan7_Status": 0,
+        "Fan8_Duty": 0, "Fan8_RPM": 0, "Fan8_Status": 0,
+        "Fan9_Duty": 0, "Fan9_RPM": 0, "Fan9_Status": 0,
+        "FanExtDuty": 0,
+        # Status
+        "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        "connected": False,
+    }
+    return telemetry
+
 def read_device_loop(port, uid):
     """Continuously read sensor data from a specific device with reconnection logic."""
     ser = None
     consecutive_errors = 0
     max_consecutive_errors = 10  # After this many errors, attempt reconnect
     product_id = None  # Will be set once we read device info
+    is_connected = False  # Track connection status
 
     while not shutdown_event.is_set():
         # --- (Re)connect ---
         if ser is None:
+            # Mark as disconnected
+            if is_connected:
+                is_connected = False
+                with data_lock:
+                    if uid in devices_data:
+                        devices_data[uid]["connected"] = False
+                        devices_data[uid]["latest"] = create_empty_telemetry()
+                logger.info("[%s] Device disconnected", uid)
+            
             try:
                 new_ser = open_serial_connection(port)
                 if new_ser is None:
@@ -219,6 +345,10 @@ def read_device_loop(port, uid):
                 except Exception:
                     pass
                 
+                is_connected = True
+                with data_lock:
+                    if uid in devices_data:
+                        devices_data[uid]["connected"] = True
                 logger.info("Connected to device %s on %s", uid, port)
             except Exception as exc:
                 ser = None  # Ensure ser is None on error
@@ -272,7 +402,13 @@ def read_device_loop(port, uid):
 
         shutdown_event.wait(poll_interval)
 
-    # Cleanup
+    # Cleanup - mark as disconnected
+    if is_connected:
+        with data_lock:
+            if uid in devices_data:
+                devices_data[uid]["connected"] = False
+                devices_data[uid]["latest"] = create_empty_telemetry()
+    
     if ser:
         try:
             ser.close()
@@ -317,7 +453,7 @@ def read_device_info_from_port(port):
 # --- API endpoints ---
 @app.get("/devices")
 def list_devices():
-    """List all connected devices with basic info including variant."""
+    """List all connected devices with basic info including variant and connection status."""
     result = []
     for uid, info in devices_data.items():
         device_info = info.get("info", {}) or {}
@@ -328,6 +464,7 @@ def list_devices():
             "variant": device_info.get("variant", "ORIGINAL"),
             "VendorId": device_info.get("VendorId", 0),
             "ProductId": device_info.get("ProductId", 0),
+            "connected": info.get("connected", False),
         })
     return result
 
