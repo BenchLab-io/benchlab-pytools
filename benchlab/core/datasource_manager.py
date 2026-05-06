@@ -10,28 +10,33 @@ import logging
 import threading
 import time
 from datetime import datetime
-from typing import Any, Dict, Optional, Callable
+from typing import Any, Dict, List, Optional, Callable
 
 from benchlab.core import create_datasource, DataSource
 from benchlab.core.discovery import discover_devices as _discover_devices
 
 logger = logging.getLogger("benchlab.tui.datasource_manager")
 
+# All recognised source type identifiers
+ALL_SOURCE_TYPES = ("direct", "fastapi", "mqtt", "named_pipe", "service_http")
+
 
 class DataSourceManager:
     """
     Unified manager for DataSource instances that provides a consistent
     snapshot API for UI components and other tools.
-    
-    This replaces the DataSourceWorkerWrapper and provides clean separation
-    between data source management and UI concerns.
     """
     
     def __init__(self, source_type: str = 'direct', stats_callback: Optional[Callable] = None, **datasource_kwargs):
         """Initialize DataSource Manager.
         
         Args:
-            source_type: Type of datasource ('direct', 'fastapi', 'mqtt')
+            source_type: Type of datasource:
+                         'direct'       — direct serial via pycore
+                         'fastapi'      — Python benchlab FastAPI server
+                         'mqtt'         — MQTT broker
+                         'named_pipe'   — C# BenchLab service named pipes (Windows)
+                         'service_http' — C# BenchLab service HTTP API
             stats_callback: Optional callback(device_uid, channel, value) for statistics
             **datasource_kwargs: Arguments passed to datasource constructor
         """
@@ -46,26 +51,24 @@ class DataSourceManager:
         
         # Shared state
         self._connected = False
-        self._devices: Dict[str, Dict[str, Any]] = {}  # uid -> device_info
-        self._telemetry: Dict[str, Dict[str, Any]] = {}  # uid -> sensor_data
+        self._devices: Dict[str, Dict[str, Any]] = {}
+        self._telemetry: Dict[str, Dict[str, Any]] = {}
         self._selected_uid: Optional[str] = None
         self._connection_time: Optional[datetime] = None
         self._last_error: Optional[str] = None
         
-        # Track previous values for stats updates
         self._prev_telemetry: Dict[str, Dict[str, Any]] = {}
 
-    # ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
     # Discovery helpers
-    # ---------------------------------------------------------------------
-    from typing import List
+    # ------------------------------------------------------------------
+
     def discover_devices(self) -> List[Dict[str, Any]]:
         """Expose the core discovery helper.
 
         Returns a list of dictionaries with ``uid``, ``port`` and ``fw`` keys
-        for each connected BenchLab device.  This method provides a convenient
-        way for callers (e.g., UI tools) to query available devices without
-        needing to import the discovery module directly.
+        for each connected BenchLab device found via direct serial scan.
+        For named_pipe / service_http sources use list_devices() instead.
         """
         try:
             return _discover_devices()
@@ -77,31 +80,27 @@ class DataSourceManager:
         """Connect to the datasource.
         
         Args:
-            port: For direct connections, the serial port to use
-            uid: For network connections, specific device UID to focus on
+            port: For direct connections, the serial port to use.
+            uid: Specific device UID to select after connecting.
             
         Returns:
             True if connection successful
         """
-        self.disconnect()  # Clean disconnect first
+        self.disconnect()
         
         try:
-            # Create datasource instance with filtered parameters
             kwargs = self._filter_datasource_kwargs(port)
             self._datasource = create_datasource(self.source_type, **kwargs)
             
-            # Connect to datasource
             if not self._datasource.connect():
                 self._last_error = f"Failed to connect to {self.source_type} datasource"
                 return False
             
-            # Get available devices
             devices = self._datasource.list_devices()
             if not devices:
                 self._last_error = f"No devices available via {self.source_type}"
                 return False
             
-            # Select device - prefer specified uid, otherwise first available
             if uid and any(d.get('uid') == uid for d in devices):
                 self._selected_uid = uid
             else:
@@ -111,15 +110,12 @@ class DataSourceManager:
                 self._last_error = "No valid device UID found"
                 return False
             
-            # Update device info - get full device info for each device
             with self._lock:
                 self._devices.clear()
                 for device in devices:
                     device_uid = device.get('uid')
                     if device_uid:
-                        # Start with basic device info from list_devices
                         device_entry = device.copy()
-                        # Augment with full device info if available
                         try:
                             full_info = self._datasource.get_device_info(device_uid)
                             if full_info:
@@ -132,7 +128,6 @@ class DataSourceManager:
                 self._connection_time = datetime.now()
                 self._last_error = None
             
-            # Start background worker
             self._stop_event.clear()
             self._worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
             self._worker_thread.start()
@@ -171,14 +166,7 @@ class DataSourceManager:
         logger.info("Disconnected from datasource")
 
     def select_device(self, uid: str) -> bool:
-        """Select a different device for monitoring.
-        
-        Args:
-            uid: Device UID to select
-            
-        Returns:
-            True if device exists and was selected
-        """
+        """Select a different device for monitoring."""
         with self._lock:
             if uid in self._devices:
                 self._selected_uid = uid
@@ -187,11 +175,7 @@ class DataSourceManager:
             return False
 
     def list_devices(self) -> Dict[str, Dict[str, Any]]:
-        """Get list of available devices.
-        
-        Returns:
-            Dictionary mapping UID to device info
-        """
+        """Get list of available devices."""
         if self._datasource and self._datasource.is_connected():
             try:
                 devices = self._datasource.list_devices()
@@ -201,7 +185,6 @@ class DataSourceManager:
                     if uid:
                         device_dict[uid] = device
                 
-                # Update our cached device info
                 with self._lock:
                     self._devices.update(device_dict)
                 
@@ -213,11 +196,7 @@ class DataSourceManager:
             return self._devices.copy()
 
     def snapshot(self) -> Dict[str, Any]:
-        """Get current state snapshot for UI consumption.
-        
-        Returns:
-            Dictionary with connection status, device info, and telemetry data
-        """
+        """Get current state snapshot for UI consumption."""
         with self._lock:
             selected_device = self._devices.get(self._selected_uid) if self._selected_uid else None
             selected_telemetry = self._telemetry.get(self._selected_uid) if self._selected_uid else None
@@ -230,7 +209,7 @@ class DataSourceManager:
                 'uid': self._selected_uid,
                 'device_info': selected_device,
                 'sensor_data': selected_telemetry,
-                'sensor_struct': None,  # Only available in direct mode with legacy SerialWorker
+                'sensor_struct': None,
                 'connection_time': self._connection_time,
                 'last_error': self._last_error,
                 'all_devices': self._devices.copy(),
@@ -238,11 +217,9 @@ class DataSourceManager:
             }
 
     def is_connected(self) -> bool:
-        """Check if connected to datasource."""
         return self._connected
 
     def get_selected_uid(self) -> Optional[str]:
-        """Get currently selected device UID."""
         return self._selected_uid
 
     def _get_source_description(self) -> str:
@@ -258,20 +235,17 @@ class DataSourceManager:
             broker = self.datasource_kwargs.get('broker', 'localhost')
             port = self.datasource_kwargs.get('port', 1883)
             return f"MQTT at {broker}:{port}"
+        elif self.source_type == 'named_pipe':
+            return "BenchLab Windows service (named pipe)"
+        elif self.source_type == 'service_http':
+            base_url = self.datasource_kwargs.get('base_url', 'http://localhost:8585')
+            return f"BenchLab service HTTP API at {base_url}"
         else:
             return f"{self.source_type} datasource"
 
     def _filter_datasource_kwargs(self, port: Optional[str] = None) -> Dict[str, Any]:
-        """Filter datasource kwargs based on source type to avoid parameter mismatches.
-        
-        Args:
-            port: Optional port for direct connections
-            
-        Returns:
-            Filtered kwargs appropriate for the datasource type
-        """
+        """Filter datasource kwargs based on source type."""
         if self.source_type == 'direct':
-            # DirectDataSource accepts: port, poll_interval
             kwargs = {}
             if port:
                 kwargs['port'] = port
@@ -280,7 +254,6 @@ class DataSourceManager:
             return kwargs
         
         elif self.source_type == 'fastapi':
-            # FastAPIDataSource accepts: base_url, timeout
             kwargs = {}
             if 'base_url' in self.datasource_kwargs:
                 kwargs['base_url'] = self.datasource_kwargs['base_url']
@@ -289,20 +262,29 @@ class DataSourceManager:
             return kwargs
         
         elif self.source_type == 'mqtt':
-            # MQTTDataSource accepts: broker, port, topic_prefix, timeout
             kwargs = {}
-            if 'broker' in self.datasource_kwargs:
-                kwargs['broker'] = self.datasource_kwargs['broker']
-            if 'port' in self.datasource_kwargs:
-                kwargs['port'] = self.datasource_kwargs['port']
-            if 'topic_prefix' in self.datasource_kwargs:
-                kwargs['topic_prefix'] = self.datasource_kwargs['topic_prefix']
-            if 'timeout' in self.datasource_kwargs:
-                kwargs['timeout'] = self.datasource_kwargs['timeout']
+            for key in ('broker', 'port', 'topic_prefix', 'timeout'):
+                if key in self.datasource_kwargs:
+                    kwargs[key] = self.datasource_kwargs[key]
+            return kwargs
+
+        elif self.source_type == 'named_pipe':
+            # NamedPipeDataSource accepts: timeout, poll_interval
+            kwargs = {}
+            for key in ('timeout', 'poll_interval'):
+                if key in self.datasource_kwargs:
+                    kwargs[key] = self.datasource_kwargs[key]
+            return kwargs
+
+        elif self.source_type == 'service_http':
+            # ServiceHttpDataSource accepts: base_url, timeout, poll_interval
+            kwargs = {}
+            for key in ('base_url', 'timeout', 'poll_interval'):
+                if key in self.datasource_kwargs:
+                    kwargs[key] = self.datasource_kwargs[key]
             return kwargs
         
         else:
-            # Unknown datasource type, return empty dict to be safe
             logger.warning(f"Unknown datasource type: {self.source_type}")
             return {}
 
@@ -342,15 +324,16 @@ class DataSourceManager:
                     try:
                         telemetry = self._datasource.get_telemetry(uid)
                         if telemetry:
-                            # Update stats if callback provided
                             if self.stats_callback:
                                 prev_data = self._prev_telemetry.get(uid, {})
                                 for key, value in telemetry.items():
                                     if isinstance(value, (int, float)) and key != 'timestamp':
-                                        if key not in prev_data or value != prev_data[key]:
+                                        if key not in prev_data or value != prev_data.get(key):
                                             self.stats_callback(uid, key, value)
-                                self._prev_telemetry[uid] = prev_data.copy()
-                                self._prev_telemetry[uid].update(telemetry)
+                                self._prev_telemetry[uid] = {**prev_data, **{
+                                    k: v for k, v in telemetry.items()
+                                    if isinstance(v, (int, float))
+                                }}
                             
                             with self._lock:
                                 self._telemetry[uid] = telemetry

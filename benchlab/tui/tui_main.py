@@ -1,34 +1,29 @@
 """
 Refactored TUI Main Entry Point
-
 Clean main entry point using the refactored architecture with separated concerns:
 - DataSourceManager handles all data source operations
 - ChannelStats manages statistics  
 - TUICore handles all UI rendering
 - Config centralizes configuration
-
 This replaces the original monolithic tui_main.py with a much cleaner implementation.
 """
-
 import curses
 import logging
 import sys
 import time
 from typing import List, Dict, Any
-
 from benchlab.tui.__init__ import __version__
 from benchlab.core.datasource_manager import DataSourceManager
 from benchlab.core.statistics import ChannelStats, create_stats_callback
 from .tui_core import TUICore
-
 logger = logging.getLogger("benchlab.tui.main")
 
 
 def get_default_datasource(args) -> str:
     """Get default data source based on command-line arguments."""
-    if hasattr(args, 'source'):
+    if hasattr(args, 'source') and args.source:
         return args.source
-    return 'direct'  # Default for backward compatibility
+    return 'direct'
 
 
 def convert_fleet_format(devices_dict: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -50,74 +45,58 @@ class TUIApplication:
     """
     
     def __init__(self, args):
-        """Initialize TUI application.
-        
-        Args:
-            args: Command line arguments with interval, source, etc.
-        """
         self.args = args
         self.source_type = get_default_datasource(args)
         
-        # Create statistics tracking
         self.stats = ChannelStats()
         stats_callback = create_stats_callback(self.stats)
         
-        # Create datasource manager with stats callback
         datasource_kwargs = {
             'poll_interval': getattr(args, 'interval', 1.0),
         }
         
-        # Add source-specific kwargs
         if self.source_type == 'fastapi':
             if hasattr(args, 'api_port'):
                 datasource_kwargs['base_url'] = f"http://127.0.0.1:{args.api_port}"
             else:
                 datasource_kwargs['base_url'] = "http://127.0.0.1:8000"
-            datasource_kwargs['timeout'] = 5.0  # FastAPI request timeout
+            datasource_kwargs['timeout'] = 5.0
+
         elif self.source_type == 'mqtt':
-            if hasattr(args, 'mqtt_broker'):
-                datasource_kwargs['broker'] = args.mqtt_broker
-            else:
-                datasource_kwargs['broker'] = 'localhost'
-            if hasattr(args, 'mqtt_port'):
-                datasource_kwargs['port'] = args.mqtt_port
-            else:
-                datasource_kwargs['port'] = 1883
-            datasource_kwargs['timeout'] = 5.0  # MQTT connection timeout
-        
+            datasource_kwargs['broker'] = getattr(args, 'mqtt_broker', 'localhost')
+            datasource_kwargs['port'] = getattr(args, 'mqtt_port', 1883)
+            datasource_kwargs['timeout'] = 5.0
+
+        elif self.source_type == 'named_pipe':
+            datasource_kwargs['timeout'] = 5.0
+
+        elif self.source_type == 'service_http':
+            service_url = getattr(args, 'service_url', None) or 'http://localhost:8585'
+            datasource_kwargs['base_url'] = service_url
+            datasource_kwargs['timeout'] = 5.0
+
         self.datasource_manager = DataSourceManager(
             source_type=self.source_type,
             stats_callback=stats_callback,
             **datasource_kwargs
         )
         
-        # UI components
         self.tui_core = None
         self.fleet_cache = []
         self.last_fleet_refresh = 0.0
 
     def run(self, stdscr):
-        """Main application loop.
-        
-        Args:
-            stdscr: Curses screen object
-        """
-        # Initialize TUI core
         self.tui_core = TUICore(stdscr, __version__)
         
-        # Auto-connect for network sources
+        # Auto-connect for all non-direct sources
         if self.source_type != 'direct':
             self._connect_datasource()
         
-        # Initial fleet scan
         self._refresh_fleet_cache()
         
-        # Main render loop
         while True:
-            # Get current snapshot
             snapshot = self.datasource_manager.snapshot()
             
-            # Render UI
             rendered = self.tui_core.render(
                 snapshot=snapshot,
                 stats=self.stats,
@@ -126,31 +105,20 @@ class TUIApplication:
             )
             
             if not rendered:
-                # Terminal too small, wait for resize
                 time.sleep(0.2)
                 continue
             
-            # Handle keyboard input
             try:
                 key = stdscr.getkey()
                 action = self.tui_core.handle_key(key)
                 
                 if not self._handle_action(action):
-                    break  # Quit requested
-                    
+                    break
+
             except curses.error:
-                # No key pressed, continue render loop
                 pass
 
     def _handle_action(self, action: Dict[str, Any]) -> bool:
-        """Handle action from TUI core.
-        
-        Args:
-            action: Action dictionary from TUI key handler
-            
-        Returns:
-            True to continue, False to quit
-        """
         action_type = action.get('type', 'none')
         
         if action_type == 'quit':
@@ -183,7 +151,7 @@ class TUIApplication:
         return True
 
     def _connect_datasource(self):
-        """Connect via network datasource (FastAPI/MQTT)."""
+        """Connect via non-direct datasource (FastAPI/MQTT/named_pipe/service_http)."""
         try:
             if self.datasource_manager.connect():
                 uid = self.datasource_manager.get_selected_uid()
@@ -199,11 +167,6 @@ class TUIApplication:
             logger.error(f"Exception during {self.source_type} connection: {e}")
 
     def _connect_to_device(self, device: Dict[str, Any]):
-        """Connect to a specific device.
-        
-        Args:
-            device: Device info dict with 'port', 'uid', etc.
-        """
         port = device.get('port')
         uid = device.get('uid')
         
@@ -213,7 +176,6 @@ class TUIApplication:
         
         try:
             if self.source_type == 'direct':
-                # Direct serial connection
                 if self.datasource_manager.connect(port=port):
                     self.tui_core.set_status(f"Connected to {port}")
                     logger.info(f"Connected to device on {port}")
@@ -223,7 +185,7 @@ class TUIApplication:
                     self.tui_core.set_status(f"Connection failed: {error_msg}", 4.0)
                     logger.error(f"Failed to connect to {port}: {error_msg}")
             else:
-                # Network datasource - select different device
+                # Network/pipe datasource — select different device
                 if self.datasource_manager.select_device(uid):
                     self.tui_core.set_status(f"Selected device {uid}")
                     logger.info(f"Selected device {uid} via {self.source_type}")
@@ -236,24 +198,19 @@ class TUIApplication:
             logger.error(f"Exception during device connection: {e}")
 
     def _refresh_fleet_cache(self):
-        """Refresh the fleet device cache."""
         try:
-            # Throttle fleet refreshes to avoid excessive scanning
             current_time = time.time()
             if current_time - self.last_fleet_refresh < 1.0:
                 return
             self.last_fleet_refresh = current_time
             
             if self.source_type != 'direct' and self.datasource_manager.is_connected():
-                # Use datasource for network sources
                 devices_dict = self.datasource_manager.list_devices()
                 self.fleet_cache = convert_fleet_format(devices_dict)
             else:
-                # Fall back to local scan for direct mode or when not connected
                 self.fleet_cache = self._scan_local_fleet()
                 
-            # Reset fleet index if it's out of bounds
-            if self.tui_core.fleet_index >= len(self.fleet_cache):
+            if self.tui_core and self.tui_core.fleet_index >= len(self.fleet_cache):
                 self.tui_core.fleet_index = 0
                 
             logger.debug(f"Fleet cache refreshed: {len(self.fleet_cache)} devices")
@@ -263,10 +220,8 @@ class TUIApplication:
             self.fleet_cache = []
 
     def _scan_local_fleet(self) -> List[Dict[str, Any]]:
-        """Scan for local devices via serial ports using the core discovery module."""
         fleet = []
         try:
-            # Use the centralized discovery mechanism instead of direct pycore imports
             devices = self.datasource_manager.discover_devices()
             for device in devices:
                 fleet.append({
@@ -281,19 +236,12 @@ class TUIApplication:
         return sorted(fleet, key=lambda d: d["port"])
 
     def cleanup(self):
-        """Clean up resources."""
         if self.datasource_manager:
             self.datasource_manager.disconnect()
 
 
 def tui_main(stdscr, _unused, args):
-    """Main TUI entry point for compatibility with existing code.
-    
-    Args:
-        stdscr: Curses screen object
-        _unused: Unused parameter for compatibility
-        args: Command line arguments
-    """
+    """Main TUI entry point."""
     app = TUIApplication(args)
     
     try:
@@ -305,17 +253,23 @@ def tui_main(stdscr, _unused, args):
         app.cleanup()
 
 
-# For direct execution/testing
 if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="BenchLab TUI")
     parser.add_argument('--interval', type=float, default=1.0, help='Telemetry refresh interval')
-    parser.add_argument('--source', choices=['direct', 'fastapi', 'mqtt'], default='direct',
-                       help='Data source type')
-    parser.add_argument('--api-port', type=int, default=8000, help='FastAPI server port')
-    parser.add_argument('--mqtt-broker', default='localhost', help='MQTT broker hostname')
-    parser.add_argument('--mqtt-port', type=int, default=1883, help='MQTT broker port')
+    parser.add_argument('--source',
+                        choices=['direct', 'fastapi', 'mqtt', 'named_pipe', 'service_http'],
+                        default='direct',
+                        help='Data source type')
+    parser.add_argument('--api-port', type=int, default=8000, dest='api_port',
+                        help='FastAPI server port')
+    parser.add_argument('--mqtt-broker', default='localhost', dest='mqtt_broker',
+                        help='MQTT broker hostname')
+    parser.add_argument('--mqtt-port', type=int, default=1883, dest='mqtt_port',
+                        help='MQTT broker port')
+    parser.add_argument('--service-url', default='http://localhost:8585', dest='service_url',
+                        help='C# BenchLab service HTTP API URL')
     args = parser.parse_args()
     
     try:

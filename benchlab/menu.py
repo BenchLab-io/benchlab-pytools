@@ -8,6 +8,7 @@ Implements the three-step interactive menu flow:
 
 import logging
 import os
+import sys
 from typing import List, Optional
 
 import sys as _sys
@@ -21,6 +22,7 @@ from .sources import (
     start_mqtt_broker,
     start_mqtt_source,
     cleanup_all_services,
+    SERVICE_HTTP_DEFAULT_PORT,
 )
 from .launcher import launch_single_tool, launch_tools_concurrent
 
@@ -205,6 +207,37 @@ def step2_multi_tool() -> None:
 # Step 3 – Source Selection & Launch
 # ──────────────────────────────────────────────────────────────
 
+def _build_source_menu(is_multi: bool) -> dict:
+    """Build the source selection menu.
+
+    Returns a dict mapping menu key → (label, source_type).
+    All sources are always listed. OS-unsupported ones get a note.
+    """
+    is_windows = sys.platform.startswith("win")
+    os_name = "Windows" if is_windows else ("macOS" if sys.platform == "darwin" else "Linux")
+
+    sources = {}
+    key = 1
+
+    if not is_multi:
+        sources[str(key)] = ("Direct (serial port)", "direct")
+        key += 1
+
+    sources[str(key)] = ("FastAPI server (Python)", "fastapi")
+    key += 1
+
+    sources[str(key)] = ("MQTT broker", "mqtt")
+    key += 1
+
+    pipe_note = "" if is_windows else f"  (not available on {os_name})"
+    sources[str(key)] = (f"BenchLab service - named pipe{pipe_note}", "named_pipe")
+    key += 1
+
+    sources[str(key)] = (f"BenchLab service - HTTP API (port {SERVICE_HTTP_DEFAULT_PORT})", "service_http")
+
+    return sources
+
+
 def step3_select_source(tool_ids: List[str], tool_names: List[str]) -> None:
     """Select data source, verify/start it, confirm, then launch tools."""
     is_multi = len(tool_ids) > 1
@@ -213,41 +246,51 @@ def step3_select_source(tool_ids: List[str], tool_names: List[str]) -> None:
 
     if is_multi:
         print(f"Tools: {', '.join(tool_names)}")
-        print("1. FastAPI (recommended)")
-        print("2. MQTT")
-        print()
         print("  Note: Direct mode is not available for multi-tool")
-        print("  because the serial port can only be used by one application.")
-        source_map = {"1": "fastapi", "2": "mqtt"}
+        print("  because the serial port can only be used by one process.")
     else:
         print(f"Tool: {tool_names[0]}")
-        print("1. Direct (serial port)")
-        print("2. FastAPI")
-        print("3. MQTT")
-        source_map = {"1": "direct", "2": "fastapi", "3": "mqtt"}
 
     print()
-    choice = input("Choice [1-3] (default: 1): ").strip() or "1"
 
-    if choice not in source_map:
+    sources = _build_source_menu(is_multi)
+
+    for key, (label, _) in sorted(sources.items()):
+        print(f"  {key}. {label}")
+
+    print()
+    default_key = min(sources.keys())
+    choice = input(f"Choice (default: {default_key}): ").strip() or default_key
+
+    if choice not in sources:
         print("  Invalid choice.")
         return
 
-    source_type = source_map[choice]
+    label, source_type = sources[choice]
+
     logger.info(f"Setting up {source_type} data source...")
 
+    # Build kwargs for check_and_setup_source
+    setup_kwargs: dict = {}
     if source_type == "fastapi":
         port = int(os.environ.get("API_PORT", "8000"))
-        source_ready = check_and_setup_source("fastapi", port=port)
+        setup_kwargs = {"port": port}
     elif source_type == "mqtt":
         broker = os.environ.get("MQTT_BROKER", "localhost")
         mqtt_port = int(os.environ.get("MQTT_PORT", "1883"))
-        source_ready = check_and_setup_source("mqtt", broker=broker, mqtt_port=mqtt_port)
-    else:
-        source_ready = check_and_setup_source("direct")
+        setup_kwargs = {"broker": broker, "mqtt_port": mqtt_port}
+    elif source_type == "service_http":
+        import urllib.parse
+        svc_url = os.environ.get("BENCHLAB_SERVICE_URL", f"http://localhost:{SERVICE_HTTP_DEFAULT_PORT}")
+        parsed = urllib.parse.urlparse(svc_url)
+        setup_kwargs = {"host": parsed.hostname or "localhost", "port": parsed.port or SERVICE_HTTP_DEFAULT_PORT}
+
+    source_ready = check_and_setup_source(source_type, **setup_kwargs)
 
     if not source_ready:
         print(f"\n  ✗ Could not set up {source_type} data source.")
+        if source_type in ("named_pipe", "service_http"):
+            print("  → Start the BenchLab Windows service (BL_Service.exe) and try again.")
         return
 
     print()

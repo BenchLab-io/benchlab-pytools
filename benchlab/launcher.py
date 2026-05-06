@@ -40,7 +40,9 @@ def _build_args_namespace() -> _types.SimpleNamespace:
         api_port=int(os.environ.get("API_PORT", "8000")),
         mqtt_broker=os.environ.get("MQTT_BROKER", "localhost"),
         mqtt_port=int(os.environ.get("MQTT_PORT", "1883")),
+        service_url=os.environ.get("BENCHLAB_SERVICE_URL", "http://localhost:8585"),
     )
+
 
 def _monitor_process(tool_name: str, proc: subprocess.Popen) -> None:
     """Read stderr from a child process and log it to the parent terminal."""
@@ -104,7 +106,6 @@ def _detect_terminal() -> str | None:
         "xterm",
     ]
 
-    # only accept valid user override if it exists
     user_term = os.environ.get("TERMINAL")
     if user_term and shutil.which(user_term):
         return user_term
@@ -128,6 +129,7 @@ def _spawn_tool_in_terminal(tool_id: str, args: _types.SimpleNamespace) -> subpr
         "--api-port", str(args.api_port),
         "--mqtt-broker", args.mqtt_broker,
         "--mqtt-port", str(args.mqtt_port),
+        "--service-url", args.service_url,
     ]
 
     env = os.environ.copy()
@@ -212,14 +214,13 @@ def launch_tools_concurrent(tool_ids: List[str]) -> None:
         logger.info(f"Launching {tool['name']} in terminal...")
         proc = _spawn_tool_in_terminal(tid, args)
 
-        time.sleep(0.5)  # grace period for fast failures
+        time.sleep(0.5)
         if proc.poll() is not None:
             logger.error(f"{tool['name']} terminal failed to launch (exit code {proc.returncode})")
             continue
 
         processes[tid] = proc
 
-        # start a background thread to read stderr
         t = threading.Thread(
             target=_monitor_process,
             args=(tool["name"], proc),

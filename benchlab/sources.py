@@ -1,7 +1,8 @@
 """BENCHLAB PyTools v2 – Data Source Management.
 
-Handles detection, startup, and teardown of the three supported
-telemetry sources: direct serial, FastAPI REST server, and MQTT.
+Handles detection, startup, and teardown of the five supported
+telemetry sources: direct serial, FastAPI REST server, MQTT,
+named pipe (C# service), and service HTTP API (C# service).
 """
 
 import json
@@ -44,11 +45,7 @@ def check_mqtt_running(host: str = "localhost", port: int = 1883) -> bool:
 # ──────────────────────────────────────────────────────────────
 
 def _fastapi_health(host: str, port: int) -> bool:
-    """Return True if the FastAPI server is responding to HTTP requests.
-    
-    This checks the /health endpoint to verify the server is fully ready
-    to accept connections, not just that the port is open.
-    """
+    """Return True if the FastAPI server is responding to HTTP requests."""
     try:
         url = f"http://{host}:{port}/health"
         with urllib.request.urlopen(url, timeout=3) as resp:
@@ -90,7 +87,6 @@ def start_fastapi_source(port: int = 8000) -> bool:
         return True
 
     logger.info(f"Starting FastAPI server on port {port}...")
-    logger.debug("Ensure the serial device is not held by another process.")
 
     ok = pm.start_service(
         name="fastapi",
@@ -100,7 +96,6 @@ def start_fastapi_source(port: int = 8000) -> bool:
     )
 
     if ok:
-        # Check device availability and log appropriate message
         devices_available = _fastapi_devices_available("127.0.0.1", port)
         if devices_available:
             logger.info(f"FastAPI server ready on port {port} with device(s)")
@@ -196,7 +191,6 @@ def start_mqtt_source(broker: str = "localhost", port: int = 1883) -> bool:
         return True
 
     logger.info(f"Starting MQTT publisher to {broker}:{port}...")
-    logger.debug("Ensure the serial device is not held by another process.")
 
     ok = pm.start_service(
         name="mqtt_publisher",
@@ -217,6 +211,104 @@ def start_mqtt_source(broker: str = "localhost", port: int = 1883) -> bool:
 
 
 # ──────────────────────────────────────────────────────────────
+# Named Pipe Source (C# BenchLab Windows service)
+# ──────────────────────────────────────────────────────────────
+
+def _named_pipe_available() -> bool:
+    """Return True if the BenchlabDiscovery pipe exists (service is running)."""
+    if not sys.platform.startswith("win"):
+        return False
+    try:
+        import win32pipe
+        import pywintypes
+        # WaitNamedPipe with a very short timeout just checks existence
+        win32pipe.WaitNamedPipe(r"\\.\pipe\BenchlabDiscovery", 1000)
+        return True
+    except Exception:
+        return False
+
+
+def check_named_pipe_service() -> bool:
+    """Check if the C# BenchLab named pipe service is running.
+
+    Returns True if the discovery pipe is present and responsive.
+    Does NOT attempt to start the service — call this to decide
+    whether to offer named_pipe as a source option.
+    """
+    if not sys.platform.startswith("win"):
+        logger.debug("Named pipe source is Windows-only")
+        return False
+
+    if not _named_pipe_available():
+        logger.debug("BenchlabDiscovery pipe not found — C# service not running")
+        return False
+
+    # Quick smoke-test: open the pipe and send ListDevices
+    try:
+        import win32file
+        import win32pipe
+        import pywintypes
+
+        path = r"\\.\pipe\BenchlabDiscovery"
+        win32pipe.WaitNamedPipe(path, 2000)
+        handle = win32file.CreateFile(
+            path,
+            win32file.GENERIC_READ | win32file.GENERIC_WRITE,
+            0, None,
+            win32file.OPEN_EXISTING,
+            0, None,
+        )
+        win32file.WriteFile(handle, b"ListDevices\n")
+        _, data = win32file.ReadFile(handle, 65536)
+        win32file.CloseHandle(handle)
+        result = json.loads(data.split(b"\n")[0].decode("utf-8"))
+        return isinstance(result, list)
+    except Exception as e:
+        logger.debug(f"Named pipe smoke-test failed: {e}")
+        return False
+
+
+# ──────────────────────────────────────────────────────────────
+# Service HTTP Source (C# BenchLab Windows service REST API)
+# ──────────────────────────────────────────────────────────────
+
+SERVICE_HTTP_DEFAULT_PORT = 8585
+
+
+def _service_http_health(host: str = "localhost", port: int = SERVICE_HTTP_DEFAULT_PORT) -> bool:
+    """Return True if the C# BenchLab service HTTP API is healthy."""
+    try:
+        url = f"http://{host}:{port}/health"
+        with urllib.request.urlopen(url, timeout=3) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode())
+                # C# service returns {"status":"healthy",...}
+                return data.get("status") == "healthy"
+    except Exception as e:
+        logger.debug(f"Service HTTP health check failed: {e}")
+    return False
+
+
+def _service_http_devices_available(host: str = "localhost", port: int = SERVICE_HTTP_DEFAULT_PORT) -> bool:
+    """Return True if the C# service has at least one device."""
+    try:
+        url = f"http://{host}:{port}/devices"
+        with urllib.request.urlopen(url, timeout=3) as resp:
+            devices = json.loads(resp.read().decode())
+            return isinstance(devices, list) and len(devices) > 0
+    except Exception:
+        return False
+
+
+def check_service_http() -> bool:
+    """Check if the C# BenchLab service HTTP API is reachable.
+
+    Auto-detects at localhost:8585. Does NOT start the service.
+    """
+    return _service_http_health()
+
+
+# ──────────────────────────────────────────────────────────────
 # Unified Source Setup
 # ──────────────────────────────────────────────────────────────
 
@@ -225,6 +317,13 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
 
     Sets the relevant environment variables and returns True when the
     source is ready, False if setup failed.
+
+    Supported source_type values:
+        'direct'       — direct serial via pycore
+        'fastapi'      — Python benchlab FastAPI server
+        'mqtt'         — MQTT broker + publisher
+        'named_pipe'   — C# BenchLab service named pipes (Windows only)
+        'service_http' — C# BenchLab service HTTP API
     """
     if source_type == "direct":
         os.environ["BENCHLAB_DATA_SOURCE"] = "direct"
@@ -276,6 +375,44 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
             logger.info(f"MQTT broker available at {host}:{mqtt_port}")
 
         return start_mqtt_source(host, mqtt_port)
+
+    if source_type == "named_pipe":
+        if not sys.platform.startswith("win"):
+            logger.error(
+                "Named pipe source is only available on Windows. "
+                "The C# BenchLab service uses Windows named pipes."
+            )
+            return False
+
+        if not _named_pipe_available():
+            logger.error(
+                "BenchLab named pipe service not detected.\n"
+                "  → Make sure the BenchLab Windows service (BL_Service) is running.\n"
+                "  → You can start it via Windows Services or by running BL_Service.exe."
+            )
+            return False
+
+        logger.info("BenchLab named pipe service detected and ready")
+        os.environ["BENCHLAB_DATA_SOURCE"] = "named_pipe"
+        return True
+
+    if source_type == "service_http":
+        port = kwargs.get("port", SERVICE_HTTP_DEFAULT_PORT)
+        host = kwargs.get("host", "localhost")
+
+        if not _service_http_health(host, port):
+            logger.error(
+                f"BenchLab service HTTP API not detected at http://{host}:{port}.\n"
+                "  → Make sure the BenchLab Windows service (BL_Service) is running.\n"
+                "  → The service HTTP API listens on port 8585 by default."
+            )
+            return False
+
+        devices_msg = "with device(s)" if _service_http_devices_available(host, port) else "but no devices detected"
+        logger.info(f"BenchLab service HTTP API ready at http://{host}:{port} {devices_msg}")
+        os.environ["BENCHLAB_DATA_SOURCE"] = "service_http"
+        os.environ["BENCHLAB_SERVICE_URL"] = f"http://{host}:{port}"
+        return True
 
     return False
 

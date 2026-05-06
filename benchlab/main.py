@@ -3,16 +3,10 @@
 This module implements the command-line entry point for the Benchlab
 telemetry suite. The workflow is split into three steps:
 
-1. **Select a data source** – FastAPI, MQTT, or direct serial access.
-2. **Choose consumer tools** – one or many tools that will read from the
-   selected source.
-3. **Launch** – start the source (if needed) and then launch the selected
-   tools, handling cleanup on exit.
-
-The launcher relies on :class:`benchlab.core.process_manager.ProcessManager`
-to start and monitor auxiliary services and on
-:class:`benchlab.core.device_registry.DeviceRegistry` to keep track of
-discovered devices.
+1. **Select a data source** – FastAPI, MQTT, direct serial, named pipe, or service HTTP.
+2. **Choose consumer tools** – one or many tools that will read from the selected source.
+3. **Launch** – start the source (if needed) and then launch the selected tools,
+   handling cleanup on exit.
 """
 
 import argparse
@@ -68,8 +62,8 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument("-tui", action="store_true",
                         help="Enable TUI (default)")
     parser.add_argument("--source",
-                        help="Data source: direct | fastapi | mqtt",
-                        choices=["direct", "fastapi", "mqtt"],
+                        help="Data source: direct | fastapi | mqtt | named_pipe | service_http",
+                        choices=["direct", "fastapi", "mqtt", "named_pipe", "service_http"],
                         default=None,
                         metavar="SOURCE")
     parser.add_argument("--api-url", default="http://127.0.0.1:8000",
@@ -84,6 +78,9 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mqtt-port", type=int, default=1883,
                         dest="mqtt_port",
                         help="MQTT broker port (default: 1883)")
+    parser.add_argument("--service-url", default="http://localhost:8585",
+                        dest="service_url",
+                        help="C# BenchLab service HTTP API URL (default: http://localhost:8585)")
     parser.add_argument("-vu", action="store_true",
                         help="Launch VU analog dials")
     parser.add_argument("-vuconfig", action="store_true",
@@ -104,9 +101,6 @@ def get_parser() -> argparse.ArgumentParser:
 def _setup_source_from_args(args) -> bool:
     """Resolve and start the data source requested via --source (or env fallback).
 
-    Sets BENCHLAB_DATA_SOURCE (and related env vars) so that any tool that
-    reads from the environment will pick up the correct source.
-
     Returns True if the source is ready, False on failure.
     """
     source = args.source or os.environ.get("BENCHLAB_DATA_SOURCE", "direct")
@@ -117,12 +111,31 @@ def _setup_source_from_args(args) -> bool:
         os.environ["API_PORT"] = str(port)
         os.environ["BENCHLAB_API_URL"] = getattr(args, "api_url", f"http://127.0.0.1:{port}")
         ready = check_and_setup_source("fastapi", port=port)
+
     elif source == "mqtt":
         broker = getattr(args, "mqtt_broker", None) or os.environ.get("MQTT_BROKER", "localhost")
         mqtt_port = getattr(args, "mqtt_port", None) or int(os.environ.get("MQTT_PORT", "1883"))
         os.environ["MQTT_BROKER"] = broker
         os.environ["MQTT_PORT"] = str(mqtt_port)
         ready = check_and_setup_source("mqtt", broker=broker, mqtt_port=mqtt_port)
+
+    elif source == "named_pipe":
+        ready = check_and_setup_source("named_pipe")
+
+    elif source == "service_http":
+        service_url = getattr(args, "service_url", None) or os.environ.get(
+            "BENCHLAB_SERVICE_URL", "http://localhost:8585"
+        )
+        os.environ["BENCHLAB_SERVICE_URL"] = service_url
+        # Parse host/port from URL for the check
+        import urllib.parse
+        parsed = urllib.parse.urlparse(service_url)
+        ready = check_and_setup_source(
+            "service_http",
+            host=parsed.hostname or "localhost",
+            port=parsed.port or 8585,
+        )
+
     else:
         ready = check_and_setup_source("direct")
 
@@ -139,7 +152,6 @@ def _setup_source_from_args(args) -> bool:
 
 def _run_with_source(args, import_path: str, func_name: str, call_fn, tool_label: str) -> None:
     """Set up source, call call_fn, then clean up."""
-    # Install tool dependencies before running
     from .tools import CONSUMER_TOOLS, ensure_tool_dependencies
     tool_id = next((tid for tid, t in CONSUMER_TOOLS.items() 
                     if t["module"] == import_path), None)
@@ -187,7 +199,6 @@ def launch_mode() -> None:
             return
         print(f"Launching profile: {args.profile}")
         
-        # Ensure all tool dependencies are installed before launching
         from .tools import ensure_profile_dependencies
         ensure_profile_dependencies(args.profile)
         
@@ -197,6 +208,7 @@ def launch_mode() -> None:
             api_port=getattr(args, "api_port", 8000),
             mqtt_broker=getattr(args, "mqtt_broker", "localhost"),
             mqtt_port=getattr(args, "mqtt_port", 1883),
+            service_url=getattr(args, "service_url", "http://localhost:8585"),
         )
         if not _setup_source_from_args(profile_args):
             print("Failed to initialize data source")
