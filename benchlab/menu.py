@@ -226,6 +226,9 @@ def _build_source_menu(is_multi: bool) -> dict:
     sources[str(key)] = ("FastAPI server (Python)", "fastapi")
     key += 1
 
+    sources[str(key)] = ("FastAPI server (custom URL)", "fastapi_custom")
+    key += 1
+
     sources[str(key)] = ("MQTT broker", "mqtt")
     key += 1
 
@@ -275,6 +278,20 @@ def step3_select_source(tool_ids: List[str], tool_names: List[str]) -> None:
     if source_type == "fastapi":
         port = int(os.environ.get("API_PORT", "8000"))
         setup_kwargs = {"port": port}
+    elif source_type == "fastapi_custom":
+        # Prompt for custom FastAPI server URL
+        host = input("  Host/IP [127.0.0.1]: ").strip() or "127.0.0.1"
+        port_input = input("  Port [8000]: ").strip()
+        try:
+            port = int(port_input) if port_input else 8000
+        except ValueError:
+            print("  Invalid port number.")
+            return
+        base_url = f"http://{host}:{port}"
+        setup_kwargs = {"base_url": base_url}
+        # Store for later use by datasource manager
+        os.environ["BENCHLAB_FASTAPI_CUSTOM_URL"] = base_url
+        print(f"  → Using FastAPI server at {base_url}")
     elif source_type == "mqtt":
         broker = os.environ.get("MQTT_BROKER", "localhost")
         mqtt_port = int(os.environ.get("MQTT_PORT", "1883"))

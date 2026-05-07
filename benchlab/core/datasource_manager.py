@@ -17,7 +17,7 @@ from benchlab.core.discovery import discover_devices as _discover_devices
 
 logger = logging.getLogger("benchlab.tui.datasource_manager")
 
-# All recognised source type identifiers
+# All recognised
 ALL_SOURCE_TYPES = ("direct", "fastapi", "mqtt", "named_pipe", "service_http")
 
 
@@ -231,6 +231,9 @@ class DataSourceManager:
         elif self.source_type == 'fastapi':
             base_url = self.datasource_kwargs.get('base_url', 'http://127.0.0.1:8000')
             return f"FastAPI at {base_url}"
+        elif self.source_type == 'fastapi_custom':
+            base_url = self.datasource_kwargs.get('base_url', 'http://127.0.0.1:8000')
+            return f"FastAPI (custom) at {base_url}"
         elif self.source_type == 'mqtt':
             broker = self.datasource_kwargs.get('broker', 'localhost')
             port = self.datasource_kwargs.get('port', 1883)
@@ -254,6 +257,15 @@ class DataSourceManager:
             return kwargs
         
         elif self.source_type == 'fastapi':
+            kwargs = {}
+            if 'base_url' in self.datasource_kwargs:
+                kwargs['base_url'] = self.datasource_kwargs['base_url']
+            if 'timeout' in self.datasource_kwargs:
+                kwargs['timeout'] = self.datasource_kwargs['timeout']
+            return kwargs
+        
+        elif self.source_type == 'fastapi_custom':
+            # Same as fastapi, but uses custom base_url
             kwargs = {}
             if 'base_url' in self.datasource_kwargs:
                 kwargs['base_url'] = self.datasource_kwargs['base_url']

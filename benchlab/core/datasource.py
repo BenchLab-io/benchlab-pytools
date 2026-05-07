@@ -1024,11 +1024,12 @@ def create_datasource(
     
     Args:
         source_type: Type of data source:
-                     'direct'      - direct serial via pycore
-                     'fastapi'     - Python benchlab FastAPI server
-                     'mqtt'        - MQTT broker
-                     'named_pipe'  - C# BenchLab service named pipes (Windows only)
-                     'service_http'- C# BenchLab service HTTP API
+                     'direct'        - direct serial via pycore
+                     'fastapi'       - Python benchlab FastAPI server (localhost)
+                     'fastapi_custom'- FastAPI server at custom URL
+                     'mqtt'          - MQTT broker
+                     'named_pipe'    - C# BenchLab service named pipes (Windows only)
+                     'service_http'  - C# BenchLab service HTTP API
         **kwargs: Arguments passed to the data source constructor
         
     Returns:
@@ -1039,7 +1040,9 @@ def create_datasource(
     """
     if source_type == 'direct':
         return DirectDataSource(**kwargs)
-    elif source_type == 'fastapi':
+    elif source_type in ('fastapi', 'fastapi_custom'):
+        # Both fastapi and fastapi_custom use FastAPIDataSource
+        # fastapi_custom just passes a custom base_url
         return FastAPIDataSource(**kwargs)
     elif source_type == 'mqtt':
         return MQTTDataSource(**kwargs)
