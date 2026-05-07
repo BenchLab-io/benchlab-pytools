@@ -62,6 +62,11 @@ class TUIApplication:
                 datasource_kwargs['base_url'] = "http://127.0.0.1:8000"
             datasource_kwargs['timeout'] = 5.0
 
+        elif self.source_type == 'fastapi_custom':
+            # Use the custom URL from args.api_url (set from BENCHLAB_API_URL env var)
+            datasource_kwargs['base_url'] = getattr(args, 'api_url', 'http://127.0.0.1:8000')
+            datasource_kwargs['timeout'] = 5.0
+
         elif self.source_type == 'mqtt':
             datasource_kwargs['broker'] = getattr(args, 'mqtt_broker', 'localhost')
             datasource_kwargs['port'] = getattr(args, 'mqtt_port', 1883)
@@ -259,7 +264,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="BenchLab TUI")
     parser.add_argument('--interval', type=float, default=1.0, help='Telemetry refresh interval')
     parser.add_argument('--source',
-                        choices=['direct', 'fastapi', 'mqtt', 'named_pipe', 'service_http'],
+                        choices=['direct', 'fastapi', 'fastapi_custom', 'mqtt', 'named_pipe', 'service_http'],
                         default='direct',
                         help='Data source type')
     parser.add_argument('--api-port', type=int, default=8000, dest='api_port',

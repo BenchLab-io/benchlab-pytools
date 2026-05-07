@@ -414,6 +414,31 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
         os.environ["BENCHLAB_SERVICE_URL"] = f"http://{host}:{port}"
         return True
 
+    if source_type == "fastapi_custom":
+        base_url = kwargs.get("base_url")
+        if not base_url:
+            logger.error("fastapi_custom requires a base_url (e.g., http://192.168.1.100:8000)")
+            return False
+
+        # Parse the URL to get host and port
+        from urllib.parse import urlparse
+        parsed = urlparse(base_url)
+        host = parsed.hostname
+        port = parsed.port or 8000
+
+        os.environ["BENCHLAB_API_URL"] = base_url
+        os.environ["BENCHLAB_DATA_SOURCE"] = "fastapi_custom"
+
+        # Check if the remote server is healthy
+        if _fastapi_health(host, port):
+            devices_msg = "with device(s)" if _fastapi_devices_available(host, port) else "but no devices detected"
+            logger.info(f"FastAPI server available at {base_url} {devices_msg}")
+            return True
+        else:
+            logger.error(f"FastAPI server not reachable at {base_url}")
+            logger.error("Make sure the remote server is running and accessible from this machine.")
+            return False
+
     return False
 
 
