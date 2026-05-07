@@ -229,7 +229,10 @@ def _build_source_menu(is_multi: bool) -> dict:
     sources[str(key)] = ("FastAPI server (custom URL)", "fastapi_custom")
     key += 1
 
-    sources[str(key)] = ("MQTT broker", "mqtt")
+    sources[str(key)] = ("MQTT (Python, experimental)", "mqtt")
+    key += 1
+
+    sources[str(key)] = ("MQTT (custom)", "mqtt_custom")
     key += 1
 
     pipe_note = "" if is_windows else f"  (not available on {os_name})"
@@ -296,6 +299,17 @@ def step3_select_source(tool_ids: List[str], tool_names: List[str]) -> None:
         broker = os.environ.get("MQTT_BROKER", "localhost")
         mqtt_port = int(os.environ.get("MQTT_PORT", "1883"))
         setup_kwargs = {"broker": broker, "mqtt_port": mqtt_port}
+    elif source_type == "mqtt_custom":
+        # Prompt for custom MQTT broker
+        broker = input("  Broker host [localhost]: ").strip() or "localhost"
+        port_input = input("  Broker port [1883]: ").strip()
+        try:
+            mqtt_port = int(port_input) if port_input else 1883
+        except ValueError:
+            print("  Invalid port number.")
+            return
+        setup_kwargs = {"broker": broker, "mqtt_port": mqtt_port}
+        print(f"  → Using MQTT broker at {broker}:{mqtt_port}")
     elif source_type == "service_http":
         import urllib.parse
         svc_url = os.environ.get("BENCHLAB_SERVICE_URL", f"http://localhost:{SERVICE_HTTP_DEFAULT_PORT}")

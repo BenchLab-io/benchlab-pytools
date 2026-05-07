@@ -439,6 +439,24 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
             logger.error("Make sure the remote server is running and accessible from this machine.")
             return False
 
+    if source_type == "mqtt_custom":
+        broker = kwargs.get("broker", "localhost")
+        mqtt_port = kwargs.get("mqtt_port", 1883)
+        os.environ["MQTT_BROKER"] = broker
+        os.environ["MQTT_PORT"] = str(mqtt_port)
+
+        # Check if the custom MQTT broker is reachable
+        if not check_mqtt_running(broker, mqtt_port):
+            logger.error(f"MQTT broker not reachable at {broker}:{mqtt_port}")
+            logger.error("Make sure the MQTT broker is running and accessible.")
+            return False
+
+        logger.info(f"MQTT broker available at {broker}:{mqtt_port}")
+        os.environ["BENCHLAB_DATA_SOURCE"] = "mqtt_custom"
+
+        # Start the MQTT publisher pointing to the custom broker
+        return start_mqtt_source(broker, mqtt_port)
+
     return False
 
 

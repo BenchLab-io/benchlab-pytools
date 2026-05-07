@@ -226,7 +226,7 @@ def _select_datasource() -> DataSource:
     source_type = os.environ.get("BENCHLAB_DATA_SOURCE", "direct")
     kwargs = {}
 
-    if source_type == "fastapi":
+    if source_type in ("fastapi", "fastapi_custom"):
         kwargs["base_url"] = os.environ.get("BENCHLAB_API_URL", "http://127.0.0.1:8000")
     elif source_type == "mqtt":
         kwargs["broker"] = os.environ.get("MQTT_BROKER", "localhost")

@@ -225,7 +225,7 @@ class EnhancedCSVLogger:
         source_type = (args.source if args else None) or "direct"
 
         ds_kwargs: Dict[str, Any] = {}
-        if source_type == "fastapi" and args:
+        if source_type in ("fastapi", "fastapi_custom") and args:
             ds_kwargs["base_url"] = args.api_url
         elif source_type == "mqtt" and args:
             ds_kwargs["broker"] = args.mqtt_broker

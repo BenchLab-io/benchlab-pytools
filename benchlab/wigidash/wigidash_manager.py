@@ -271,7 +271,7 @@ def main(args=None):
 
     source = args.source
     ds_kwargs = {}
-    if source == "fastapi":
+    if source in ("fastapi", "fastapi_custom"):
         ds_kwargs["base_url"] = args.api_url
         logger.info(f"Using FastAPI datasource: {args.api_url}")
     elif source == "mqtt":

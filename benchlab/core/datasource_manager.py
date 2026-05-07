@@ -17,8 +17,8 @@ from benchlab.core.discovery import discover_devices as _discover_devices
 
 logger = logging.getLogger("benchlab.tui.datasource_manager")
 
-# All recognised
-ALL_SOURCE_TYPES = ("direct", "fastapi", "mqtt", "named_pipe", "service_http")
+# All recognised source type identifiers
+ALL_SOURCE_TYPES = ("direct", "fastapi", "fastapi_custom", "mqtt", "mqtt_custom", "named_pipe", "service_http")
 
 
 class DataSourceManager:
@@ -238,6 +238,10 @@ class DataSourceManager:
             broker = self.datasource_kwargs.get('broker', 'localhost')
             port = self.datasource_kwargs.get('port', 1883)
             return f"MQTT at {broker}:{port}"
+        elif self.source_type == 'mqtt_custom':
+            broker = self.datasource_kwargs.get('broker', 'localhost')
+            port = self.datasource_kwargs.get('port', 1883)
+            return f"MQTT (custom) at {broker}:{port}"
         elif self.source_type == 'named_pipe':
             return "BenchLab Windows service (named pipe)"
         elif self.source_type == 'service_http':
@@ -274,6 +278,14 @@ class DataSourceManager:
             return kwargs
         
         elif self.source_type == 'mqtt':
+            kwargs = {}
+            for key in ('broker', 'port', 'topic_prefix', 'timeout'):
+                if key in self.datasource_kwargs:
+                    kwargs[key] = self.datasource_kwargs[key]
+            return kwargs
+
+        elif self.source_type == 'mqtt_custom':
+            # Same as mqtt, uses custom broker/port
             kwargs = {}
             for key in ('broker', 'port', 'topic_prefix', 'timeout'):
                 if key in self.datasource_kwargs:

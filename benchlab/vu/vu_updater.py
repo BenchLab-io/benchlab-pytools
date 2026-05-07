@@ -413,7 +413,7 @@ def run_updater(args=None):
 
     # Connect datasource
     ds_kwargs = {}
-    if args.source == "fastapi":
+    if args.source in ("fastapi", "fastapi_custom"):
         ds_kwargs["base_url"] = args.api_url
     elif args.source == "mqtt":
         ds_kwargs["broker"]   = args.mqtt_broker

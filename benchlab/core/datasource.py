@@ -1044,7 +1044,9 @@ def create_datasource(
         # Both fastapi and fastapi_custom use FastAPIDataSource
         # fastapi_custom just passes a custom base_url
         return FastAPIDataSource(**kwargs)
-    elif source_type == 'mqtt':
+    elif source_type in ('mqtt', 'mqtt_custom'):
+        # Both mqtt and mqtt_custom use MQTTDataSource
+        # mqtt_custom just passes custom broker/port
         return MQTTDataSource(**kwargs)
     elif source_type == 'named_pipe':
         return NamedPipeDataSource(**kwargs)

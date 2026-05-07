@@ -21,7 +21,7 @@ def run_graph_mode(args=None):
     _logger.info(f"Graph: connecting via {source} datasource")
 
     ds_kwargs = {}
-    if source == "fastapi":
+    if source in ("fastapi", "fastapi_custom"):
         ds_kwargs["base_url"] = args.api_url
     elif source == "mqtt":
         ds_kwargs["broker"] = args.mqtt_broker
