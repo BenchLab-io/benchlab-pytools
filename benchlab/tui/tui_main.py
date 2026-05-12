@@ -19,9 +19,9 @@ from .tui_core import TUICore
 
 logger = logging.getLogger("benchlab.tui.main")
 
-# Suppress INFO messages from benchlab modules in the TUI to prevent
-# stdout interference with curses display
-logging.getLogger("benchlab").setLevel(logging.WARNING)
+# Suppress INFO messages from all sources in the TUI to prevent
+# stdout interference with curses display (includes pycore library messages)
+logging.getLogger().setLevel(logging.WARNING)
 
 
 def get_default_datasource(args) -> str:
