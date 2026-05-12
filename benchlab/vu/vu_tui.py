@@ -735,7 +735,7 @@ def launch_vu_config(args=None):
     time.sleep(1)
 
     ds_kwargs = {}
-    if args.source == "fastapi":
+    if args.source in ("fastapi", "fastapi_custom"):
         ds_kwargs["base_url"] = args.api_url
     elif args.source == "mqtt":
         ds_kwargs["broker"]   = args.mqtt_broker

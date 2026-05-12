@@ -96,11 +96,10 @@ CONSUMER_TOOLS = {
 
 LAUNCH_PROFILES = {
     "gskill_ctex26": {
-        "tools": ["graph", "link", "tui", "vu", "wigidash"],
-        "source": "fastapi",
+        "tools": ["tui", "vu", "wigidash"],
+        "source": "fastapi_custom",
     },
 }
-
 
 # ──────────────────────────────────────────────────────────────
 # Tool Dependency Helpers
