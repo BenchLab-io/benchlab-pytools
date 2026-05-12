@@ -9,9 +9,10 @@ This replaces the original monolithic tui_main.py with a much cleaner implementa
 """
 import curses
 import logging
+import os
 import sys
 import time
-from typing import List, Dict, Any
+from typing import List, Dict, Any, TextIO
 
 from benchlab.tui.__init__ import __version__
 from benchlab.core.datasource_manager import DataSourceManager
@@ -20,14 +21,53 @@ from .tui_core import TUICore
 
 logger = logging.getLogger("benchlab.tui.main")
 
-# Suppress all INFO logging to prevent stdout interference with curses display.
-# Must be done AFTER imports so pycore handlers are already configured.
-_root_logger = logging.getLogger()
-_root_logger.setLevel(logging.WARNING)
-# Remove any StreamHandlers that output to stdout/stderr
-for _handler in _root_logger.handlers[:]:
-    if isinstance(_handler, logging.StreamHandler):
-        _root_logger.removeHandler(_handler)
+
+class _DevNullWriter:
+    """A file-like object that discards all output."""
+    def write(self, s):
+        pass
+    def flush(self):
+        pass
+    def isatty(self):
+        return False
+
+
+class _TUIStdoutRedirect:
+    """Redirect stdout/stderr to prevent interference with curses display.
+    
+    The pycore library writes INFO messages directly to stdout which messes up
+    the curses layout. This class redirects stdout/stderr to a file or /dev/null
+    during TUI operation.
+    """
+    def __init__(self, log_file: str = None):
+        self.log_file = log_file
+        self._original_stdout = None
+        self._original_stderr = None
+        self._file_handle = None
+    
+    def __enter__(self):
+        self._original_stdout = sys.stdout
+        self._original_stderr = sys.stderr
+        
+        if self.log_file:
+            self._file_handle = open(self.log_file, 'a')
+            sys.stdout = self._file_handle
+            sys.stderr = self._file_handle
+        else:
+            # Discard all output
+            sys.stdout = _DevNullWriter()
+            sys.stderr = _DevNullWriter()
+        
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self._file_handle:
+            self._file_handle.flush()
+            self._file_handle.close()
+        
+        sys.stdout = self._original_stdout
+        sys.stderr = self._original_stderr
+        return False
 
 
 def get_default_datasource(args) -> str:
@@ -258,15 +298,17 @@ class TUIApplication:
 
 def tui_main(stdscr, _unused, args):
     """Main TUI entry point."""
-    app = TUIApplication(args)
-    
-    try:
-        app.run(stdscr)
-    except Exception as e:
-        logger.error(f"TUI application error: {e}")
-        raise
-    finally:
-        app.cleanup()
+    # Redirect stdout/stderr to prevent pycore INFO messages from messing up curses layout
+    with _TUIStdoutRedirect():
+        app = TUIApplication(args)
+        
+        try:
+            app.run(stdscr)
+        except Exception as e:
+            logger.error(f"TUI application error: {e}")
+            raise
+        finally:
+            app.cleanup()
 
 
 if __name__ == "__main__":
