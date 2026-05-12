@@ -11,10 +11,14 @@ BASE_DIR = Path(__file__).resolve().parent
 logger = logging.getLogger("benchlab.launcher")
 logger.setLevel(logging.INFO)
 
+# Only add StreamHandler if not running TUI mode
+# Check for -tui flag in arguments to avoid stdout interference with curses
 if not logger.handlers:
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
-    logger.addHandler(handler)
+    _has_tui = '-tui' in sys.argv
+    if not _has_tui:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+        logger.addHandler(handler)
 
 
 def main():

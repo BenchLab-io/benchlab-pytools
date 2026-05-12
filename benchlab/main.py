@@ -24,6 +24,47 @@ from .menu import interactive_loop
 logger = logging.getLogger("benchlab.launcher")
 
 
+def _setup_tui_logging():
+    """Redirect all benchlab logs to a file during TUI operation.
+    
+    This prevents stdout interference with curses display (especially on Linux ARM
+    where output shifts the screen and causes title bar to disappear).
+    
+    The approach is to:
+    1. Remove ALL existing handlers from root logger
+    2. Add only a file handler (no stdout/stderr output)
+    3. Set propagate=False on benchlab loggers to prevent any leakage
+    """
+    root_logger = logging.getLogger()
+    
+    # Remove ALL handlers (not just StreamHandlers) to ensure clean state
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    
+    # Reset basicConfig state so it won't auto-configure if somehow called
+    # This is a workaround - basicConfig checks logging._root.level and handler list
+    logging.basicConfig = lambda **kwargs: None  # Disable basicConfig entirely
+    
+    # Add file handler for debugging (no stdout/stderr output)
+    try:
+        fh = logging.FileHandler('benchlab_tui.log', mode='a')
+        fh.setFormatter(logging.Formatter(
+            '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+        ))
+        root_logger.addHandler(fh)
+        # Set a reasonable log level - INFO for debugging, WARNING for production
+        root_logger.setLevel(logging.INFO)
+    except Exception:
+        # If we can't write to file, add a NullHandler to prevent basicConfig auto-configuration
+        root_logger.addHandler(logging.NullHandler())
+        root_logger.setLevel(logging.WARNING)
+    
+    # Also disable propagation on benchlab loggers as a safety measure
+    for name in logging.root.manager.loggerDict:
+        if name.startswith('benchlab'):
+            logging.getLogger(name).propagate = False
+
+
 # ──────────────────────────────────────────────────────────────
 # Argument Parser
 # ──────────────────────────────────────────────────────────────
@@ -280,6 +321,10 @@ def launch_mode() -> None:
                          lambda fn: fn(args), "WigiDash")
 
     elif args.tui:
+        # Configure logging to file-only mode BEFORE any operations to prevent
+        # stdout interference with curses display (especially on Linux ARM)
+        _setup_tui_logging()
+        
         if not _setup_source_from_args(args):
             return
         try:
