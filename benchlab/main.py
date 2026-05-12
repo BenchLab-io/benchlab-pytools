@@ -62,8 +62,8 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument("-tui", action="store_true",
                         help="Enable TUI (default)")
     parser.add_argument("--source",
-                        help="Data source: direct | fastapi | mqtt | named_pipe | service_http",
-                        choices=["direct", "fastapi", "mqtt", "named_pipe", "service_http"],
+                        help="Data source: direct | fastapi | fastapi_custom | mqtt | mqtt_custom | named_pipe | service_http",
+                        choices=["direct", "fastapi", "fastapi_custom", "mqtt", "mqtt_custom", "named_pipe", "service_http"],
                         default=None,
                         metavar="SOURCE")
     parser.add_argument("--api-url", default="http://127.0.0.1:8000",
@@ -112,12 +112,24 @@ def _setup_source_from_args(args) -> bool:
         os.environ["BENCHLAB_API_URL"] = getattr(args, "api_url", f"http://127.0.0.1:{port}")
         ready = check_and_setup_source("fastapi", port=port)
 
+    elif source == "fastapi_custom":
+        api_url = getattr(args, "api_url", os.environ.get("BENCHLAB_API_URL", "http://127.0.0.1:8000"))
+        os.environ["BENCHLAB_API_URL"] = api_url
+        ready = check_and_setup_source("fastapi_custom", base_url=api_url)
+
     elif source == "mqtt":
         broker = getattr(args, "mqtt_broker", None) or os.environ.get("MQTT_BROKER", "localhost")
         mqtt_port = getattr(args, "mqtt_port", None) or int(os.environ.get("MQTT_PORT", "1883"))
         os.environ["MQTT_BROKER"] = broker
         os.environ["MQTT_PORT"] = str(mqtt_port)
         ready = check_and_setup_source("mqtt", broker=broker, mqtt_port=mqtt_port)
+
+    elif source == "mqtt_custom":
+        broker = getattr(args, "mqtt_broker", None) or os.environ.get("MQTT_BROKER", "localhost")
+        mqtt_port = getattr(args, "mqtt_port", None) or int(os.environ.get("MQTT_PORT", "1883"))
+        os.environ["MQTT_BROKER"] = broker
+        os.environ["MQTT_PORT"] = str(mqtt_port)
+        ready = check_and_setup_source("mqtt_custom", broker=broker, mqtt_port=mqtt_port)
 
     elif source == "named_pipe":
         ready = check_and_setup_source("named_pipe")
