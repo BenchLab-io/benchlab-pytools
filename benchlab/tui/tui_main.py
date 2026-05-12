@@ -16,6 +16,31 @@ from benchlab.tui.__init__ import __version__
 from benchlab.core.datasource_manager import DataSourceManager
 from benchlab.core.statistics import ChannelStats, create_stats_callback
 from .tui_core import TUICore
+
+# Configure logging to file only during TUI operation to prevent stdout interference
+# with curses display (especially on Linux ARM where output shifts the screen)
+def _setup_tui_logging():
+    """Redirect all benchlab logs to a file during TUI operation."""
+    root_logger = logging.getLogger()
+    # Remove any existing handlers that output to stdout/stderr
+    for handler in root_logger.handlers[:]:
+        if isinstance(handler, logging.StreamHandler):
+            root_logger.removeHandler(handler)
+    # Add file handler if not already present
+    has_file_handler = any(
+        isinstance(h, logging.FileHandler) and h.baseFilename.endswith('benchlab_tui.log')
+        for h in root_logger.handlers
+    )
+    if not has_file_handler:
+        try:
+            fh = logging.FileHandler('benchlab_tui.log', mode='a')
+            fh.setFormatter(logging.Formatter(
+                '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+            ))
+            root_logger.addHandler(fh)
+        except Exception:
+            pass  # If we can't write to file, just suppress stdout handlers
+
 logger = logging.getLogger("benchlab.tui.main")
 
 
@@ -247,6 +272,9 @@ class TUIApplication:
 
 def tui_main(stdscr, _unused, args):
     """Main TUI entry point."""
+    # Setup logging to file-only mode to prevent stdout interference with curses
+    _setup_tui_logging()
+    
     app = TUIApplication(args)
     
     try:
