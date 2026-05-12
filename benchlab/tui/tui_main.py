@@ -144,6 +144,9 @@ class TUIApplication:
     def run(self, stdscr):
         self.tui_core = TUICore(stdscr, __version__)
         
+        # Force full screen redraw to overwrite any stray console output
+        stdscr.clearok(True)
+        
         # Auto-connect for all non-direct sources
         if self.source_type != 'direct':
             self._connect_datasource()
@@ -173,6 +176,10 @@ class TUIApplication:
 
             except curses.error:
                 pass
+            
+            # Force screen update to overwrite any stray console output from pycore
+            stdscr.refresh()
+            curses.doupdate()
 
     def _handle_action(self, action: Dict[str, Any]) -> bool:
         action_type = action.get('type', 'none')
