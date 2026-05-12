@@ -12,16 +12,17 @@ import logging
 import sys
 import time
 from typing import List, Dict, Any
+
+# IMPORTANT: Set logging level BEFORE any benchlab imports to prevent
+# INFO messages from pycore library during import
+logging.getLogger().setLevel(logging.WARNING)
+
 from benchlab.tui.__init__ import __version__
 from benchlab.core.datasource_manager import DataSourceManager
 from benchlab.core.statistics import ChannelStats, create_stats_callback
 from .tui_core import TUICore
 
 logger = logging.getLogger("benchlab.tui.main")
-
-# Suppress INFO messages from all sources in the TUI to prevent
-# stdout interference with curses display (includes pycore library messages)
-logging.getLogger().setLevel(logging.WARNING)
 
 
 def get_default_datasource(args) -> str:
