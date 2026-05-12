@@ -2,7 +2,8 @@
 *.db
 *.config
 *.pid.lock
-
+benchlab/vu/generated/
+benchlab/vu/VU-Server/upload/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -43,7 +43,11 @@ class FastAPIConfig(BaseModel):
 
     @field_validator("base_url")
     @classmethod
-    def _strip_trailing_slash(cls, v: str) -> str:
+    def _validate_base_url(cls, v: str) -> str:
+        """Ensure base_url has a protocol prefix and no trailing slash."""
+        v = v.strip()
+        if not v.startswith(('http://', 'https://')):
+            v = f"http://{v}"
         return v.rstrip('/')
 
 
