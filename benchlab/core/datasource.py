@@ -270,7 +270,10 @@ class DirectDataSource(DataSource):
         while not self._stop_event.is_set():
             for uid, ser in list(self._ser_handles.items()):
                 try:
-                    sensors = self._pycore['read_sensors'](ser)
+                    # Get product_id for this device to ensure correct sensor interpretation
+                    device_info = self._device_info.get(uid, {})
+                    product_id = device_info.get('ProductId', self._pycore['BENCHLAB_ORIGINAL_PRODUCT_ID'])
+                    sensors = self._pycore['read_sensors'](ser, product_id=product_id)
                     if sensors:
                         data = self._pycore['translate_sensor_struct'](sensors)
                         data['timestamp'] = datetime.now(UTC).isoformat()

@@ -11,7 +11,7 @@ import sys
 import threading
 import time
 
-from benchlab_pycore.core import translate_sensor_struct, read_sensors
+from benchlab_pycore.core import translate_sensor_struct, read_sensors, read_device, BENCHLAB_ORIGINAL_PRODUCT_ID
 from benchlab_pycore.core.serial_io import get_fleet_info, open_serial_connection
 
 # Import DeviceRegistry so the MQTT publisher publishes device lifecycle events
@@ -292,7 +292,15 @@ def device_thread(device, cfg, publish_interval=1):
 
             # Read sensors and publish telemetry
             try:
-                sensors = read_sensors(ser)
+                # Get product_id for correct sensor interpretation (CFE vs ORIGINAL)
+                product_id = BENCHLAB_ORIGINAL_PRODUCT_ID
+                try:
+                    device_info = read_device(ser)
+                    if device_info:
+                        product_id = device_info.get('ProductId', BENCHLAB_ORIGINAL_PRODUCT_ID)
+                except Exception:
+                    pass
+                sensors = read_sensors(ser, product_id=product_id)
                 payload = map_sensors_to_payload(sensors, int(time.time() * 1000))
                 topic_telemetry = f"{cfg['topic_prefix']}/{uid}/telemetry"
                 result = mqtt_publish(client, topic_telemetry, payload, qos=qos)

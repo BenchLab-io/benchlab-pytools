@@ -5,7 +5,7 @@ import sys
 import time
 import logging
 import atexit
-from benchlab_pycore.core import translate_sensor_struct, FAN_NUM
+from benchlab_pycore.core import translate_sensor_struct, FAN_NUM, read_device, BENCHLAB_ORIGINAL_PRODUCT_ID
 from benchlab_pycore.core.serial_io import get_fleet_info
 from benchlab.core.datasource import create_datasource, DataSource
 
@@ -169,7 +169,15 @@ def export_device_sensors(device_info, datasource=None):
             if not ser:
                 logger.error("Cannot open serial port for device %s", uid)
                 return False
-            sensor_struct = read_sensors(ser)
+            # Get product_id for correct sensor interpretation (CFE vs ORIGINAL)
+            product_id = BENCHLAB_ORIGINAL_PRODUCT_ID
+            try:
+                device_info = read_device(ser)
+                if device_info:
+                    product_id = device_info.get('ProductId', BENCHLAB_ORIGINAL_PRODUCT_ID)
+            except Exception:
+                pass
+            sensor_struct = read_sensors(ser, product_id=product_id)
             ser.close()
             if not sensor_struct:
                 logger.error("Failed to read sensors for device %s", uid)
