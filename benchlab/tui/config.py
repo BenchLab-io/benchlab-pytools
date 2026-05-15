@@ -18,7 +18,7 @@ MIN_TERMINAL_ROWS = 35
 MIN_TERMINAL_COLS = 100
 
 # Tab configuration
-TAB_NAMES = ["Fleet", "Device", "System", "12VHPWR", "Voltage", "Temperature", "Fans"]
+TAB_NAMES = ["Fleet", "Device", "System", "ATX", "12VHPWR", "Voltage", "Temperature", "Fans"]
 
 # Statistics display width
 STAT_COLUMN_WIDTH = 10
@@ -128,8 +128,8 @@ class Channels:
         ('MB_Power', 'MB Power'),
     ]
     
-    # Rail channels for ORIGINAL variant (11 power sensors total, 7 shown here)
-    # Note: ORIGINAL also has ATX3V, ATX5V, ATX5VSB, ATX12V, PCIE1-3 which are board voltages
+    # Rail channels for ORIGINAL variant (11 power sensors total, 7 shown in System tab)
+    # Note: ORIGINAL also has ATX3V, ATX5V, ATX5VSB, ATX12V which are shown in ATX tab
     RAIL_CHANNELS_ORIGINAL = [
         ('EPS1', 'EPS_1'),
         ('EPS2', 'EPS_2'),
@@ -150,6 +150,14 @@ class Channels:
         ('PCIE3', 'PCIE_3'),
         ('HPWR1', '12V_HPWR_1'),
         ('HPWR2', '12V_HPWR_2'),
+    ]
+    
+    # ATX rail channels (shown in ATX tab) - same for both variants
+    ATX_RAIL_CHANNELS = [
+        ('ATX3V', 'ATX 3.3V'),
+        ('ATX5V', 'ATX 5V'),
+        ('ATX5VSB', 'ATX 5VSB'),
+        ('ATX12V', 'ATX 12V'),
     ]
     
     # CFE-specific HPWR_Wx sense lines (shown in separate 12VHPWR tab)
@@ -297,7 +305,7 @@ HELP_TEXT = [
     "",
     "Navigation",
     "  ← / →  or  h / l    Switch tabs",
-    "  0 – 5               Jump to tab directly",
+    "  0 – 7               Jump to tab directly",
     "  q / Q               Quit",
     "  ?                   This help",
     "",
@@ -310,11 +318,15 @@ HELP_TEXT = [
     "  Summary: SYS/CPU/GPU/MB power",
     "  Power / Current / Voltage per rail",
     "",
-    "Voltage tab (3)",
+    "ATX tab (3)",
+    "  ATX rails: 3.3V, 5V, 5VSB, 12V",
+    "  Power / Current / Voltage per rail",
+    "",
+    "Voltage tab (5)",
     "  Board: Vdd, Vref",
     "  Measurements: VIN_0 to VIN_12",
     "",
-    "Temperature tab (4)",
+    "Temperature tab (6)",
     "  Board: chip temp",
     "  System: ambient temp & humidity",
     "  Sensors: Sensor_1 to Sensor_4",

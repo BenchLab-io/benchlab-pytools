@@ -242,12 +242,14 @@ class TUICore:
             elif self.current_tab == 2:
                 self._render_system_tab(snapshot, stats)
             elif self.current_tab == 3:
-                self._render_hpwr_tab(snapshot, stats)
+                self._render_atx_tab(snapshot, stats)
             elif self.current_tab == 4:
-                self._render_voltage_tab(snapshot, stats)
+                self._render_hpwr_tab(snapshot, stats)
             elif self.current_tab == 5:
-                self._render_temperature_tab(snapshot, stats)
+                self._render_voltage_tab(snapshot, stats)
             elif self.current_tab == 6:
+                self._render_temperature_tab(snapshot, stats)
+            elif self.current_tab == 7:
                 self._render_fans_tab(snapshot, stats)
         except curses.error:
             pass
@@ -560,6 +562,68 @@ class TUICore:
                                        [sd.get(f'{k}_Voltage', 0.0) for k, _ in rail_channels]):
             stat = stats.get(uid, f'{key_pfx}_Voltage')
             self._draw_bar(row, 4, label, val, 'V', Config.BarScales.RAIL_VOLTAGE_MAX,
+                         curses.color_pair(Config.COLOR_PAIRS['voltage']), stat=stat, decimals=2)
+            row += 1
+
+    def _render_atx_tab(self, snapshot: Dict[str, Any], stats: ChannelStats):
+        """Render ATX rails tab (ATX3V, ATX5V, ATX5VSB, ATX12V)."""
+        if not snapshot.get('connected') or not snapshot.get('sensor_data'):
+            self._draw_disconnected("ATX")
+            return
+        
+        sd = snapshot['sensor_data']
+        uid = snapshot.get('uid', '')
+        atx_channels = Config.Channels.ATX_RAIL_CHANNELS
+        
+        row = 4
+        self._draw_section(row, 2, "ATX Power Rails")
+        row += 1
+        
+        # Power readings
+        self._draw_section(row, 2, "Power")
+        row += 1
+        
+        atx_pwr_vals = [sd.get(f'{k}_Power', 0.0) for k, _ in atx_channels]
+        max_atx_pwr = (Config.BarScales.POWER_MAX or 
+                      max(Config.BarScales.POWER_AUTO_FLOOR, max(atx_pwr_vals) * 1.2))
+        
+        for (key_pfx, label), val in zip(atx_channels, atx_pwr_vals):
+            stat = stats.get(uid, f'{key_pfx}_Power')
+            self._draw_bar(row, 4, label, val, 'W', max_atx_pwr,
+                         curses.color_pair(Config.COLOR_PAIRS['caution']), stat=stat)
+            row += 1
+        
+        # Current readings
+        row += 1
+        self._draw_section(row, 2, "Current")
+        row += 1
+        
+        atx_cur_vals = [sd.get(f'{k}_Current', 0.0) for k, _ in atx_channels]
+        max_atx_cur = (Config.BarScales.CURRENT_MAX or 
+                      max(Config.BarScales.CURRENT_AUTO_FLOOR, max(atx_cur_vals) * 1.2))
+        
+        for (key_pfx, label), val in zip(atx_channels, atx_cur_vals):
+            stat = stats.get(uid, f'{key_pfx}_Current')
+            self._draw_bar(row, 4, label, val, 'A', max_atx_cur,
+                         curses.color_pair(Config.COLOR_PAIRS['info']), stat=stat, decimals=2)
+            row += 1
+        
+        # Voltage readings
+        row += 1
+        self._draw_section(row, 2, "Voltage")
+        row += 1
+        
+        for (key_pfx, label), val in zip(atx_channels, 
+                                        [sd.get(f'{k}_Voltage', 0.0) for k, _ in atx_channels]):
+            stat = stats.get(uid, f'{key_pfx}_Voltage')
+            # Use appropriate voltage max based on rail type
+            if key_pfx == 'ATX3V':
+                v_max = 5.0
+            elif key_pfx == 'ATX5V' or key_pfx == 'ATX5VSB':
+                v_max = 7.0
+            else:  # ATX12V
+                v_max = 15.0
+            self._draw_bar(row, 4, label, val, 'V', v_max,
                          curses.color_pair(Config.COLOR_PAIRS['voltage']), stat=stat, decimals=2)
             row += 1
 
