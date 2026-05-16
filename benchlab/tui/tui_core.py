@@ -242,7 +242,7 @@ class TUICore:
             elif self.current_tab == 2:
                 self._render_system_tab(snapshot, stats)
             elif self.current_tab == 3:
-                self._render_atx_tab(snapshot, stats)
+                self._render_mb_tab(snapshot, stats)
             elif self.current_tab == 4:
                 self._render_hpwr_tab(snapshot, stats)
             elif self.current_tab == 5:
@@ -565,31 +565,31 @@ class TUICore:
                          curses.color_pair(Config.COLOR_PAIRS['voltage']), stat=stat, decimals=2)
             row += 1
 
-    def _render_atx_tab(self, snapshot: Dict[str, Any], stats: ChannelStats):
-        """Render ATX rails tab (ATX3V, ATX5V, ATX5VSB, ATX12V)."""
+    def _render_mb_tab(self, snapshot: Dict[str, Any], stats: ChannelStats):
+        """Render Motherboard rails tab (ATX3V, ATX5V, ATX5VSB, ATX12V)."""
         if not snapshot.get('connected') or not snapshot.get('sensor_data'):
-            self._draw_disconnected("ATX")
+            self._draw_disconnected("Motherboard")
             return
         
         sd = snapshot['sensor_data']
         uid = snapshot.get('uid', '')
-        atx_channels = Config.Channels.ATX_RAIL_CHANNELS
+        mb_channels = Config.Channels.MB_RAIL_CHANNELS
         
         row = 4
-        self._draw_section(row, 2, "ATX Power Rails")
+        self._draw_section(row, 2, "Motherboard Power Rails")
         row += 1
         
         # Power readings
         self._draw_section(row, 2, "Power")
         row += 1
         
-        atx_pwr_vals = [sd.get(f'{k}_Power', 0.0) for k, _ in atx_channels]
-        max_atx_pwr = (Config.BarScales.POWER_MAX or 
-                      max(Config.BarScales.POWER_AUTO_FLOOR, max(atx_pwr_vals) * 1.2))
+        mb_pwr_vals = [sd.get(f'{k}_Power', 0.0) for k, _ in mb_channels]
+        max_mb_pwr = (Config.BarScales.POWER_MAX or 
+                      max(Config.BarScales.POWER_AUTO_FLOOR, max(mb_pwr_vals) * 1.2))
         
-        for (key_pfx, label), val in zip(atx_channels, atx_pwr_vals):
+        for (key_pfx, label), val in zip(mb_channels, mb_pwr_vals):
             stat = stats.get(uid, f'{key_pfx}_Power')
-            self._draw_bar(row, 4, label, val, 'W', max_atx_pwr,
+            self._draw_bar(row, 4, label, val, 'W', max_mb_pwr,
                          curses.color_pair(Config.COLOR_PAIRS['caution']), stat=stat)
             row += 1
         
@@ -598,13 +598,13 @@ class TUICore:
         self._draw_section(row, 2, "Current")
         row += 1
         
-        atx_cur_vals = [sd.get(f'{k}_Current', 0.0) for k, _ in atx_channels]
-        max_atx_cur = (Config.BarScales.CURRENT_MAX or 
-                      max(Config.BarScales.CURRENT_AUTO_FLOOR, max(atx_cur_vals) * 1.2))
+        mb_cur_vals = [sd.get(f'{k}_Current', 0.0) for k, _ in mb_channels]
+        max_mb_cur = (Config.BarScales.CURRENT_MAX or 
+                      max(Config.BarScales.CURRENT_AUTO_FLOOR, max(mb_cur_vals) * 1.2))
         
-        for (key_pfx, label), val in zip(atx_channels, atx_cur_vals):
+        for (key_pfx, label), val in zip(mb_channels, mb_cur_vals):
             stat = stats.get(uid, f'{key_pfx}_Current')
-            self._draw_bar(row, 4, label, val, 'A', max_atx_cur,
+            self._draw_bar(row, 4, label, val, 'A', max_mb_cur,
                          curses.color_pair(Config.COLOR_PAIRS['info']), stat=stat, decimals=2)
             row += 1
         
@@ -613,8 +613,8 @@ class TUICore:
         self._draw_section(row, 2, "Voltage")
         row += 1
         
-        for (key_pfx, label), val in zip(atx_channels, 
-                                        [sd.get(f'{k}_Voltage', 0.0) for k, _ in atx_channels]):
+        for (key_pfx, label), val in zip(mb_channels, 
+                                        [sd.get(f'{k}_Voltage', 0.0) for k, _ in mb_channels]):
             stat = stats.get(uid, f'{key_pfx}_Voltage')
             # Use appropriate voltage max based on rail type
             if key_pfx == 'ATX3V':

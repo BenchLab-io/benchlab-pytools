@@ -18,7 +18,7 @@ MIN_TERMINAL_ROWS = 35
 MIN_TERMINAL_COLS = 100
 
 # Tab configuration
-TAB_NAMES = ["Fleet", "Device", "System", "ATX", "12VHPWR", "Voltage", "Temperature", "Fans"]
+TAB_NAMES = ["Fleet", "Device", "System", "Motherboard", "12VHPWR", "Voltage", "Temperature", "Fans"]
 
 # Statistics display width
 STAT_COLUMN_WIDTH = 10
@@ -129,7 +129,7 @@ class Channels:
     ]
     
     # Rail channels for ORIGINAL variant (11 power sensors total, 7 shown in System tab)
-    # Note: ORIGINAL also has ATX3V, ATX5V, ATX5VSB, ATX12V which are shown in ATX tab
+    # Note: ORIGINAL also has ATX3V, ATX5V, ATX5VSB, ATX12V which are shown in Motherboard tab
     RAIL_CHANNELS_ORIGINAL = [
         ('EPS1', 'EPS_1'),
         ('EPS2', 'EPS_2'),
@@ -152,8 +152,8 @@ class Channels:
         ('HPWR2', '12V_HPWR_2'),
     ]
     
-    # ATX rail channels (shown in ATX tab) - same for both variants
-    ATX_RAIL_CHANNELS = [
+    # Motherboard rail channels (shown in Motherboard tab) - same for both variants
+    MB_RAIL_CHANNELS = [
         ('ATX3V', 'ATX 3.3V'),
         ('ATX5V', 'ATX 5V'),
         ('ATX5VSB', 'ATX 5VSB'),
@@ -318,8 +318,8 @@ HELP_TEXT = [
     "  Summary: SYS/CPU/GPU/MB power",
     "  Power / Current / Voltage per rail",
     "",
-    "ATX tab (3)",
-    "  ATX rails: 3.3V, 5V, 5VSB, 12V",
+    "Motherboard tab (3)",
+    "  Motherboard rails: 3.3V, 5V, 5VSB, 12V",
     "  Power / Current / Voltage per rail",
     "",
     "Voltage tab (5)",
