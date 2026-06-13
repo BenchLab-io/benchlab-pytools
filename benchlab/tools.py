@@ -22,6 +22,15 @@ logger = logging.getLogger("benchlab.launcher")
 # ──────────────────────────────────────────────────────────────
 
 CONSUMER_TOOLS = {
+    "config": {
+        "name": "Config Tool",
+        "description": "Import/export device configuration",
+        "flag": "-config",
+        "module": "benchlab.config.config_tool",
+        "function": "main",
+        "requirements": "requirements.txt",
+        "supported_sources": ["direct", "named_pipe"],
+    },
     "csv_log": {
         "name": "CSV Logger",
         "description": "Log device telemetry to CSV files",

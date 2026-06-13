@@ -207,40 +207,46 @@ def step2_multi_tool() -> None:
 # Step 3 – Source Selection & Launch
 # ──────────────────────────────────────────────────────────────
 
-def _build_source_menu(is_multi: bool) -> dict:
+def _build_source_menu(is_multi: bool, supported_sources: Optional[List[str]] = None) -> dict:
     """Build the source selection menu.
 
+    Args:
+        is_multi: Whether multiple tools are being launched
+        supported_sources: Optional list of source types to include (e.g., ["direct", "named_pipe"])
+                          If None, all sources are shown.
+
     Returns a dict mapping menu key → (label, source_type).
-    All sources are always listed. OS-unsupported ones get a note.
+    All sources are always listed unless filtered by supported_sources.
+    OS-unsupported ones get a note.
     """
     is_windows = sys.platform.startswith("win")
     os_name = "Windows" if is_windows else ("macOS" if sys.platform == "darwin" else "Linux")
 
-    sources = {}
-    key = 1
-
+    # Build all possible sources
+    all_sources = []
+    
     if not is_multi:
-        sources[str(key)] = ("Direct (serial port)", "direct")
-        key += 1
-
-    sources[str(key)] = ("FastAPI server (Python)", "fastapi")
-    key += 1
-
-    sources[str(key)] = ("FastAPI server (custom URL)", "fastapi_custom")
-    key += 1
-
-    sources[str(key)] = ("MQTT (Python, experimental)", "mqtt")
-    key += 1
-
-    sources[str(key)] = ("MQTT (custom)", "mqtt_custom")
-    key += 1
-
+        all_sources.append(("Direct (serial port)", "direct"))
+    
+    all_sources.append(("FastAPI server (Python)", "fastapi"))
+    all_sources.append(("FastAPI server (custom URL)", "fastapi_custom"))
+    all_sources.append(("MQTT (Python, experimental)", "mqtt"))
+    all_sources.append(("MQTT (custom)", "mqtt_custom"))
+    
     pipe_note = "" if is_windows else f"  (not available on {os_name})"
-    sources[str(key)] = (f"BenchLab service - named pipe{pipe_note}", "named_pipe")
-    key += 1
-
-    sources[str(key)] = (f"BenchLab service - HTTP API (port {SERVICE_HTTP_DEFAULT_PORT})", "service_http")
-
+    all_sources.append((f"BenchLab service - named pipe{pipe_note}", "named_pipe"))
+    all_sources.append((f"BenchLab service - HTTP API (port {SERVICE_HTTP_DEFAULT_PORT})", "service_http"))
+    
+    # Filter by supported_sources if provided
+    if supported_sources is not None:
+        all_sources = [(label, src_type) for label, src_type in all_sources 
+                       if src_type in supported_sources]
+    
+    # Build numbered menu
+    sources = {}
+    for key, (label, src_type) in enumerate(all_sources, 1):
+        sources[str(key)] = (label, src_type)
+    
     return sources
 
 
@@ -259,7 +265,14 @@ def step3_select_source(tool_ids: List[str], tool_names: List[str]) -> None:
 
     print()
 
-    sources = _build_source_menu(is_multi)
+    # Get supported sources for single tool (if specified)
+    supported_sources = None
+    if not is_multi and len(tool_ids) == 1:
+        tool_info = CONSUMER_TOOLS.get(tool_ids[0])
+        if tool_info:
+            supported_sources = tool_info.get("supported_sources")
+
+    sources = _build_source_menu(is_multi, supported_sources)
 
     for key, (label, _) in sorted(sources.items()):
         print(f"  {key}. {label}")

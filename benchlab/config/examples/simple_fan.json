@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "description": "Simple fan control - Set all fans to 50% fixed speed",
+  "devices": [
+    {
+      "selector": {
+        "type": "any",
+        "value": null
+      },
+      "fanProfiles": [
+        {
+          "profileId": 0,
+          "fans": [
+            {
+              "fanId": 0,
+              "FanMode": 1,
+              "TempSource": 0,
+              "Temp": [300, 600],
+              "Duty": [30, 80],
+              "RampStep": 5,
+              "FixedDuty": 50,
+              "MinDuty": 20,
+              "MaxDuty": 100,
+              "FanStop": 0
+            }
+          ]
+        }
+      ],
+      "saveToFlash": true
+    }
+  ]
+}

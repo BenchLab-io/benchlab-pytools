@@ -32,6 +32,8 @@ def get_parser() -> argparse.ArgumentParser:
         description="BENCHLAB PyTools v2 - Device Telemetry Suite"
     )
 
+    parser.add_argument("-config", action="store_true",
+                        help="Device configuration import/export tool")
     parser.add_argument("-fastapi", action="store_true",
                         help="Launch FastAPI telemetry API server")
     parser.add_argument("-graph", action="store_true",
@@ -191,10 +193,15 @@ def _run_with_source(args, import_path: str, func_name: str, call_fn, tool_label
 def launch_mode() -> None:
     """Parse CLI arguments and dispatch to the appropriate mode."""
     parser = get_parser()
-    args = parser.parse_args()
+    
+    # Check if -config is in args - if so, use parse_known_args to allow config tool args through
+    if '-config' in sys.argv:
+        args, unknown = parser.parse_known_args()
+    else:
+        args = parser.parse_args()
 
     no_flags = not any([
-        args.fastapi, args.graph, args.hwinfo, args.link, args.logfleet,
+        args.config, args.fastapi, args.graph, args.hwinfo, args.link, args.logfleet,
         args.mqtt, args.tui, args.vu, args.vuconfig,
         args.wigidash, args.profile,
     ])
@@ -229,7 +236,17 @@ def launch_mode() -> None:
         return
 
     # ── Individual tool flags ─────────────────────────────────
-    if args.fastapi:
+    if args.config:
+        # Config tool handles its own argument parsing
+        # Remove -config from sys.argv so config tool can parse remaining args
+        try:
+            sys.argv.remove('-config')
+            from benchlab.config.config_tool import main as config_main
+            sys.exit(config_main())
+        except ModuleNotFoundError:
+            print("Config tool module not available in this build.")
+    
+    elif args.fastapi:
         try:
             from benchlab.restapi.telemetry_api import run_server
             run_server()
