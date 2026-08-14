@@ -52,12 +52,6 @@ From the main BENCHLAB launcher:
 python benchlab.py -graph
 ```
 
-Or run directly:
-
-```
-python -m benchlab.graph.app
-```
-
 ### Main GUI
 
 - **Device Selection**: Select a device from the combo box.

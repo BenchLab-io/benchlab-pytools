@@ -207,7 +207,8 @@ class GraphApp:
                 y_data.clear()
                 user_data["x_data"].clear()
                 user_data["y_data"].clear()
-                self.session_stats = {"min": None, "max": None, "avg": None, "count": 0}
+                self.session_stats = {"min": None, "max": None, "avg": None, "count": 0,
+                                       "history": deque(maxlen=1000)}
                 current_sensor = self.selected_sensor
                 current_device = self.selected_device
 
@@ -238,20 +239,19 @@ class GraphApp:
                                         min_y - margin, max_y + margin)
 
                 s = self.session_stats
-                if dpg.does_item_exist("graph_min"):
-                    dpg.set_value("graph_min",
-                                  f"Min: {s['min']:.2f}" if s["min"] is not None else "Min: --")
-                if dpg.does_item_exist("graph_max"):
-                    dpg.set_value("graph_max",
-                                  f"Max: {s['max']:.2f}" if s["max"] is not None else "Max: --")
-                if dpg.does_item_exist("graph_avg"):
-                    dpg.set_value("graph_avg",
-                                  f"Avg: {s['avg']:.2f}" if s["avg"] is not None else "Avg: --")
+                min_text = f"Min: {s['min']:.2f}" if s["min"] is not None else "Min: --"
+                max_text = f"Max: {s['max']:.2f}" if s["max"] is not None else "Max: --"
+                avg_text = f"Avg: {s['avg']:.2f}" if s["avg"] is not None else "Avg: --"
+                for tag, text in (("graph_min", min_text), ("graph_min_float", min_text),
+                                   ("graph_max", max_text), ("graph_max_float", max_text),
+                                   ("graph_avg", avg_text), ("graph_avg_float", avg_text)):
+                    if dpg.does_item_exist(tag):
+                        dpg.set_value(tag, text)
 
             time.sleep(self.graph_update_interval)
 
     def _update_session_stats(self, value):
-        if "history" not in self.session_stats:
+        if not isinstance(self.session_stats.get("history"), deque):
             self.session_stats["history"] = deque(maxlen=1000)
         self.session_stats["history"].append(value)
         s = self.session_stats
