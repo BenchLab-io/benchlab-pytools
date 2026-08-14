@@ -532,7 +532,7 @@ class TUICore:
         self._draw_section(row, 2, "Summary")
         row += 1
         
-        sum_vals = [sd.get(k, 0.0) for k, _ in Config.Channels.POWER_SUMMARY]
+        sum_vals = [sd.get(k, 0.0) or 0.0 for k, _ in Config.Channels.POWER_SUMMARY]
         max_sum = (Config.BarScales.POWER_MAX or 
                   max(Config.BarScales.POWER_AUTO_FLOOR, max(sum_vals) * 1.2))
         
@@ -547,7 +547,7 @@ class TUICore:
         self._draw_section(row, 2, "Power Telemetry")  
         row += 1
         
-        pwr_vals = [sd.get(f'{k}_Power', 0.0) for k, _ in rail_channels]
+        pwr_vals = [sd.get(f'{k}_Power', 0.0) or 0.0 for k, _ in rail_channels]
         max_pwr = (Config.BarScales.POWER_MAX or 
                   max(Config.BarScales.POWER_AUTO_FLOOR, max(pwr_vals) * 1.2))
         
@@ -562,7 +562,7 @@ class TUICore:
         self._draw_section(row, 2, "Current Telemetry")
         row += 1
         
-        cur_vals = [sd.get(f'{k}_Current', 0.0) for k, _ in rail_channels]
+        cur_vals = [sd.get(f'{k}_Current', 0.0) or 0.0 for k, _ in rail_channels]
         max_cur = (Config.BarScales.CURRENT_MAX or 
                   max(Config.BarScales.CURRENT_AUTO_FLOOR, max(cur_vals) * 1.2))
         
@@ -577,8 +577,8 @@ class TUICore:
         self._draw_section(row, 2, "Voltage Telemetry")
         row += 1
         
-        for (key_pfx, label), val in zip(rail_channels, 
-                                       [sd.get(f'{k}_Voltage', 0.0) for k, _ in rail_channels]):
+        for (key_pfx, label), val in zip(rail_channels,
+                                       [sd.get(f'{k}_Voltage', 0.0) or 0.0 for k, _ in rail_channels]):
             stat = stats.get(uid, f'{key_pfx}_Voltage')
             self._draw_bar(row, 4, label, val, 'V', Config.BarScales.RAIL_VOLTAGE_MAX,
                          curses.color_pair(Config.COLOR_PAIRS['voltage']), stat=stat, decimals=2)
@@ -602,7 +602,7 @@ class TUICore:
         self._draw_section(row, 2, "Power")
         row += 1
         
-        mb_pwr_vals = [sd.get(f'{k}_Power', 0.0) for k, _ in mb_channels]
+        mb_pwr_vals = [sd.get(f'{k}_Power', 0.0) or 0.0 for k, _ in mb_channels]
         max_mb_pwr = (Config.BarScales.POWER_MAX or 
                       max(Config.BarScales.POWER_AUTO_FLOOR, max(mb_pwr_vals) * 1.2))
         
@@ -617,7 +617,7 @@ class TUICore:
         self._draw_section(row, 2, "Current")
         row += 1
         
-        mb_cur_vals = [sd.get(f'{k}_Current', 0.0) for k, _ in mb_channels]
+        mb_cur_vals = [sd.get(f'{k}_Current', 0.0) or 0.0 for k, _ in mb_channels]
         max_mb_cur = (Config.BarScales.CURRENT_MAX or 
                       max(Config.BarScales.CURRENT_AUTO_FLOOR, max(mb_cur_vals) * 1.2))
         
@@ -632,8 +632,8 @@ class TUICore:
         self._draw_section(row, 2, "Voltage")
         row += 1
         
-        for (key_pfx, label), val in zip(mb_channels, 
-                                        [sd.get(f'{k}_Voltage', 0.0) for k, _ in mb_channels]):
+        for (key_pfx, label), val in zip(mb_channels,
+                                        [sd.get(f'{k}_Voltage', 0.0) or 0.0 for k, _ in mb_channels]):
             stat = stats.get(uid, f'{key_pfx}_Voltage')
             # Use appropriate voltage max based on rail type
             if key_pfx == 'ATX3V':
