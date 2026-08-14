@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pathlib import Path
 
-from benchlab_pycore.core import read_sensors, read_device, read_uid, translate_sensor_struct
+from benchlab_pycore.core import read_sensors, read_device, translate_sensor_struct
 from benchlab.core import BENCHLAB_ORIGINAL_PRODUCT_ID, BENCHLAB_BL2_PRODUCT_ID
 # benchlab_pycore.core.serial_io has no connection-opening helper; use the
 # local wrapper instead (see benchlab.core.shared_serial).
@@ -54,7 +54,7 @@ class Config:
         if cls.SCAN_INTERVAL < 1:
             raise ValueError("SCAN_INTERVAL must be at least 1 second")
 
-# --- Logger setup --- (FIX #1: moved above Config.validate() so logger exists if validation fails)
+# --- Logger setup ---
 logger = logging.getLogger("benchlab.restapi")
 logger.setLevel(getattr(logging, Config.LOG_LEVEL.upper(), logging.INFO))
 if not logger.handlers:
@@ -82,8 +82,6 @@ devices_data = {}      # { uid: { "port": str, "latest": dict, "history": deque,
 clients = {}           # { uid: set([WebSocket, ...]) }
 main_loop = None       # Will store main asyncio loop
 shutdown_event = threading.Event()  # Graceful shutdown flag
-device_connections = {}  # { uid: serial.Serial } - Track active connections
-connection_locks = {}    # { uid: threading.Lock } - Prevent duplicate connections
 device_threads = {}    # { uid: threading.Thread } - Track device reader threads
 scan_lock = threading.Lock()  # Prevent concurrent scans
 data_lock = threading.Lock()  # Protect concurrent access to devices_data
@@ -138,7 +136,7 @@ def device_scanner_loop():
     
     logger.info("Device scanner stopped")
 
-# --- Lifespan (FIX #7: replaces deprecated @app.on_event) ---
+# --- Lifespan ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -180,7 +178,7 @@ async def lifespan(app: FastAPI):
 
             t = threading.Thread(target=read_device_loop, args=(port, uid), daemon=True)
             t.start()
-            device_threads[uid] = t  # FIX #5: store thread so start_device_thread won't duplicate it
+            device_threads[uid] = t  # store thread so start_device_thread won't duplicate it
 
             # Register device in the DeviceRegistry so tools can discover it
             registry = DeviceRegistry.get_instance()
@@ -216,8 +214,7 @@ async def lifespan(app: FastAPI):
 # --- FastAPI app ---
 app = FastAPI(title="Benchlab Multi-Device Telemetry API", lifespan=lifespan)
 
-# FIX #2: CORSMiddleware is now imported (from fastapi.middleware.cors above)
-# Qual-2.3 fix: CORS configurable via environment variable
+# CORS origins configurable via environment variable.
 # Default to "*" for local dev, but can restrict to known origins in production
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",") if os.getenv("CORS_ORIGINS") else ["*"]
 # Wildcard origin + credentials is an invalid combination per the CORS spec
@@ -443,26 +440,6 @@ def find_benchlab_devices():
     """
     return _discover_devices()
 
-def read_device_info_from_port(port):
-    """Read device info from a specific port with error handling."""
-    uid, fw = "?", "?"
-    try:
-        ser = open_serial_connection(port)
-        if ser:
-            info = read_device(ser) or {}
-            fw = info.get("FwVersion", "?")
-            uid_read = read_uid(ser)
-            if uid_read:
-                uid = uid_read
-            ser.close()
-            logger.info("Found device on %s: UID=%s, FW=%s", port, uid, fw)
-            return {"port": port, "uid": uid, "fw": fw}
-        else:
-            logger.warning("Could not open serial port %s", port)
-    except Exception as e:
-        logger.debug("Failed to read device on %s: %s", port, e)
-    return None
-
 # --- API endpoints ---
 @app.get("/devices")
 def list_devices():
@@ -561,7 +538,7 @@ async def stream_device(uid: str, ws: WebSocket):
         pass
     finally:
         with data_lock:
-            clients[uid].discard(ws)  # FIX #6: use discard instead of remove to avoid KeyError
+            clients[uid].discard(ws)
             client_count = len(clients[uid])
         logger.info("[%s] Client disconnected (%d total)", uid, client_count)
 
@@ -575,7 +552,7 @@ def health_check():
     """Basic health check endpoint for monitoring."""
     return {
         "status": "healthy",
-        "platform": sys.platform,  # FIX #3: sys is now imported
+        "platform": sys.platform,
         "timestamp": datetime.now().isoformat(),
         "connected_devices": len(devices_data),
         "total_clients": sum(len(clients.get(uid, [])) for uid in devices_data)
@@ -596,7 +573,7 @@ def get_status():
 
     return {
         "server_status": "running",
-        "platform": sys.platform,  # FIX #3: sys is now imported
+        "platform": sys.platform,
         "timestamp": datetime.now().isoformat(),
         "devices": device_status,
         "total_devices": len(devices_data),
@@ -607,7 +584,7 @@ def get_status():
 def get_device_status(uid: str):
     """Get detailed status for a specific device."""
     if uid not in devices_data:
-        raise HTTPException(status_code=404, detail=f"Device {uid} not found")  # FIX #4: HTTPException now imported
+        raise HTTPException(status_code=404, detail=f"Device {uid} not found")
 
     data = devices_data[uid]
     return {
@@ -660,7 +637,7 @@ def scan_for_devices():
     """Scan for new BenchLab devices and start telemetry for newly discovered ones.
 
     This endpoint allows runtime device discovery without restarting the server.
-    Only devices with BenchLab hardware ID (VID:PID=0483:5740) will be opened.
+    Only devices matching a known BenchLab product ID (ORIGINAL or BL2) will be opened.
     """
     with scan_lock:
         logger.info("Manual device scan triggered...")
@@ -712,7 +689,7 @@ def scan_for_devices():
 async def global_exception_handler(request, exc):
     """Global exception handler for unhandled errors."""
     logger.error(f"Unhandled exception: {exc}")
-    return JSONResponse(  # FIX #4: JSONResponse now imported
+    return JSONResponse(
         status_code=500,
         content={"error": "Internal server error", "message": str(exc)}
     )
