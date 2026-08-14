@@ -179,27 +179,28 @@ def test_help_modal_renders_without_stomping_main_refresh():
     were two independent immediate refreshes, the plain stdscr.refresh()
     always ran last and wiped out the modal, making it flicker/disappear
     on every ~100ms render tick instead of staying legible. Fixed by using
-    noutrefresh() on both windows plus a single curses.doupdate() so they
-    composite into one physical update.
+    noutrefresh() on both windows plus a single curses.doupdate() — with
+    stdscr staged *before* the help window, since doupdate() composites in
+    staging order and staging stdscr last would paint over the modal (a
+    second regression this test also caught).
 
     This test can't visually assert flicker, but it exercises the full
     render() path with the modal open across several ticks and confirms
     no exception is raised and the modal window is left in a composited
     (not directly-refreshed) state.
+
+    Uses an explicit height/width (via _render_help_modal directly rather
+    than the full render() path) so this doesn't depend on the host/CI
+    console actually being >= Config.MIN_TERMINAL_ROWS/COLS — render()
+    early-returns without creating the help window at all below that size.
     """
     from benchlab.tui.tui_core import TUICore
 
     def _run(stdscr):
         core = TUICore(stdscr, version="test")
         core.show_help_modal = True
-        snapshot = _snapshot()
         for _ in range(3):  # simulate several render ticks with the modal open
-            core.render(
-                snapshot=snapshot,
-                stats=ChannelStats(),
-                fleet_devices=[],
-                refresh_interval=1.0,
-            )
+            core._render_help_modal(height=40, width=110)
         assert core._help_win is not None
 
     try:
