@@ -833,8 +833,8 @@ class TUICore:
         
         # Fan rows
         for i in range(1, num_fans + 1):
-            duty = sd.get(f'Fan{i}_Duty', 0)
-            rpm = sd.get(f'Fan{i}_RPM', 0)
+            duty = sd.get(f'Fan{i}_Duty', 0) or 0
+            rpm = sd.get(f'Fan{i}_RPM', 0) or 0
             enabled = True  # Assume enabled since we can't get status from dict
             
             rpm_key = f'Fan{i}_RPM'
@@ -866,7 +866,7 @@ class TUICore:
                 pass
         
         # External fan
-        ext_duty = sd.get('FanExtDuty', 0)
+        ext_duty = sd.get('FanExtDuty', 0) or 0
         ext_bar = max(0, min(20, int(ext_duty / 5)))
         ext_row = 8 + num_fans + 1
         
@@ -886,7 +886,7 @@ class TUICore:
         
         # Active count
         if num_fans > 0:
-            active_count = sum(1 for i in range(1, num_fans+1) if (sd.get(f'Fan{i}_RPM', 0) > 0))
+            active_count = sum(1 for i in range(1, num_fans+1) if (sd.get(f'Fan{i}_RPM', 0) or 0) > 0)
             try:
                 self.stdscr.addstr(ext_row + 2, cols['NAME']+2,
                                  f"Active: {active_count}/{num_fans} fans running",
