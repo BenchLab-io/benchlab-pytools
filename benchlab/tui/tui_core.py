@@ -364,6 +364,7 @@ class TUICore:
         
         try:
             self.stdscr.addstr(6, cols['SEL'], f"{'':2}", hdr_attr)
+            self.stdscr.addstr(6, cols['MODEL'], f"{'Model':<{widths['MODEL']}}", hdr_attr)
             self.stdscr.addstr(6, cols['PORT'], f"{'Port':<{widths['PORT']}}", hdr_attr)
             self.stdscr.addstr(6, cols['FW'], f"{'Firmware':<{widths['FW']}}", hdr_attr)
             self.stdscr.addstr(6, cols['UID'], f"{'UID':<{widths['UID']}}", hdr_attr)
@@ -381,6 +382,11 @@ class TUICore:
             firmware = dev.get('firmware', 0)
             dev_uid = dev.get('uid', 'Unknown')
             is_busy = dev_uid == "BUSY"
+
+            variant = dev.get('variant')
+            if variant is None and dev.get('ProductId') is not None:
+                variant = 'BL2' if dev.get('ProductId') == 0x11 else 'ORIGINAL'
+            model_str = 'BL2' if variant == 'BL2' else ('BL1' if variant else '?')
             
             cursor = "->" if i == self.fleet_index else "  "
             is_active = connected_uid is not None and dev_uid == connected_uid
@@ -402,6 +408,7 @@ class TUICore:
             row = 8 + i
             try:
                 self.stdscr.addstr(row, cols['SEL'], cursor, row_color)
+                self.stdscr.addstr(row, cols['MODEL'], f"{model_str:<{widths['MODEL']}}", row_color)
                 self.stdscr.addstr(row, cols['PORT'], f"{port:<{widths['PORT']}}", row_color)
                 
                 if is_busy:
@@ -469,14 +476,21 @@ class TUICore:
                     return "0x??"
 
             vendor_str = _hex_str(device_info.get('VendorId', 0))
-            product_str = _hex_str(device_info.get('ProductId', 0))
+            product_id = device_info.get('ProductId', 0)
+            product_str = _hex_str(product_id)
             fw_str = _hex_str(device_info.get('FwVersion', 0))
 
+            variant = device_info.get('variant')
+            if variant is None:
+                variant = 'BL2' if product_id == 0x11 else 'ORIGINAL'
+            model_str = "BENCHLAB 2 (BL2)" if variant == 'BL2' else "BENCHLAB 1 (Original)"
+
             self._draw_section(9, 2, "Device")
-            self.stdscr.addstr(10, 4, f"{'Vendor ID':<22} {vendor_str}")
-            self.stdscr.addstr(11, 4, f"{'Product ID':<22} {product_str}")
-            self.stdscr.addstr(12, 4, f"{'Device UID':<22} {uid or 'N/A'}")
-            self.stdscr.addstr(13, 4, f"{'Firmware Version':<22} {fw_str}")
+            self.stdscr.addstr(10, 4, f"{'Model':<22} {model_str}")
+            self.stdscr.addstr(11, 4, f"{'Vendor ID':<22} {vendor_str}")
+            self.stdscr.addstr(12, 4, f"{'Product ID':<22} {product_str}")
+            self.stdscr.addstr(13, 4, f"{'Device UID':<22} {uid or 'N/A'}")
+            self.stdscr.addstr(14, 4, f"{'Firmware Version':<22} {fw_str}")
             
             # Configuration (only show if we have sensor_struct - direct mode)
             sensor_struct = snapshot.get('sensor_struct')

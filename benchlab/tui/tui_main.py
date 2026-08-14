@@ -85,6 +85,8 @@ def convert_fleet_format(devices_dict: Dict[str, Dict[str, Any]]) -> List[Dict[s
             'uid': uid,
             'port': device_info.get('port', 'unknown'),
             'firmware': device_info.get('firmware', device_info.get('FwVersion', 0)),
+            'variant': device_info.get('variant'),
+            'ProductId': device_info.get('ProductId'),
         })
     return sorted(fleet, key=lambda d: d["port"])
 

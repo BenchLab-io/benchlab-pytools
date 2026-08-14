@@ -270,14 +270,16 @@ class Layout:
     # Fleet tab column positions and widths
     FLEET_COLS = {
         'SEL': 2,               # Selection cursor column
-        'PORT': 5,              # Port name column
-        'FW': 25,               # Firmware column
-        'UID': 38,              # UID column
-        'STATUS': 66,           # Status column
-        'ACTIVE': 80,           # Active indicator column
+        'MODEL': 5,             # Model (BL1/BL2) column
+        'PORT': 11,             # Port name column
+        'FW': 31,               # Firmware column
+        'UID': 44,              # UID column
+        'STATUS': 72,           # Status column
+        'ACTIVE': 86,           # Active indicator column
     }
-    
+
     FLEET_WIDTHS = {
+        'MODEL': 5,             # Model width ("BL1"/"BL2")
         'PORT': 18,             # Port name width
         'FW': 11,               # Firmware width ("0x" + 8 hex digits)
         'UID': 26,              # UID width
