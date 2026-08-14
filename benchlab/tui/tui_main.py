@@ -85,6 +85,8 @@ def convert_fleet_format(devices_dict: Dict[str, Dict[str, Any]]) -> List[Dict[s
             'uid': uid,
             'port': device_info.get('port', 'unknown'),
             'firmware': device_info.get('firmware', device_info.get('FwVersion', 0)),
+            'variant': device_info.get('variant'),
+            'ProductId': device_info.get('ProductId'),
         })
     return sorted(fleet, key=lambda d: d["port"])
 
@@ -176,10 +178,6 @@ class TUIApplication:
 
             except curses.error:
                 pass
-            
-            # Force screen update to overwrite any stray console output from pycore
-            stdscr.refresh()
-            curses.doupdate()
 
     def _handle_action(self, action: Dict[str, Any]) -> bool:
         action_type = action.get('type', 'none')
@@ -295,7 +293,24 @@ class TUIApplication:
                 })
         except Exception as e:
             logger.error(f"Error during local fleet scan: {e}")
-        
+
+        # discover_devices() probes each port with a fresh serial connection,
+        # which fails (and is silently dropped) for the port our own active
+        # connection already holds exclusively. Fall back to the connected
+        # device's own info so it doesn't vanish from the fleet list while
+        # we're connected to it.
+        if self.datasource_manager.is_connected():
+            uid = self.datasource_manager.get_selected_uid()
+            if uid and not any(d["uid"] == uid for d in fleet):
+                snapshot = self.datasource_manager.snapshot()
+                device_info = snapshot.get('device_info') or {}
+                fleet.append({
+                    "port": snapshot.get("port") or "Unknown",
+                    "firmware": device_info.get("FwVersion", "?"),
+                    "uid": uid,
+                    "variant": device_info.get("variant", "ORIGINAL"),
+                })
+
         return sorted(fleet, key=lambda d: d["port"])
 
     def cleanup(self):

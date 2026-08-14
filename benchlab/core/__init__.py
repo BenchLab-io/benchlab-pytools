@@ -11,7 +11,7 @@ Provides:
 
 PyCore v0.3.0 Multi-Variant Support:
 - ORIGINAL (0x10): 11 power sensors, 4 temperature sensors
-- CFE (0x11): 23 power sensors, 8 temperature sensors
+- BL2 / BENCHLAB 2 (0x11): 23 power sensors, 8 temperature sensors
 """
 
 import logging
@@ -36,19 +36,19 @@ logger = logging.getLogger("benchlab.core")
 
 # PyCore variant constants for tools that need to detect device capabilities
 # Import from pycore to make them easily accessible to tools.
-# PyCore >=0.4.1 renamed BENCHLAB_CFE_PRODUCT_ID to BENCHLAB_BL2_PRODUCT_ID;
-# BENCHLAB_CFE_PRODUCT_ID is kept here as a local alias so the rest of this
-# repo doesn't need to rename all at once.
+# PyCore >=0.4.1 renamed BENCHLAB_CFE_PRODUCT_ID to BENCHLAB_BL2_PRODUCT_ID
+# (the "CFE" SKU is now marketed as BENCHLAB 2); fall back to the old name
+# for older pycore installs.
 try:
     from benchlab_pycore.core import BENCHLAB_ORIGINAL_PRODUCT_ID
     try:
-        from benchlab_pycore.core import BENCHLAB_BL2_PRODUCT_ID as BENCHLAB_CFE_PRODUCT_ID
+        from benchlab_pycore.core import BENCHLAB_BL2_PRODUCT_ID
     except ImportError:
-        from benchlab_pycore.core import BENCHLAB_CFE_PRODUCT_ID
+        from benchlab_pycore.core import BENCHLAB_CFE_PRODUCT_ID as BENCHLAB_BL2_PRODUCT_ID
 except ImportError:
     logger.warning("benchlab_pycore not installed; using fallback product ID constants")
     BENCHLAB_ORIGINAL_PRODUCT_ID = 0x10
-    BENCHLAB_CFE_PRODUCT_ID = 0x11
+    BENCHLAB_BL2_PRODUCT_ID = 0x11
 
 __version__ = "2.0.0"
 
@@ -72,5 +72,5 @@ __all__ = [
     "ManagedProcess",
     # PyCore v0.3.0 variant constants
     "BENCHLAB_ORIGINAL_PRODUCT_ID",
-    "BENCHLAB_CFE_PRODUCT_ID",
+    "BENCHLAB_BL2_PRODUCT_ID",
 ]

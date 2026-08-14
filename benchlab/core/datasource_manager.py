@@ -209,7 +209,6 @@ class DataSourceManager:
                 'uid': self._selected_uid,
                 'device_info': selected_device,
                 'sensor_data': selected_telemetry,
-                'sensor_struct': None,
                 'connection_time': self._connection_time,
                 'last_error': self._last_error,
                 'all_devices': self._devices.copy(),

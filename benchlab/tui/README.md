@@ -41,9 +41,9 @@ The BENCHLAB Enhanced TUI provides a modern, feature-rich curses-based interface
 
 ### **Device Tab (Tab 1)**
 - Connection details and port information
-- Device identification (Vendor ID, Product ID, UID)
+- Device identification (Model, Vendor ID, Product ID, UID)
 - Firmware version display
-- Configuration status (Fan Switch, RGB Switch, RGB Ext)
+- TUI refresh interval
 
 ### **Power Tab (Tab 2)**
 - Real-time power consumption with progress bars

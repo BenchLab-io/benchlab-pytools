@@ -16,7 +16,7 @@ from pathlib import Path
 
 from benchlab_pycore.core import read_sensors, read_device, read_uid, translate_sensor_struct
 from benchlab_pycore.core.serial_io import get_fleet_info
-from benchlab.core import BENCHLAB_ORIGINAL_PRODUCT_ID, BENCHLAB_CFE_PRODUCT_ID
+from benchlab.core import BENCHLAB_ORIGINAL_PRODUCT_ID, BENCHLAB_BL2_PRODUCT_ID
 # benchlab_pycore.core.serial_io has no connection-opening helper; use the
 # local wrapper instead (see benchlab.core.shared_serial).
 from benchlab.core.shared_serial import open_serial_connection
@@ -161,7 +161,7 @@ async def lifespan(app: FastAPI):
                     device_info = read_device(ser) or {}
                     # Determine device variant from ProductId
                     product_id = device_info.get('ProductId', BENCHLAB_ORIGINAL_PRODUCT_ID)
-                    device_info['variant'] = 'CFE' if product_id == BENCHLAB_CFE_PRODUCT_ID else 'ORIGINAL'
+                    device_info['variant'] = 'BL2' if product_id == BENCHLAB_BL2_PRODUCT_ID else 'ORIGINAL'
                     ser.close()
             except Exception as e:
                 logger.debug("Could not read device info for %s: %s", uid, e)
@@ -250,7 +250,7 @@ RECONNECT_DELAY = 2.0  # seconds
 def create_empty_telemetry():
     """Create an empty telemetry dict with all values set to 0.
     
-    Includes all possible sensors for both ORIGINAL and CFE variants.
+    Includes all possible sensors for both ORIGINAL and BL2 variants.
     This ensures that applications always see the same set of keys regardless
     of device variant or connection status.
     """
@@ -260,10 +260,10 @@ def create_empty_telemetry():
         # Temperature
         "Chip_Temp": 0, "Ambient_Temp": 0.0, "Humidity": 0.0,
         "TS_1": 0.0, "TS_2": 0.0, "TS_3": 0.0, "TS_4": 0.0,
-        # CFE-specific temperature sensors
+        # BL2-specific temperature sensors
         "TS_HPWR1_IN": 0.0, "TS_HPWR1_OUT": 0.0,
         "TS_HPWR2_IN": 0.0, "TS_HPWR2_OUT": 0.0,
-        # Power rails (ORIGINAL + CFE)
+        # Power rails (ORIGINAL + BL2)
         "EPS1_Voltage": 0.0, "EPS1_Current": 0.0, "EPS1_Power": 0.0,
         "EPS2_Voltage": 0.0, "EPS2_Current": 0.0, "EPS2_Power": 0.0,
         "ATX3V_Voltage": 0.0, "ATX3V_Current": 0.0, "ATX3V_Power": 0.0,
@@ -275,7 +275,7 @@ def create_empty_telemetry():
         "PCIE3_Voltage": 0.0, "PCIE3_Current": 0.0, "PCIE3_Power": 0.0,
         "HPWR1_Voltage": 0.0, "HPWR1_Current": 0.0, "HPWR1_Power": 0.0,
         "HPWR2_Voltage": 0.0, "HPWR2_Current": 0.0, "HPWR2_Power": 0.0,
-        # CFE-specific HPWR sense lines
+        # BL2-specific HPWR sense lines
         "HPWR1_W1_Voltage": 0.0, "HPWR1_W1_Current": 0.0, "HPWR1_W1_Power": 0.0,
         "HPWR1_W2_Voltage": 0.0, "HPWR1_W2_Current": 0.0, "HPWR1_W2_Power": 0.0,
         "HPWR1_W3_Voltage": 0.0, "HPWR1_W3_Current": 0.0, "HPWR1_W3_Power": 0.0,
@@ -344,7 +344,7 @@ def read_device_loop(port, uid):
                     if device_info:
                         product_id = device_info.get('ProductId', BENCHLAB_ORIGINAL_PRODUCT_ID)
                         logger.info("[%s] Device variant: %s (ProductId=0x%02X)", uid, 
-                                   'CFE' if product_id == BENCHLAB_CFE_PRODUCT_ID else 'ORIGINAL',
+                                   'BL2' if product_id == BENCHLAB_BL2_PRODUCT_ID else 'ORIGINAL',
                                    product_id)
                 except Exception:
                     pass
@@ -628,7 +628,7 @@ def start_device_thread(port, uid):
             info = read_device(ser) or {}
             # Determine device variant from ProductId
             product_id = info.get('ProductId', BENCHLAB_ORIGINAL_PRODUCT_ID)
-            info['variant'] = 'CFE' if product_id == BENCHLAB_CFE_PRODUCT_ID else 'ORIGINAL'
+            info['variant'] = 'BL2' if product_id == BENCHLAB_BL2_PRODUCT_ID else 'ORIGINAL'
             devices_data[uid]["info"] = info
             ser.close()
     except Exception as e:

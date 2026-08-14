@@ -133,9 +133,9 @@ class DirectDataSource(DataSource):
                 BENCHLAB_ORIGINAL_PRODUCT_ID,
             )
             try:
-                from benchlab_pycore.core import BENCHLAB_BL2_PRODUCT_ID as BENCHLAB_CFE_PRODUCT_ID
+                from benchlab_pycore.core import BENCHLAB_BL2_PRODUCT_ID
             except ImportError:
-                from benchlab_pycore.core import BENCHLAB_CFE_PRODUCT_ID
+                from benchlab_pycore.core import BENCHLAB_CFE_PRODUCT_ID as BENCHLAB_BL2_PRODUCT_ID
             # benchlab_pycore.core.serial_io has no connection-opening helper;
             # use the local wrapper instead (see benchlab.core.shared_serial).
             from benchlab.core.shared_serial import open_serial_connection
@@ -147,7 +147,7 @@ class DirectDataSource(DataSource):
                 'get_benchlab_ports': get_benchlab_ports,
                 'open_serial_connection': open_serial_connection,
                 'BENCHLAB_ORIGINAL_PRODUCT_ID': BENCHLAB_ORIGINAL_PRODUCT_ID,
-                'BENCHLAB_CFE_PRODUCT_ID': BENCHLAB_CFE_PRODUCT_ID,
+                'BENCHLAB_BL2_PRODUCT_ID': BENCHLAB_BL2_PRODUCT_ID,
             }
         except ImportError as e:
             logger.error(f"Failed to import benchlab_pycore: {e}")
@@ -180,7 +180,7 @@ class DirectDataSource(DataSource):
                 info = self._pycore['read_device'](ser) or {}
                 if uid:
                     product_id = info.get('ProductId', self._pycore['BENCHLAB_ORIGINAL_PRODUCT_ID'])
-                    variant = "CFE" if product_id == self._pycore['BENCHLAB_CFE_PRODUCT_ID'] else "ORIGINAL"
+                    variant = "BL2" if product_id == self._pycore['BENCHLAB_BL2_PRODUCT_ID'] else "ORIGINAL"
                     self._device_info[uid] = {**info, 'uid': uid, 'port': port, 'variant': variant}
                     self._ser_handles[uid] = ser
                     logger.info(f"Connected to device {uid} on {port}")
@@ -250,7 +250,7 @@ class DirectDataSource(DataSource):
                         ser.close()
                         if uid:
                             product_id = info.get('ProductId', self._pycore['BENCHLAB_ORIGINAL_PRODUCT_ID'])
-                            variant = "CFE" if product_id == self._pycore['BENCHLAB_CFE_PRODUCT_ID'] else "ORIGINAL"
+                            variant = "BL2" if product_id == self._pycore['BENCHLAB_BL2_PRODUCT_ID'] else "ORIGINAL"
                             devices.append({
                                 'uid': uid,
                                 'port': port,

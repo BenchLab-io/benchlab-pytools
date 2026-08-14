@@ -98,11 +98,21 @@ class TUICore:
         self._render_current_tab(snapshot, stats, fleet_devices, refresh_interval, height, width)
         self._render_status_bar(snapshot, height, width)
         
+        # Stage stdscr first so the help window (staged after, if shown)
+        # composites on top of it — doupdate() paints windows in the order
+        # they were noutrefresh()'d, so staging order here is significant.
+        self.stdscr.noutrefresh()
+
         # Show help modal if requested
         if self.show_help_modal:
             self._render_help_modal(height, width)
-        
-        self.stdscr.refresh()
+
+        # Composite stdscr + help window (if any) into one physical update.
+        # Using stdscr.refresh() here (or in the caller) would immediately
+        # repaint the physical screen from stdscr alone, wiping out the
+        # help window's own refresh() and causing it to flicker/vanish on
+        # every render tick.
+        curses.doupdate()
         return True
 
     def handle_key(self, key: str) -> Dict[str, Any]:
@@ -250,7 +260,7 @@ class TUICore:
             elif self.current_tab == 6:
                 self._render_temperature_tab(snapshot, stats)
             elif self.current_tab == 7:
-                self._render_fans_tab(snapshot, stats)
+                self._render_fans_tab(snapshot, stats, height, width)
         except curses.error:
             pass
 
@@ -289,7 +299,6 @@ class TUICore:
             
             # Draw status bar
             self.stdscr.addstr(height - 1, 2, left_msg[:width - len(right_msg) - 4], left_col)
-            self.stdscr.addstr(height - 1, width - len(right_msg) - 2, right_msg, con_col)
             self.stdscr.addstr(height - 1, right_col, right_msg[:width - right_col - 1], con_col)
             
         except curses.error:
@@ -325,7 +334,11 @@ class TUICore:
             for i, line in enumerate(Config.HELP_TEXT):
                 if i < h - 2:
                     win.addstr(i + 1, 2, line[:w - 4])
-            win.refresh()
+            # noutrefresh (not refresh) — this window is composited together
+            # with stdscr via a single curses.doupdate() call in render(),
+            # so it doesn't get immediately overwritten by stdscr's own
+            # refresh on the next tick.
+            win.noutrefresh()
         except curses.error:
             pass
 
@@ -365,6 +378,7 @@ class TUICore:
         
         try:
             self.stdscr.addstr(6, cols['SEL'], f"{'':2}", hdr_attr)
+            self.stdscr.addstr(6, cols['MODEL'], f"{'Model':<{widths['MODEL']}}", hdr_attr)
             self.stdscr.addstr(6, cols['PORT'], f"{'Port':<{widths['PORT']}}", hdr_attr)
             self.stdscr.addstr(6, cols['FW'], f"{'Firmware':<{widths['FW']}}", hdr_attr)
             self.stdscr.addstr(6, cols['UID'], f"{'UID':<{widths['UID']}}", hdr_attr)
@@ -382,6 +396,11 @@ class TUICore:
             firmware = dev.get('firmware', 0)
             dev_uid = dev.get('uid', 'Unknown')
             is_busy = dev_uid == "BUSY"
+
+            variant = dev.get('variant')
+            if variant is None and dev.get('ProductId') is not None:
+                variant = 'BL2' if dev.get('ProductId') == 0x11 else 'ORIGINAL'
+            model_str = 'BL2' if variant == 'BL2' else ('BL1' if variant else '?')
             
             cursor = "->" if i == self.fleet_index else "  "
             is_active = connected_uid is not None and dev_uid == connected_uid
@@ -403,6 +422,7 @@ class TUICore:
             row = 8 + i
             try:
                 self.stdscr.addstr(row, cols['SEL'], cursor, row_color)
+                self.stdscr.addstr(row, cols['MODEL'], f"{model_str:<{widths['MODEL']}}", row_color)
                 self.stdscr.addstr(row, cols['PORT'], f"{port:<{widths['PORT']}}", row_color)
                 
                 if is_busy:
@@ -463,30 +483,32 @@ class TUICore:
                 return
             
             # Device information
-            vendor_id = device_info.get('VendorId', 0)
+            def _hex_str(value):
+                try:
+                    return f"0x{int(value):02X}"
+                except (TypeError, ValueError):
+                    return "0x??"
+
+            vendor_str = _hex_str(device_info.get('VendorId', 0))
             product_id = device_info.get('ProductId', 0)
-            fw_version = device_info.get('FwVersion', 0)
-            
+            product_str = _hex_str(product_id)
+            fw_str = _hex_str(device_info.get('FwVersion', 0))
+
+            variant = device_info.get('variant')
+            if variant is None:
+                variant = 'BL2' if product_id == 0x11 else 'ORIGINAL'
+            model_str = "BENCHLAB 2 (BL2)" if variant == 'BL2' else "BENCHLAB 1 (Original)"
+
             self._draw_section(9, 2, "Device")
-            self.stdscr.addstr(10, 4, f"{'Vendor ID':<22} 0x{vendor_id:02X}")
-            self.stdscr.addstr(11, 4, f"{'Product ID':<22} 0x{product_id:02X}")
-            self.stdscr.addstr(12, 4, f"{'Device UID':<22} {uid or 'N/A'}")
-            self.stdscr.addstr(13, 4, f"{'Firmware Version':<22} 0x{fw_version:02X}")
-            
-            # Configuration (only show if we have sensor_struct - direct mode)
-            sensor_struct = snapshot.get('sensor_struct')
-            if sensor_struct:
-                self._draw_section(15, 2, "Configuration")
-                fan_sw = getattr(sensor_struct, 'FanSwitchStatus', 'Unknown')
-                rgb_sw = getattr(sensor_struct, 'RGBSwitchStatus', 'Unknown')  
-                rgb_ex = getattr(sensor_struct, 'RGBExtStatus', 'Unknown')
-                self.stdscr.addstr(16, 4, f"{'Fan Switch':<22} {fan_sw}")
-                self.stdscr.addstr(17, 4, f"{'RGB Switch':<22} {rgb_sw}")
-                self.stdscr.addstr(18, 4, f"{'RGB Ext':<22} {rgb_ex}")
-                
-                self._draw_section(20, 2, "TUI")
-                self.stdscr.addstr(21, 4, f"{'Refresh Interval':<22} {refresh_interval} s")
-            
+            self.stdscr.addstr(10, 4, f"{'Model':<22} {model_str}")
+            self.stdscr.addstr(11, 4, f"{'Vendor ID':<22} {vendor_str}")
+            self.stdscr.addstr(12, 4, f"{'Product ID':<22} {product_str}")
+            self.stdscr.addstr(13, 4, f"{'Device UID':<22} {uid or 'N/A'}")
+            self.stdscr.addstr(14, 4, f"{'Firmware Version':<22} {fw_str}")
+
+            self._draw_section(16, 2, "TUI")
+            self.stdscr.addstr(17, 4, f"{'Refresh Interval':<22} {refresh_interval} s")
+
         except curses.error:
             pass
 
@@ -503,7 +525,7 @@ class TUICore:
         # Detect device variant from device info (Product ID) or sensor data
         product_id = device_info.get('ProductId')
         if product_id is not None:
-            variant = 'CFE' if product_id == 0x11 else 'ORIGINAL'
+            variant = 'BL2' if product_id == 0x11 else 'ORIGINAL'
         else:
             variant = Config.Channels.detect_variant(sd)
         rail_channels = Config.Channels.get_rail_channels(variant)
@@ -513,7 +535,7 @@ class TUICore:
         self._draw_section(row, 2, "Summary")
         row += 1
         
-        sum_vals = [sd.get(k, 0.0) for k, _ in Config.Channels.POWER_SUMMARY]
+        sum_vals = [sd.get(k, 0.0) or 0.0 for k, _ in Config.Channels.POWER_SUMMARY]
         max_sum = (Config.BarScales.POWER_MAX or 
                   max(Config.BarScales.POWER_AUTO_FLOOR, max(sum_vals) * 1.2))
         
@@ -528,7 +550,7 @@ class TUICore:
         self._draw_section(row, 2, "Power Telemetry")  
         row += 1
         
-        pwr_vals = [sd.get(f'{k}_Power', 0.0) for k, _ in rail_channels]
+        pwr_vals = [sd.get(f'{k}_Power', 0.0) or 0.0 for k, _ in rail_channels]
         max_pwr = (Config.BarScales.POWER_MAX or 
                   max(Config.BarScales.POWER_AUTO_FLOOR, max(pwr_vals) * 1.2))
         
@@ -543,7 +565,7 @@ class TUICore:
         self._draw_section(row, 2, "Current Telemetry")
         row += 1
         
-        cur_vals = [sd.get(f'{k}_Current', 0.0) for k, _ in rail_channels]
+        cur_vals = [sd.get(f'{k}_Current', 0.0) or 0.0 for k, _ in rail_channels]
         max_cur = (Config.BarScales.CURRENT_MAX or 
                   max(Config.BarScales.CURRENT_AUTO_FLOOR, max(cur_vals) * 1.2))
         
@@ -558,8 +580,8 @@ class TUICore:
         self._draw_section(row, 2, "Voltage Telemetry")
         row += 1
         
-        for (key_pfx, label), val in zip(rail_channels, 
-                                       [sd.get(f'{k}_Voltage', 0.0) for k, _ in rail_channels]):
+        for (key_pfx, label), val in zip(rail_channels,
+                                       [sd.get(f'{k}_Voltage', 0.0) or 0.0 for k, _ in rail_channels]):
             stat = stats.get(uid, f'{key_pfx}_Voltage')
             self._draw_bar(row, 4, label, val, 'V', Config.BarScales.RAIL_VOLTAGE_MAX,
                          curses.color_pair(Config.COLOR_PAIRS['voltage']), stat=stat, decimals=2)
@@ -583,7 +605,7 @@ class TUICore:
         self._draw_section(row, 2, "Power")
         row += 1
         
-        mb_pwr_vals = [sd.get(f'{k}_Power', 0.0) for k, _ in mb_channels]
+        mb_pwr_vals = [sd.get(f'{k}_Power', 0.0) or 0.0 for k, _ in mb_channels]
         max_mb_pwr = (Config.BarScales.POWER_MAX or 
                       max(Config.BarScales.POWER_AUTO_FLOOR, max(mb_pwr_vals) * 1.2))
         
@@ -598,7 +620,7 @@ class TUICore:
         self._draw_section(row, 2, "Current")
         row += 1
         
-        mb_cur_vals = [sd.get(f'{k}_Current', 0.0) for k, _ in mb_channels]
+        mb_cur_vals = [sd.get(f'{k}_Current', 0.0) or 0.0 for k, _ in mb_channels]
         max_mb_cur = (Config.BarScales.CURRENT_MAX or 
                       max(Config.BarScales.CURRENT_AUTO_FLOOR, max(mb_cur_vals) * 1.2))
         
@@ -613,8 +635,8 @@ class TUICore:
         self._draw_section(row, 2, "Voltage")
         row += 1
         
-        for (key_pfx, label), val in zip(mb_channels, 
-                                        [sd.get(f'{k}_Voltage', 0.0) for k, _ in mb_channels]):
+        for (key_pfx, label), val in zip(mb_channels,
+                                        [sd.get(f'{k}_Voltage', 0.0) or 0.0 for k, _ in mb_channels]):
             stat = stats.get(uid, f'{key_pfx}_Voltage')
             # Use appropriate voltage max based on rail type
             if key_pfx == 'ATX3V':
@@ -628,7 +650,7 @@ class TUICore:
             row += 1
 
     def _render_hpwr_tab(self, snapshot: Dict[str, Any], stats: ChannelStats):
-        """Render 12VHPWR tab (CFE-specific HPWR_Wx sense lines)."""
+        """Render 12VHPWR tab (BL2-specific HPWR_Wx sense lines)."""
         if not snapshot.get('connected') or not snapshot.get('sensor_data'):
             self._draw_disconnected("12VHPWR")
             return
@@ -640,24 +662,24 @@ class TUICore:
         # Detect device variant from device info (Product ID)
         product_id = device_info.get('ProductId')
         if product_id is not None:
-            variant = 'CFE' if product_id == 0x11 else 'ORIGINAL'
+            variant = 'BL2' if product_id == 0x11 else 'ORIGINAL'
         else:
             variant = Config.Channels.detect_variant(sd)
         
-        # Only show HPWR_Wx sensors for CFE devices
-        if variant != 'CFE':
+        # Only show HPWR_Wx sensors for BL2 (BENCHLAB 2) devices
+        if variant != 'BL2':
             self._draw_section(4, 2, "12VHPWR Sense Lines")
             try:
-                self.stdscr.addstr(6, 4, "HPWR_Wx sense lines are only available on CFE devices.",
+                self.stdscr.addstr(6, 4, "HPWR_Wx sense lines are only available on BENCHLAB 2 devices.",
                                  curses.color_pair(Config.COLOR_PAIRS['info']))
             except curses.error:
                 pass
             return
-        
+
         hpwr_channels = Config.Channels.HPWR_SENSE_CHANNELS
-        
+
         row = 4
-        self._draw_section(row, 2, "12VHPWR Sense Lines (CFE)")
+        self._draw_section(row, 2, "12VHPWR Sense Lines (BENCHLAB 2)")
         row += 1
         
         # Power readings
@@ -741,7 +763,7 @@ class TUICore:
         # Detect device variant from device info (Product ID) or sensor data
         product_id = device_info.get('ProductId')
         if product_id is not None:
-            variant = 'CFE' if product_id == 0x11 else 'ORIGINAL'
+            variant = 'BL2' if product_id == 0x11 else 'ORIGINAL'
         else:
             variant = Config.Channels.detect_variant(sd)
         temp_sensors = Config.Channels.get_temperature_sensors(variant)
@@ -777,9 +799,9 @@ class TUICore:
         
         row += 1
         
-        # Sensors - dynamic based on variant (only show variant label for CFE)
-        if variant == 'CFE':
-            self._draw_section(row, 2, f"Sensors (CFE)")
+        # Sensors - dynamic based on variant (only show variant label for BL2)
+        if variant == 'BL2':
+            self._draw_section(row, 2, "Sensors (BENCHLAB 2)")
         else:
             self._draw_section(row, 2, "Sensors")
         row += 1
@@ -797,39 +819,52 @@ class TUICore:
                          curses.color_pair(s_color), stat=stat, decimals=1)
             row += 1
 
-    def _render_fans_tab(self, snapshot: Dict[str, Any], stats: ChannelStats):
+    def _render_fans_tab(self, snapshot: Dict[str, Any], stats: ChannelStats,
+                        height: int = None, width: int = None):
         """Render Fans tab."""
         self._draw_section(4, 2, "Fan Control & Monitoring")
-        
+
         if not snapshot.get('connected') or not snapshot.get('sensor_data'):
             self._draw_disconnected("Fan")
             return
-        
+
         sd = snapshot['sensor_data']
         uid = snapshot.get('uid', '')
-        
+
         # Column positions
         cols = Config.Layout.FAN_COLS
         rpm_max_str = str(Config.BarScales.FAN_RPM_MAX)
         hdr = (f"{'Fan':<8} {'Duty':>5}%  {'RPM':>6}  {'On':<3}  "
                f"{'Bar ('+rpm_max_str+' RPM)':<20}  Stats")
-        
+
         try:
-            self.stdscr.addstr(5, cols['NAME']+2, hdr, 
+            self.stdscr.addstr(5, cols['NAME']+2, hdr,
                              curses.A_UNDERLINE | curses.color_pair(Config.COLOR_PAIRS['default']))
         except curses.error:
             pass
-        
-        # Determine number of fans
-        num_fans = sum(1 for k in sd if k.startswith('Fan') and k.endswith('_Duty') 
-               and k[3:-5].isdigit())
-        while sd.get(f'Fan{num_fans+1}_Duty') is not None:
-            num_fans += 1
-        
+
+        # Determine number of fans (highest fan index present, so non-contiguous
+        # numbering like Fan1/Fan3 with no Fan2 still renders all known fans)
+        fan_indices = [int(k[3:-5]) for k in sd
+                       if k.startswith('Fan') and k.endswith('_Duty') and k[3:-5].isdigit()]
+        num_fans = max(fan_indices, default=0)
+
+        # Reserve rows for the external fan row, active-count line, and the
+        # status bar so fan rows never silently overlap them on a short
+        # terminal. Each fan takes one row starting at row 7.
+        FAN_ROWS_START = 7
+        RESERVED_TRAILING_ROWS = 4  # ext fan row + active count + status bar + margin
+        if height is not None:
+            max_visible_fans = max(0, height - RESERVED_TRAILING_ROWS - FAN_ROWS_START)
+        else:
+            max_visible_fans = num_fans
+        visible_fans = min(num_fans, max_visible_fans)
+        hidden_fans = num_fans - visible_fans
+
         # Fan rows
-        for i in range(1, num_fans + 1):
-            duty = sd.get(f'Fan{i}_Duty', 0)
-            rpm = sd.get(f'Fan{i}_RPM', 0)
+        for i in range(1, visible_fans + 1):
+            duty = sd.get(f'Fan{i}_Duty', 0) or 0
+            rpm = sd.get(f'Fan{i}_RPM', 0) or 0
             enabled = True  # Assume enabled since we can't get status from dict
             
             rpm_key = f'Fan{i}_RPM'
@@ -860,11 +895,20 @@ class TUICore:
             except curses.error:
                 pass
         
+        # Note if some fans were hidden to avoid overlapping the status bar
+        if hidden_fans > 0:
+            try:
+                self.stdscr.addstr(FAN_ROWS_START + visible_fans, cols['NAME']+2,
+                                 f"... +{hidden_fans} more fan(s) — resize terminal to see all",
+                                 curses.color_pair(Config.COLOR_PAIRS['caution']))
+            except curses.error:
+                pass
+
         # External fan
-        ext_duty = sd.get('FanExtDuty', 0)
+        ext_duty = sd.get('FanExtDuty', 0) or 0
         ext_bar = max(0, min(20, int(ext_duty / 5)))
-        ext_row = 8 + num_fans + 1
-        
+        ext_row = 8 + visible_fans + 1 + (1 if hidden_fans > 0 else 0)
+
         try:
             self.stdscr.addstr(ext_row, cols['NAME']+2, "Ext Fan ", 
                              curses.color_pair(Config.COLOR_PAIRS['highlight']))
@@ -881,7 +925,7 @@ class TUICore:
         
         # Active count
         if num_fans > 0:
-            active_count = sum(1 for i in range(1, num_fans+1) if (sd.get(f'Fan{i}_RPM', 0) > 0))
+            active_count = sum(1 for i in range(1, num_fans+1) if (sd.get(f'Fan{i}_RPM', 0) or 0) > 0)
             try:
                 self.stdscr.addstr(ext_row + 2, cols['NAME']+2,
                                  f"Active: {active_count}/{num_fans} fans running",
@@ -919,7 +963,7 @@ class TUICore:
             bar_width = Config.Layout.BAR_WIDTH
         
         filled = 0
-        if max_val > 0 and 0 <= value <= max_val:
+        if max_val > 0:
             filled = max(0, min(bar_width, int((value / max_val) * bar_width)))
         
         val_str = f"{value:>7.{decimals}f}"

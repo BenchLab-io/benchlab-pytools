@@ -295,7 +295,7 @@ def device_thread(device, cfg, publish_interval=1):
 
             # Read sensors and publish telemetry
             try:
-                # Get product_id for correct sensor interpretation (CFE vs ORIGINAL)
+                # Get product_id for correct sensor interpretation (BL2 vs ORIGINAL)
                 product_id = BENCHLAB_ORIGINAL_PRODUCT_ID
                 try:
                     device_info = read_device(ser)

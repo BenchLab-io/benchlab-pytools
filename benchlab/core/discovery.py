@@ -19,13 +19,14 @@ from benchlab_pycore.core import read_device, read_uid
 # local wrapper instead (see benchlab.core.shared_serial for why).
 from benchlab.core.shared_serial import open_serial_connection
 
-# PyCore >=0.4.1 renamed BENCHLAB_CFE_PRODUCT_ID to BENCHLAB_BL2_PRODUCT_ID.
-# Imported directly from pycore (not from benchlab.core) to avoid a circular
-# import, since benchlab.core imports this module via datasource_manager.
+# PyCore >=0.4.1 renamed BENCHLAB_CFE_PRODUCT_ID to BENCHLAB_BL2_PRODUCT_ID
+# (the "CFE" SKU is now marketed as BENCHLAB 2). Imported directly from
+# pycore (not from benchlab.core) to avoid a circular import, since
+# benchlab.core imports this module via datasource_manager.
 try:
-    from benchlab_pycore.core import BENCHLAB_BL2_PRODUCT_ID as BENCHLAB_CFE_PRODUCT_ID
+    from benchlab_pycore.core import BENCHLAB_BL2_PRODUCT_ID
 except ImportError:
-    from benchlab_pycore.core import BENCHLAB_CFE_PRODUCT_ID
+    from benchlab_pycore.core import BENCHLAB_CFE_PRODUCT_ID as BENCHLAB_BL2_PRODUCT_ID
 from benchlab_pycore.core import BENCHLAB_ORIGINAL_PRODUCT_ID
 
 # Re‑use the retry decorator defined in ``benchlab.core.retry``
@@ -65,7 +66,7 @@ def discover_devices() -> List[Dict[str, Any]]:
             if uid:
                 fw = info.get("FwVersion", "?")
                 product_id = info.get("ProductId", BENCHLAB_ORIGINAL_PRODUCT_ID)
-                variant = "CFE" if product_id == BENCHLAB_CFE_PRODUCT_ID else "ORIGINAL"
+                variant = "BL2" if product_id == BENCHLAB_BL2_PRODUCT_ID else "ORIGINAL"
                 devices.append({"uid": uid, "port": port, "fw": fw, "variant": variant})
                 logger.info("Discovered BenchLab device UID=%s on %s (FW=%s, Variant=%s)", uid, port, fw, variant)
             else:
