@@ -293,7 +293,24 @@ class TUIApplication:
                 })
         except Exception as e:
             logger.error(f"Error during local fleet scan: {e}")
-        
+
+        # discover_devices() probes each port with a fresh serial connection,
+        # which fails (and is silently dropped) for the port our own active
+        # connection already holds exclusively. Fall back to the connected
+        # device's own info so it doesn't vanish from the fleet list while
+        # we're connected to it.
+        if self.datasource_manager.is_connected():
+            uid = self.datasource_manager.get_selected_uid()
+            if uid and not any(d["uid"] == uid for d in fleet):
+                snapshot = self.datasource_manager.snapshot()
+                device_info = snapshot.get('device_info') or {}
+                fleet.append({
+                    "port": snapshot.get("port") or "Unknown",
+                    "firmware": device_info.get("FwVersion", "?"),
+                    "uid": uid,
+                    "variant": device_info.get("variant", "ORIGINAL"),
+                })
+
         return sorted(fleet, key=lambda d: d["port"])
 
     def cleanup(self):

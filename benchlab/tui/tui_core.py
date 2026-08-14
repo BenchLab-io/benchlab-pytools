@@ -98,6 +98,11 @@ class TUICore:
         self._render_current_tab(snapshot, stats, fleet_devices, refresh_interval, height, width)
         self._render_status_bar(snapshot, height, width)
         
+        # Stage stdscr first so the help window (staged after, if shown)
+        # composites on top of it — doupdate() paints windows in the order
+        # they were noutrefresh()'d, so staging order here is significant.
+        self.stdscr.noutrefresh()
+
         # Show help modal if requested
         if self.show_help_modal:
             self._render_help_modal(height, width)
@@ -107,7 +112,6 @@ class TUICore:
         # repaint the physical screen from stdscr alone, wiping out the
         # help window's own refresh() and causing it to flicker/vanish on
         # every render tick.
-        self.stdscr.noutrefresh()
         curses.doupdate()
         return True
 

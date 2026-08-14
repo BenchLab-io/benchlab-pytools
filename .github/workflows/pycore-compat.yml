@@ -37,7 +37,7 @@ jobs:
           benchlab.tui.config, benchlab.tui.tui_core, benchlab.tui.tui_main"
 
       - name: Run non-hardware tests
-        run: pytest tests/test_data_sources.py tests/test_csv_log.py benchlab/restapi/test_server.py benchlab/tui/test_tui_core.py -q -k "not mqtt"
+        run: pytest tests/test_data_sources.py tests/test_csv_log.py benchlab/restapi/test_server.py benchlab/tui/test_tui_core.py benchlab/tui/test_tui_main.py -q -k "not mqtt"
 
   latest:
     name: Import + test against latest pycore (PyPI)
@@ -65,4 +65,4 @@ jobs:
           benchlab.tui.config, benchlab.tui.tui_core, benchlab.tui.tui_main"
 
       - name: Run non-hardware tests
-        run: pytest tests/test_data_sources.py tests/test_csv_log.py benchlab/restapi/test_server.py benchlab/tui/test_tui_core.py -q -k "not mqtt"
+        run: pytest tests/test_data_sources.py tests/test_csv_log.py benchlab/restapi/test_server.py benchlab/tui/test_tui_core.py benchlab/tui/test_tui_main.py -q -k "not mqtt"
