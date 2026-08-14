@@ -189,18 +189,23 @@ def test_help_modal_renders_without_stomping_main_refresh():
     no exception is raised and the modal window is left in a composited
     (not directly-refreshed) state.
 
-    Uses an explicit height/width (via _render_help_modal directly rather
-    than the full render() path) so this doesn't depend on the host/CI
-    console actually being >= Config.MIN_TERMINAL_ROWS/COLS — render()
-    early-returns without creating the help window at all below that size.
+    Calls _render_help_modal directly (bypassing render()'s size gate) so
+    this doesn't depend on Config.MIN_TERMINAL_ROWS/COLS specifically, but
+    curses.newwin() itself still validates against the *real* physical
+    console size (independent of whatever height/width we pass in), so a
+    genuinely tiny CI console is a legitimate skip rather than a bug here.
     """
     from benchlab.tui.tui_core import TUICore
 
     def _run(stdscr):
+        real_height, real_width = stdscr.getmaxyx()
+        if real_height < 10 or real_width < 20:
+            pytest.skip(f"console too small for a help modal: {real_width}x{real_height}")
+
         core = TUICore(stdscr, version="test")
         core.show_help_modal = True
         for _ in range(3):  # simulate several render ticks with the modal open
-            core._render_help_modal(height=40, width=110)
+            core._render_help_modal(height=real_height, width=real_width)
         assert core._help_win is not None
 
     try:
