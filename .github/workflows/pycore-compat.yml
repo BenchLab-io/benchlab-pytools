@@ -33,10 +33,11 @@ jobs:
           python -c "import benchlab.core, benchlab.core.discovery,
           benchlab.core.datasource, benchlab.core.shared_serial,
           benchlab.config.config_client, benchlab.restapi.telemetry_api,
-          benchlab.mqtt.mqtt_publisher, benchlab.hwinfo.hwinfo_export"
+          benchlab.mqtt.mqtt_publisher, benchlab.hwinfo.hwinfo_export,
+          benchlab.tui.config, benchlab.tui.tui_core, benchlab.tui.tui_main"
 
       - name: Run non-hardware tests
-        run: pytest tests/test_data_sources.py tests/test_csv_log.py benchlab/restapi/test_server.py -q -k "not mqtt"
+        run: pytest tests/test_data_sources.py tests/test_csv_log.py benchlab/restapi/test_server.py benchlab/tui/test_tui_core.py -q -k "not mqtt"
 
   latest:
     name: Import + test against latest pycore (PyPI)
@@ -60,7 +61,8 @@ jobs:
           python -c "import benchlab.core, benchlab.core.discovery,
           benchlab.core.datasource, benchlab.core.shared_serial,
           benchlab.config.config_client, benchlab.restapi.telemetry_api,
-          benchlab.mqtt.mqtt_publisher, benchlab.hwinfo.hwinfo_export"
+          benchlab.mqtt.mqtt_publisher, benchlab.hwinfo.hwinfo_export,
+          benchlab.tui.config, benchlab.tui.tui_core, benchlab.tui.tui_main"
 
       - name: Run non-hardware tests
-        run: pytest tests/test_data_sources.py tests/test_csv_log.py benchlab/restapi/test_server.py -q -k "not mqtt"
+        run: pytest tests/test_data_sources.py tests/test_csv_log.py benchlab/restapi/test_server.py benchlab/tui/test_tui_core.py -q -k "not mqtt"

@@ -1,0 +1,140 @@
+"""Non-hardware regression tests for TUICore rendering.
+
+These tests exercise TUICore's render methods with mocked snapshots —
+no physical BenchLab device or datasource is required. They exist to catch
+the class of bug that slipped through undetected until it crashed on live
+hardware: sensor_data dicts where a key is *present* with an explicit
+``None`` value (as opposed to being absent), which ``dict.get(key, default)``
+does not coerce to the default. See issue #13 for the incident this guards
+against (FanExtDuty: None crashing benchlab.py -tui --source direct).
+
+Requires a real curses screen via ``curses.wrapper`` (windows-curses on
+Windows), which works headlessly in CI as long as a console is attached.
+"""
+
+try:
+    import curses
+    HAS_CURSES = True
+except ImportError:
+    curses = None
+    HAS_CURSES = False
+
+import pytest
+
+from benchlab.core.statistics import ChannelStats
+
+pytestmark = pytest.mark.skipif(not HAS_CURSES, reason="curses not available in this environment")
+
+
+# A sensor_data dict where every commonly-read key is present but None,
+# mimicking a device that reports a channel key without a value.
+SENSOR_DATA_ALL_NONE = {
+    "SYS_Power": None, "CPU_Power": None, "GPU_Power": None, "MB_Power": None,
+    "EPS1_Power": None, "EPS1_Current": None, "EPS1_Voltage": None,
+    "EPS2_Power": None, "EPS2_Current": None, "EPS2_Voltage": None,
+    "PCIE1_Power": None, "PCIE1_Current": None, "PCIE1_Voltage": None,
+    "PCIE2_Power": None, "PCIE2_Current": None, "PCIE2_Voltage": None,
+    "PCIE3_Power": None, "PCIE3_Current": None, "PCIE3_Voltage": None,
+    "HPWR1_Power": None, "HPWR1_Current": None, "HPWR1_Voltage": None,
+    "HPWR2_Power": None, "HPWR2_Current": None, "HPWR2_Voltage": None,
+    "ATX3V_Power": None, "ATX3V_Current": None, "ATX3V_Voltage": None,
+    "ATX5V_Power": None, "ATX5V_Current": None, "ATX5V_Voltage": None,
+    "ATX5VSB_Power": None, "ATX5VSB_Current": None, "ATX5VSB_Voltage": None,
+    "ATX12V_Power": None, "ATX12V_Current": None, "ATX12V_Voltage": None,
+    "Vdd": None, "Vref": None,
+    "Chip_Temp": None, "Ambient_Temp": None, "Humidity": None,
+    "TS_1": None, "TS_2": None, "TS_3": None, "TS_4": None,
+    "Fan1_Duty": None, "Fan1_RPM": None,
+    "Fan2_Duty": None, "Fan2_RPM": None,
+    "FanExtDuty": None,
+    **{f"VIN_{i}": None for i in range(13)},
+}
+
+DEVICE_INFO_VALID = {"VendorId": 0x1234, "ProductId": 0x10, "FwVersion": 0x01020304}
+DEVICE_INFO_MALFORMED = {"VendorId": None, "ProductId": "bad", "FwVersion": object()}
+
+
+def _snapshot(**overrides):
+    base = {
+        "connected": True,
+        "uid": "TEST-UID-0001",
+        "port": "COM_TEST",
+        "source_type": "direct",
+        "source_desc": "Test harness",
+        "sensor_data": dict(SENSOR_DATA_ALL_NONE),
+        "device_info": dict(DEVICE_INFO_VALID),
+        "connection_time": None,
+        "sensor_struct": None,
+    }
+    base.update(overrides)
+    return base
+
+
+def _render_tab(tab_index, snapshot, fleet_devices=None):
+    """Run TUICore.render() for a single tab inside a real curses screen.
+
+    Raises whatever exception the render call raises (curses.error is the
+    only *expected/tolerated* failure mode — anything else, e.g. TypeError
+    from bad sensor data, is a real bug).
+    """
+    from benchlab.tui.tui_core import TUICore  # imported inside curses.wrapper-safe scope
+
+    def _run(stdscr):
+        core = TUICore(stdscr, version="test")
+        core.current_tab = tab_index
+        core.render(
+            snapshot=snapshot,
+            stats=ChannelStats(),
+            fleet_devices=fleet_devices or [],
+            refresh_interval=1.0,
+        )
+
+    try:
+        curses.wrapper(_run)
+    except curses.error:
+        pytest.skip("curses screen too small / unavailable in this environment")
+
+
+@pytest.mark.parametrize(
+    "tab_index",
+    range(8),
+    ids=["fleet", "device", "system", "motherboard", "hpwr", "voltage", "temperature", "fans"],
+)
+def test_render_tab_survives_none_sensor_values(tab_index):
+    """Every tab must render without raising when sensor_data values are None.
+
+    Regression test for the FanExtDuty=None crash (issue #13): dict.get(key,
+    default) only substitutes default when the key is *missing*, not when
+    it's present with value None, so downstream arithmetic/formatting must
+    defensively coerce None itself.
+    """
+    snapshot = _snapshot()
+    fleet_devices = [{"uid": "TEST-UID-0001", "port": "COM_TEST", "firmware": 0x01020304,
+                       "variant": "ORIGINAL"}]
+    _render_tab(tab_index, snapshot, fleet_devices)
+
+
+def test_device_tab_survives_malformed_device_info():
+    """Regression test: malformed device_info must not crash the Device tab.
+
+    See issue #13 — VendorId/ProductId/FwVersion formatted with f"0x{v:02X}"
+    with no type guard used to raise ValueError/TypeError uncaught.
+    """
+    snapshot = _snapshot(device_info=dict(DEVICE_INFO_MALFORMED))
+    _render_tab(1, snapshot)  # Device tab
+
+
+def test_fleet_tab_survives_disconnected_and_empty_fleet():
+    snapshot = _snapshot(connected=False, uid=None)
+    _render_tab(0, snapshot, fleet_devices=[])  # Fleet tab
+
+
+@pytest.mark.parametrize(
+    "tab_index",
+    range(8),
+    ids=["fleet", "device", "system", "motherboard", "hpwr", "voltage", "temperature", "fans"],
+)
+def test_render_tab_survives_disconnected(tab_index):
+    """All tabs must render their disconnected state without raising."""
+    snapshot = _snapshot(connected=False, sensor_data=None, uid=None)
+    _render_tab(tab_index, snapshot)
