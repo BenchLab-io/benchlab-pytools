@@ -164,7 +164,7 @@ def export_device_sensors(device_info, datasource=None):
         # Fallback: direct probe via pycore (legacy behavior)
         try:
             from benchlab_pycore.core import read_sensors
-            from benchlab_pycore.core.serial_io import open_serial_connection
+            from benchlab.core.shared_serial import open_serial_connection
             ser = open_serial_connection(port)
             if not ser:
                 logger.error("Cannot open serial port for device %s", uid)

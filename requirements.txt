@@ -3,7 +3,7 @@ packaging>=23.0,<26.0
 python-dotenv>=1.0.0,<2.0
 
 # BENCHLAB Serial Handler
-benchlab-pycore>=0.3.0
+benchlab-pycore>=0.5.1
 
 # FastAPI Data Source
 fastapi==0.111.1

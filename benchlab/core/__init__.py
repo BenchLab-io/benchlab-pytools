@@ -14,6 +14,8 @@ PyCore v0.3.0 Multi-Variant Support:
 - CFE (0x11): 23 power sensors, 8 temperature sensors
 """
 
+import logging
+
 from benchlab.core.datasource import (
     DataSource,
     DirectDataSource,
@@ -30,15 +32,21 @@ from benchlab.core.statistics import (
     create_stats_callback,
 )
 
-# PyCore v0.3.0 variant constants for tools that need to detect device capabilities
-# Import from pycore to make them easily accessible to tools
+logger = logging.getLogger("benchlab.core")
+
+# PyCore variant constants for tools that need to detect device capabilities
+# Import from pycore to make them easily accessible to tools.
+# PyCore >=0.4.1 renamed BENCHLAB_CFE_PRODUCT_ID to BENCHLAB_BL2_PRODUCT_ID;
+# BENCHLAB_CFE_PRODUCT_ID is kept here as a local alias so the rest of this
+# repo doesn't need to rename all at once.
 try:
-    from benchlab_pycore.core import (
-        BENCHLAB_ORIGINAL_PRODUCT_ID,
-        BENCHLAB_CFE_PRODUCT_ID,
-    )
+    from benchlab_pycore.core import BENCHLAB_ORIGINAL_PRODUCT_ID
+    try:
+        from benchlab_pycore.core import BENCHLAB_BL2_PRODUCT_ID as BENCHLAB_CFE_PRODUCT_ID
+    except ImportError:
+        from benchlab_pycore.core import BENCHLAB_CFE_PRODUCT_ID
 except ImportError:
-    # Fallback defaults if pycore not installed
+    logger.warning("benchlab_pycore not installed; using fallback product ID constants")
     BENCHLAB_ORIGINAL_PRODUCT_ID = 0x10
     BENCHLAB_CFE_PRODUCT_ID = 0x11
 

@@ -128,11 +128,17 @@ class DirectDataSource(DataSource):
         # Import pycore
         try:
             from benchlab_pycore.core import (
-                read_sensors, read_device, read_uid, 
+                read_sensors, read_device, read_uid,
                 translate_sensor_struct, get_benchlab_ports,
-                BENCHLAB_ORIGINAL_PRODUCT_ID, BENCHLAB_CFE_PRODUCT_ID
+                BENCHLAB_ORIGINAL_PRODUCT_ID,
             )
-            from benchlab_pycore.core.serial_io import open_serial_connection
+            try:
+                from benchlab_pycore.core import BENCHLAB_BL2_PRODUCT_ID as BENCHLAB_CFE_PRODUCT_ID
+            except ImportError:
+                from benchlab_pycore.core import BENCHLAB_CFE_PRODUCT_ID
+            # benchlab_pycore.core.serial_io has no connection-opening helper;
+            # use the local wrapper instead (see benchlab.core.shared_serial).
+            from benchlab.core.shared_serial import open_serial_connection
             self._pycore = {
                 'read_sensors': read_sensors,
                 'read_device': read_device,

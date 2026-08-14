@@ -12,9 +12,21 @@ import logging
 from typing import List, Dict, Any
 
 # benchlab-pycore helpers
-from benchlab_pycore.core import get_benchlab_ports, BENCHLAB_ORIGINAL_PRODUCT_ID, BENCHLAB_CFE_PRODUCT_ID
-from benchlab_pycore.core.serial_io import open_serial_connection
+from benchlab_pycore.core import get_benchlab_ports
 from benchlab_pycore.core import read_device, read_uid
+
+# benchlab_pycore.core.serial_io has no connection-opening helper; use the
+# local wrapper instead (see benchlab.core.shared_serial for why).
+from benchlab.core.shared_serial import open_serial_connection
+
+# PyCore >=0.4.1 renamed BENCHLAB_CFE_PRODUCT_ID to BENCHLAB_BL2_PRODUCT_ID.
+# Imported directly from pycore (not from benchlab.core) to avoid a circular
+# import, since benchlab.core imports this module via datasource_manager.
+try:
+    from benchlab_pycore.core import BENCHLAB_BL2_PRODUCT_ID as BENCHLAB_CFE_PRODUCT_ID
+except ImportError:
+    from benchlab_pycore.core import BENCHLAB_CFE_PRODUCT_ID
+from benchlab_pycore.core import BENCHLAB_ORIGINAL_PRODUCT_ID
 
 # Re‑use the retry decorator defined in ``benchlab.core.retry``
 from .retry import retry, RetryPolicy
