@@ -178,10 +178,6 @@ class TUIApplication:
 
             except curses.error:
                 pass
-            
-            # Force screen update to overwrite any stray console output from pycore
-            stdscr.refresh()
-            curses.doupdate()
 
     def _handle_action(self, action: Dict[str, Any]) -> bool:
         action_type = action.get('type', 'none')

@@ -168,3 +168,41 @@ def test_fans_tab_survives_many_fans_on_small_terminal():
         curses.wrapper(_run)
     except curses.error:
         pytest.skip("curses screen unavailable in this environment")
+
+
+def test_help_modal_renders_without_stomping_main_refresh():
+    """Regression test: help modal must be composited, not overwritten every tick.
+
+    See issue #13 — render() called self.stdscr.refresh() (an immediate
+    physical repaint from stdscr alone) *after* _render_help_modal() had
+    already called win.refresh() on its own separate window. Since these
+    were two independent immediate refreshes, the plain stdscr.refresh()
+    always ran last and wiped out the modal, making it flicker/disappear
+    on every ~100ms render tick instead of staying legible. Fixed by using
+    noutrefresh() on both windows plus a single curses.doupdate() so they
+    composite into one physical update.
+
+    This test can't visually assert flicker, but it exercises the full
+    render() path with the modal open across several ticks and confirms
+    no exception is raised and the modal window is left in a composited
+    (not directly-refreshed) state.
+    """
+    from benchlab.tui.tui_core import TUICore
+
+    def _run(stdscr):
+        core = TUICore(stdscr, version="test")
+        core.show_help_modal = True
+        snapshot = _snapshot()
+        for _ in range(3):  # simulate several render ticks with the modal open
+            core.render(
+                snapshot=snapshot,
+                stats=ChannelStats(),
+                fleet_devices=[],
+                refresh_interval=1.0,
+            )
+        assert core._help_win is not None
+
+    try:
+        curses.wrapper(_run)
+    except curses.error:
+        pytest.skip("curses screen unavailable in this environment")

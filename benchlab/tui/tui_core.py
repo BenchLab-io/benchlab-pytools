@@ -101,8 +101,14 @@ class TUICore:
         # Show help modal if requested
         if self.show_help_modal:
             self._render_help_modal(height, width)
-        
-        self.stdscr.refresh()
+
+        # Composite stdscr + help window (if any) into one physical update.
+        # Using stdscr.refresh() here (or in the caller) would immediately
+        # repaint the physical screen from stdscr alone, wiping out the
+        # help window's own refresh() and causing it to flicker/vanish on
+        # every render tick.
+        self.stdscr.noutrefresh()
+        curses.doupdate()
         return True
 
     def handle_key(self, key: str) -> Dict[str, Any]:
@@ -324,7 +330,11 @@ class TUICore:
             for i, line in enumerate(Config.HELP_TEXT):
                 if i < h - 2:
                     win.addstr(i + 1, 2, line[:w - 4])
-            win.refresh()
+            # noutrefresh (not refresh) — this window is composited together
+            # with stdscr via a single curses.doupdate() call in render(),
+            # so it doesn't get immediately overwritten by stdscr's own
+            # refresh on the next tick.
+            win.noutrefresh()
         except curses.error:
             pass
 
