@@ -250,7 +250,7 @@ class TUICore:
             elif self.current_tab == 6:
                 self._render_temperature_tab(snapshot, stats)
             elif self.current_tab == 7:
-                self._render_fans_tab(snapshot, stats)
+                self._render_fans_tab(snapshot, stats, height, width)
         except curses.error:
             pass
 
@@ -491,21 +491,10 @@ class TUICore:
             self.stdscr.addstr(12, 4, f"{'Product ID':<22} {product_str}")
             self.stdscr.addstr(13, 4, f"{'Device UID':<22} {uid or 'N/A'}")
             self.stdscr.addstr(14, 4, f"{'Firmware Version':<22} {fw_str}")
-            
-            # Configuration (only show if we have sensor_struct - direct mode)
-            sensor_struct = snapshot.get('sensor_struct')
-            if sensor_struct:
-                self._draw_section(15, 2, "Configuration")
-                fan_sw = getattr(sensor_struct, 'FanSwitchStatus', 'Unknown')
-                rgb_sw = getattr(sensor_struct, 'RGBSwitchStatus', 'Unknown')  
-                rgb_ex = getattr(sensor_struct, 'RGBExtStatus', 'Unknown')
-                self.stdscr.addstr(16, 4, f"{'Fan Switch':<22} {fan_sw}")
-                self.stdscr.addstr(17, 4, f"{'RGB Switch':<22} {rgb_sw}")
-                self.stdscr.addstr(18, 4, f"{'RGB Ext':<22} {rgb_ex}")
-                
-                self._draw_section(20, 2, "TUI")
-                self.stdscr.addstr(21, 4, f"{'Refresh Interval':<22} {refresh_interval} s")
-            
+
+            self._draw_section(16, 2, "TUI")
+            self.stdscr.addstr(17, 4, f"{'Refresh Interval':<22} {refresh_interval} s")
+
         except curses.error:
             pass
 
@@ -816,37 +805,50 @@ class TUICore:
                          curses.color_pair(s_color), stat=stat, decimals=1)
             row += 1
 
-    def _render_fans_tab(self, snapshot: Dict[str, Any], stats: ChannelStats):
+    def _render_fans_tab(self, snapshot: Dict[str, Any], stats: ChannelStats,
+                        height: int = None, width: int = None):
         """Render Fans tab."""
         self._draw_section(4, 2, "Fan Control & Monitoring")
-        
+
         if not snapshot.get('connected') or not snapshot.get('sensor_data'):
             self._draw_disconnected("Fan")
             return
-        
+
         sd = snapshot['sensor_data']
         uid = snapshot.get('uid', '')
-        
+
         # Column positions
         cols = Config.Layout.FAN_COLS
         rpm_max_str = str(Config.BarScales.FAN_RPM_MAX)
         hdr = (f"{'Fan':<8} {'Duty':>5}%  {'RPM':>6}  {'On':<3}  "
                f"{'Bar ('+rpm_max_str+' RPM)':<20}  Stats")
-        
+
         try:
-            self.stdscr.addstr(5, cols['NAME']+2, hdr, 
+            self.stdscr.addstr(5, cols['NAME']+2, hdr,
                              curses.A_UNDERLINE | curses.color_pair(Config.COLOR_PAIRS['default']))
         except curses.error:
             pass
-        
+
         # Determine number of fans (highest fan index present, so non-contiguous
         # numbering like Fan1/Fan3 with no Fan2 still renders all known fans)
         fan_indices = [int(k[3:-5]) for k in sd
                        if k.startswith('Fan') and k.endswith('_Duty') and k[3:-5].isdigit()]
         num_fans = max(fan_indices, default=0)
-        
+
+        # Reserve rows for the external fan row, active-count line, and the
+        # status bar so fan rows never silently overlap them on a short
+        # terminal. Each fan takes one row starting at row 7.
+        FAN_ROWS_START = 7
+        RESERVED_TRAILING_ROWS = 4  # ext fan row + active count + status bar + margin
+        if height is not None:
+            max_visible_fans = max(0, height - RESERVED_TRAILING_ROWS - FAN_ROWS_START)
+        else:
+            max_visible_fans = num_fans
+        visible_fans = min(num_fans, max_visible_fans)
+        hidden_fans = num_fans - visible_fans
+
         # Fan rows
-        for i in range(1, num_fans + 1):
+        for i in range(1, visible_fans + 1):
             duty = sd.get(f'Fan{i}_Duty', 0) or 0
             rpm = sd.get(f'Fan{i}_RPM', 0) or 0
             enabled = True  # Assume enabled since we can't get status from dict
@@ -879,11 +881,20 @@ class TUICore:
             except curses.error:
                 pass
         
+        # Note if some fans were hidden to avoid overlapping the status bar
+        if hidden_fans > 0:
+            try:
+                self.stdscr.addstr(FAN_ROWS_START + visible_fans, cols['NAME']+2,
+                                 f"... +{hidden_fans} more fan(s) — resize terminal to see all",
+                                 curses.color_pair(Config.COLOR_PAIRS['caution']))
+            except curses.error:
+                pass
+
         # External fan
         ext_duty = sd.get('FanExtDuty', 0) or 0
         ext_bar = max(0, min(20, int(ext_duty / 5)))
-        ext_row = 8 + num_fans + 1
-        
+        ext_row = 8 + visible_fans + 1 + (1 if hidden_fans > 0 else 0)
+
         try:
             self.stdscr.addstr(ext_row, cols['NAME']+2, "Ext Fan ", 
                              curses.color_pair(Config.COLOR_PAIRS['highlight']))

@@ -64,7 +64,6 @@ def _snapshot(**overrides):
         "sensor_data": dict(SENSOR_DATA_ALL_NONE),
         "device_info": dict(DEVICE_INFO_VALID),
         "connection_time": None,
-        "sensor_struct": None,
     }
     base.update(overrides)
     return base
@@ -138,3 +137,34 @@ def test_render_tab_survives_disconnected(tab_index):
     """All tabs must render their disconnected state without raising."""
     snapshot = _snapshot(connected=False, sensor_data=None, uid=None)
     _render_tab(tab_index, snapshot)
+
+
+def test_fans_tab_survives_many_fans_on_small_terminal():
+    """Regression test: many fan rows must not silently overrun the status bar.
+
+    See issue #13 — _render_fans_tab previously computed row positions with
+    no bounds check against terminal height, so a device reporting many fans
+    on a small terminal could overlap the status bar with no indication to
+    the user. This exercises the truncation path directly by calling
+    _render_fans_tab with an artificially small height.
+    """
+    from benchlab.tui.tui_core import TUICore
+
+    many_fan_sensor_data = dict(SENSOR_DATA_ALL_NONE)
+    for i in range(1, 21):  # far more fans than a small terminal has rows for
+        many_fan_sensor_data[f"Fan{i}_Duty"] = 50
+        many_fan_sensor_data[f"Fan{i}_RPM"] = 1200
+
+    snapshot = _snapshot(sensor_data=many_fan_sensor_data)
+
+    def _run(stdscr):
+        core = TUICore(stdscr, version="test")
+        height, width = stdscr.getmaxyx()
+        # Force a small height regardless of the actual terminal, to
+        # guarantee the truncation path is exercised.
+        core._render_fans_tab(snapshot, ChannelStats(), height=20, width=width)
+
+    try:
+        curses.wrapper(_run)
+    except curses.error:
+        pytest.skip("curses screen unavailable in this environment")
