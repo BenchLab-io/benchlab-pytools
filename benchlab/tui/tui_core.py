@@ -289,7 +289,6 @@ class TUICore:
             
             # Draw status bar
             self.stdscr.addstr(height - 1, 2, left_msg[:width - len(right_msg) - 4], left_col)
-            self.stdscr.addstr(height - 1, width - len(right_msg) - 2, right_msg, con_col)
             self.stdscr.addstr(height - 1, right_col, right_msg[:width - right_col - 1], con_col)
             
         except curses.error:
@@ -463,15 +462,21 @@ class TUICore:
                 return
             
             # Device information
-            vendor_id = device_info.get('VendorId', 0)
-            product_id = device_info.get('ProductId', 0)
-            fw_version = device_info.get('FwVersion', 0)
-            
+            def _hex_str(value):
+                try:
+                    return f"0x{int(value):02X}"
+                except (TypeError, ValueError):
+                    return "0x??"
+
+            vendor_str = _hex_str(device_info.get('VendorId', 0))
+            product_str = _hex_str(device_info.get('ProductId', 0))
+            fw_str = _hex_str(device_info.get('FwVersion', 0))
+
             self._draw_section(9, 2, "Device")
-            self.stdscr.addstr(10, 4, f"{'Vendor ID':<22} 0x{vendor_id:02X}")
-            self.stdscr.addstr(11, 4, f"{'Product ID':<22} 0x{product_id:02X}")
+            self.stdscr.addstr(10, 4, f"{'Vendor ID':<22} {vendor_str}")
+            self.stdscr.addstr(11, 4, f"{'Product ID':<22} {product_str}")
             self.stdscr.addstr(12, 4, f"{'Device UID':<22} {uid or 'N/A'}")
-            self.stdscr.addstr(13, 4, f"{'Firmware Version':<22} 0x{fw_version:02X}")
+            self.stdscr.addstr(13, 4, f"{'Firmware Version':<22} {fw_str}")
             
             # Configuration (only show if we have sensor_struct - direct mode)
             sensor_struct = snapshot.get('sensor_struct')
@@ -820,11 +825,11 @@ class TUICore:
         except curses.error:
             pass
         
-        # Determine number of fans
-        num_fans = sum(1 for k in sd if k.startswith('Fan') and k.endswith('_Duty') 
-               and k[3:-5].isdigit())
-        while sd.get(f'Fan{num_fans+1}_Duty') is not None:
-            num_fans += 1
+        # Determine number of fans (highest fan index present, so non-contiguous
+        # numbering like Fan1/Fan3 with no Fan2 still renders all known fans)
+        fan_indices = [int(k[3:-5]) for k in sd
+                       if k.startswith('Fan') and k.endswith('_Duty') and k[3:-5].isdigit()]
+        num_fans = max(fan_indices, default=0)
         
         # Fan rows
         for i in range(1, num_fans + 1):
@@ -919,7 +924,7 @@ class TUICore:
             bar_width = Config.Layout.BAR_WIDTH
         
         filled = 0
-        if max_val > 0 and 0 <= value <= max_val:
+        if max_val > 0:
             filled = max(0, min(bar_width, int((value / max_val) * bar_width)))
         
         val_str = f"{value:>7.{decimals}f}"
