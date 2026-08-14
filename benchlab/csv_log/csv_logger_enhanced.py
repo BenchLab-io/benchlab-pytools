@@ -261,10 +261,11 @@ class EnhancedCSVLogger:
         try:
             while not self._stop_event.is_set():
                 # Sleep in small chunks so Ctrl+C is responsive on Windows
-                for _ in range(int(self.config.interval / 0.1)):
+                deadline = time.monotonic() + self.config.interval
+                while time.monotonic() < deadline:
                     if self._stop_event.is_set():
                         break
-                    time.sleep(0.1)
+                    time.sleep(min(0.1, deadline - time.monotonic()))
 
                 if self._stop_event.is_set():
                     break

@@ -36,7 +36,7 @@ jobs:
           benchlab.mqtt.mqtt_publisher, benchlab.hwinfo.hwinfo_export"
 
       - name: Run non-hardware tests
-        run: pytest tests/test_data_sources.py benchlab/restapi/test_server.py -q -k "not mqtt"
+        run: pytest tests/test_data_sources.py tests/test_csv_log.py benchlab/restapi/test_server.py -q -k "not mqtt"
 
   latest:
     name: Import + test against latest pycore (PyPI)
@@ -63,4 +63,4 @@ jobs:
           benchlab.mqtt.mqtt_publisher, benchlab.hwinfo.hwinfo_export"
 
       - name: Run non-hardware tests
-        run: pytest tests/test_data_sources.py benchlab/restapi/test_server.py -q -k "not mqtt"
+        run: pytest tests/test_data_sources.py tests/test_csv_log.py benchlab/restapi/test_server.py -q -k "not mqtt"
