@@ -508,7 +508,7 @@ class TUICore:
         # Detect device variant from device info (Product ID) or sensor data
         product_id = device_info.get('ProductId')
         if product_id is not None:
-            variant = 'CFE' if product_id == 0x11 else 'ORIGINAL'
+            variant = 'BL2' if product_id == 0x11 else 'ORIGINAL'
         else:
             variant = Config.Channels.detect_variant(sd)
         rail_channels = Config.Channels.get_rail_channels(variant)
@@ -633,7 +633,7 @@ class TUICore:
             row += 1
 
     def _render_hpwr_tab(self, snapshot: Dict[str, Any], stats: ChannelStats):
-        """Render 12VHPWR tab (CFE-specific HPWR_Wx sense lines)."""
+        """Render 12VHPWR tab (BL2-specific HPWR_Wx sense lines)."""
         if not snapshot.get('connected') or not snapshot.get('sensor_data'):
             self._draw_disconnected("12VHPWR")
             return
@@ -645,24 +645,24 @@ class TUICore:
         # Detect device variant from device info (Product ID)
         product_id = device_info.get('ProductId')
         if product_id is not None:
-            variant = 'CFE' if product_id == 0x11 else 'ORIGINAL'
+            variant = 'BL2' if product_id == 0x11 else 'ORIGINAL'
         else:
             variant = Config.Channels.detect_variant(sd)
         
-        # Only show HPWR_Wx sensors for CFE devices
-        if variant != 'CFE':
+        # Only show HPWR_Wx sensors for BL2 (BENCHLAB 2) devices
+        if variant != 'BL2':
             self._draw_section(4, 2, "12VHPWR Sense Lines")
             try:
-                self.stdscr.addstr(6, 4, "HPWR_Wx sense lines are only available on CFE devices.",
+                self.stdscr.addstr(6, 4, "HPWR_Wx sense lines are only available on BENCHLAB 2 devices.",
                                  curses.color_pair(Config.COLOR_PAIRS['info']))
             except curses.error:
                 pass
             return
-        
+
         hpwr_channels = Config.Channels.HPWR_SENSE_CHANNELS
-        
+
         row = 4
-        self._draw_section(row, 2, "12VHPWR Sense Lines (CFE)")
+        self._draw_section(row, 2, "12VHPWR Sense Lines (BENCHLAB 2)")
         row += 1
         
         # Power readings
@@ -746,7 +746,7 @@ class TUICore:
         # Detect device variant from device info (Product ID) or sensor data
         product_id = device_info.get('ProductId')
         if product_id is not None:
-            variant = 'CFE' if product_id == 0x11 else 'ORIGINAL'
+            variant = 'BL2' if product_id == 0x11 else 'ORIGINAL'
         else:
             variant = Config.Channels.detect_variant(sd)
         temp_sensors = Config.Channels.get_temperature_sensors(variant)
@@ -782,9 +782,9 @@ class TUICore:
         
         row += 1
         
-        # Sensors - dynamic based on variant (only show variant label for CFE)
-        if variant == 'CFE':
-            self._draw_section(row, 2, f"Sensors (CFE)")
+        # Sensors - dynamic based on variant (only show variant label for BL2)
+        if variant == 'BL2':
+            self._draw_section(row, 2, "Sensors (BENCHLAB 2)")
         else:
             self._draw_section(row, 2, "Sensors")
         row += 1

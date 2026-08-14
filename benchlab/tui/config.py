@@ -112,8 +112,8 @@ class ThermalStatus:
 class Channels:
     """Telemetry channel definitions and groupings.
     
-    Supports both ORIGINAL and CFE device variants. Use get_* methods
-    with sensor_data dict to get variant-appropriate channel lists.
+    Supports both ORIGINAL and BL2 (BENCHLAB 2) device variants. Use get_*
+    methods with sensor_data dict to get variant-appropriate channel lists.
     """
     
     # ──────────────────────────────────────────────────────────────────
@@ -140,9 +140,9 @@ class Channels:
         ('HPWR2', '12V_HPWR_2'),
     ]
     
-    # Rail channels for CFE variant (7 main rails, same as ORIGINAL)
+    # Rail channels for BL2 (BENCHLAB 2) variant (7 main rails, same as ORIGINAL)
     # The 12 additional HPWR_Wx sense lines are shown in a separate tab
-    RAIL_CHANNELS_CFE = [
+    RAIL_CHANNELS_BL2 = [
         ('EPS1', 'EPS_1'),
         ('EPS2', 'EPS_2'),
         ('PCIE1', 'PCIE_1'),
@@ -160,7 +160,7 @@ class Channels:
         ('ATX12V', 'ATX 12V'),
     ]
     
-    # CFE-specific HPWR_Wx sense lines (shown in separate 12VHPWR tab)
+    # BL2-specific HPWR_Wx sense lines (shown in separate 12VHPWR tab)
     HPWR_SENSE_CHANNELS = [
         ('HPWR1_W1', 'HPWR1_W1'),
         ('HPWR1_W2', 'HPWR1_W2'),
@@ -188,8 +188,8 @@ class Channels:
     # Temperature sensors for ORIGINAL variant (4 sensors: TS_1 to TS_4)
     TEMPERATURE_SENSORS_ORIGINAL = [f'TS_{i}' for i in range(1, 5)]
     
-    # Temperature sensors for CFE variant (8 sensors: TS_1-4 + TS_HPWR1_IN/OUT, TS_HPWR2_IN/OUT)
-    TEMPERATURE_SENSORS_CFE = [
+    # Temperature sensors for BL2 variant (8 sensors: TS_1-4 + TS_HPWR1_IN/OUT, TS_HPWR2_IN/OUT)
+    TEMPERATURE_SENSORS_BL2 = [
         'TS_1', 'TS_2', 'TS_3', 'TS_4',
         'TS_HPWR1_IN', 'TS_HPWR1_OUT',
         'TS_HPWR2_IN', 'TS_HPWR2_OUT',
@@ -211,13 +211,13 @@ class Channels:
         """Get rail channels based on device variant.
         
         Args:
-            variant: 'ORIGINAL' or 'CFE'
-            
+            variant: 'ORIGINAL' or 'BL2'
+
         Returns:
             List of (key_prefix, label) tuples
         """
-        if variant == 'CFE':
-            return Channels.RAIL_CHANNELS_CFE
+        if variant == 'BL2':
+            return Channels.RAIL_CHANNELS_BL2
         return Channels.RAIL_CHANNELS_ORIGINAL
     
     @staticmethod
@@ -225,13 +225,13 @@ class Channels:
         """Get temperature sensor keys based on device variant.
         
         Args:
-            variant: 'ORIGINAL' or 'CFE'
-            
+            variant: 'ORIGINAL' or 'BL2'
+
         Returns:
             List of sensor key strings
         """
-        if variant == 'CFE':
-            return Channels.TEMPERATURE_SENSORS_CFE
+        if variant == 'BL2':
+            return Channels.TEMPERATURE_SENSORS_BL2
         return Channels.TEMPERATURE_SENSORS_ORIGINAL
     
     @staticmethod
@@ -242,18 +242,18 @@ class Channels:
             sensor_data: Telemetry dictionary from datasource
             
         Returns:
-            'CFE' if CFE-specific sensors detected, 'ORIGINAL' otherwise
+            'BL2' if BL2-specific sensors detected, 'ORIGINAL' otherwise
         """
-        # Check for CFE-specific sensors (HPWR sense lines or HPWR temperature sensors)
+        # Check for BL2-specific sensors (HPWR sense lines or HPWR temperature sensors)
         # Power sensors use keys like 'HPWR1_W1_Power', temperature sensors use 'TS_HPWR1_IN'
-        cfe_indicators = [
-            'HPWR1_W1_Power', 'HPWR1_W2_Power',  # CFE power sense lines
-            'TS_HPWR1_IN', 'TS_HPWR1_OUT',  # CFE temperature sensors
+        bl2_indicators = [
+            'HPWR1_W1_Power', 'HPWR1_W2_Power',  # BL2 power sense lines
+            'TS_HPWR1_IN', 'TS_HPWR1_OUT',  # BL2 temperature sensors
             'TS_HPWR2_IN', 'TS_HPWR2_OUT',
         ]
-        for key in cfe_indicators:
+        for key in bl2_indicators:
             if key in sensor_data:
-                return 'CFE'
+                return 'BL2'
         return 'ORIGINAL'
 
 

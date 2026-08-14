@@ -169,7 +169,7 @@ def export_device_sensors(device_info, datasource=None):
             if not ser:
                 logger.error("Cannot open serial port for device %s", uid)
                 return False
-            # Get product_id for correct sensor interpretation (CFE vs ORIGINAL)
+            # Get product_id for correct sensor interpretation (BL2 vs ORIGINAL)
             product_id = BENCHLAB_ORIGINAL_PRODUCT_ID
             try:
                 device_info = read_device(ser)
