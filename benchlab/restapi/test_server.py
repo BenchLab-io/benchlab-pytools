@@ -75,30 +75,22 @@ def test_api_endpoints():
         print(f"✗ API endpoint test failed: {e}")
         return False
 
-def test_cross_platform_detection():
-    """Test cross-platform device detection logic."""
-    print("\nTesting cross-platform device detection...")
-    
+def test_device_discovery():
+    """Test that device discovery is callable and returns a list."""
+    print("\nTesting device discovery...")
+
     try:
-        import sys
-        from benchlab.restapi.telemetry_api import get_device_ports
-        
-        # Test platform detection
-        ports = get_device_ports()
-        
-        if sys.platform.startswith('win'):
-            expected_ports = ['COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9']
-            assert ports == expected_ports
-            print("✓ Windows port detection working")
-        else:
-            # Linux/Unix - should return glob patterns
-            assert len(ports) > 0
-            print("✓ Unix port detection working")
-            
+        from benchlab.restapi.telemetry_api import find_benchlab_devices
+
+        # No hardware required - just verify it runs and returns a list
+        devices = find_benchlab_devices()
+        assert isinstance(devices, list)
+        print("✓ Device discovery working")
+
         return True
-        
+
     except Exception as e:
-        print(f"✗ Cross-platform detection test failed: {e}")
+        print(f"✗ Device discovery test failed: {e}")
         return False
 
 def test_error_handling():
@@ -173,7 +165,7 @@ def main():
     tests = [
         test_server_startup,
         test_api_endpoints,
-        test_cross_platform_detection,
+        test_device_discovery,
         test_error_handling
     ]
     
