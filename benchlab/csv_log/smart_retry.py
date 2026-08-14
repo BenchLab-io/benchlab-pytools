@@ -6,12 +6,18 @@ Provides intelligent retry strategies with exponential backoff, jitter, and circ
 import time
 import random
 import logging
-import serial
 import threading
 from typing import Callable, Any, Optional, Dict, List, Union
 from enum import Enum
 from dataclasses import dataclass
 from functools import wraps
+
+try:
+    import serial
+    _SERIAL_EXCEPTIONS: List[type] = [OSError, serial.SerialException, TimeoutError]
+except ImportError:
+    serial = None
+    _SERIAL_EXCEPTIONS = [OSError, TimeoutError]
 
 
 class RetryStrategy(Enum):
@@ -333,7 +339,7 @@ SERIAL_RETRY_CONFIG = RetryConfig(
     max_delay=10.0,
     strategy=RetryStrategy.JITTERED_EXPONENTIAL,
     jitter_factor=0.2,
-    retryable_exceptions=[OSError, serial.SerialException, TimeoutError]
+    retryable_exceptions=_SERIAL_EXCEPTIONS,
 )
 
 NETWORK_RETRY_CONFIG = RetryConfig(

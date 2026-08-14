@@ -146,6 +146,12 @@ class CSVBatchWriter:
         self.file_locks: Dict[str, threading.Lock] = {}
         self.buffers: Dict[str, List[Dict[str, Any]]] = {}
         self.buffer_locks: Dict[str, threading.Lock] = {}
+        # Fieldnames fixed at file creation (from the first message's keys).
+        # Later messages with different keys are still written safely: extra
+        # keys are dropped, missing keys are left blank — this prevents a
+        # transient schema change (e.g. a sensor briefly absent) from
+        # crash-looping the writer or corrupting the CSV.
+        self.fieldnames: Dict[str, List[str]] = {}
 
     def write_batch(self, messages: List[Dict[str, Any]]):
         """Write a batch of messages, grouped by device UID."""
@@ -184,6 +190,7 @@ class CSVBatchWriter:
         # exists on disk and is non-empty even before the first flush.
         if messages and self.format == "csv":
             headers = list(messages[0].keys())
+            self.fieldnames[uid] = headers
             with open(filepath, "w", newline="", encoding="utf-8") as f:
                 csv.DictWriter(f, fieldnames=headers).writeheader()
             self.active_files[uid]["headers_written"] = True
@@ -201,7 +208,7 @@ class CSVBatchWriter:
         with self.file_locks[uid]:
             try:
                 if self.format == "csv":
-                    self._write_csv_batch(file_info, messages_to_write)
+                    self._write_csv_batch(uid, file_info, messages_to_write)
                 elif self.format == "json":
                     self._write_json_batch(file_info, messages_to_write)
                 self.logger.debug(f"Wrote {len(messages_to_write)} rows for {uid}")
@@ -209,11 +216,14 @@ class CSVBatchWriter:
                 self.logger.error(f"Failed to write batch for {uid}: {e}")
                 buf.extend(messages_to_write)  # restore on failure
 
-    def _write_csv_batch(self, file_info: Dict, messages: List[Dict[str, Any]]):
+    def _write_csv_batch(self, uid: str, file_info: Dict, messages: List[Dict[str, Any]]):
         filepath = file_info["filepath"]
-        headers = list(messages[0].keys())
+        headers = self.fieldnames.get(uid) or list(messages[0].keys())
         with open(filepath, "a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=headers)
+            # extrasaction="ignore": drop keys not in the file's header (e.g. a
+            # sensor that reappeared with a new field) instead of raising.
+            # restval="": leave missing keys blank instead of raising.
+            writer = csv.DictWriter(f, fieldnames=headers, extrasaction="ignore", restval="")
             if not file_info["headers_written"]:
                 writer.writeheader()
                 file_info["headers_written"] = True
