@@ -15,7 +15,6 @@ from fastapi.responses import FileResponse, JSONResponse
 from pathlib import Path
 
 from benchlab_pycore.core import read_sensors, read_device, read_uid, translate_sensor_struct
-from benchlab_pycore.core.serial_io import get_fleet_info
 from benchlab.core import BENCHLAB_ORIGINAL_PRODUCT_ID, BENCHLAB_BL2_PRODUCT_ID
 # benchlab_pycore.core.serial_io has no connection-opening helper; use the
 # local wrapper instead (see benchlab.core.shared_serial).
@@ -122,13 +121,16 @@ def device_scanner_loop():
                         start_device_thread(port, uid)
                         existing_uids.add(uid)  # Prevent duplicate starts
                 
-                # Check for disconnected devices - mark them as such
+                # Check for disconnected devices - mark them as such immediately
+                # rather than waiting for read_device_loop to notice on its own timer
                 for uid, data in devices_data.items():
                     port = data.get("port")
                     if port and port not in current_ports:
                         logger.info("Device %s appears disconnected (port %s not found)", uid, port)
-                        # The read_device_loop will detect this and mark as disconnected
-                        
+                        with data_lock:
+                            if uid in devices_data:
+                                devices_data[uid]["connected"] = False
+
                 logger.debug("Scanner: scan complete")
                         
         except Exception as e:
@@ -141,7 +143,7 @@ def device_scanner_loop():
 async def lifespan(app: FastAPI):
     # Startup
     global main_loop
-    main_loop = asyncio.get_event_loop()
+    main_loop = asyncio.get_running_loop()
     logger.info("Scanning for Benchlab devices...")
 
     found = find_benchlab_devices()
@@ -173,7 +175,8 @@ async def lifespan(app: FastAPI):
                     "history": deque(maxlen=history_length),
                     "info": device_info
                 }
-                clients[uid] = set()
+                if uid not in clients:
+                    clients[uid] = set()
 
             t = threading.Thread(target=read_device_loop, args=(port, uid), daemon=True)
             t.start()
@@ -217,10 +220,13 @@ app = FastAPI(title="Benchlab Multi-Device Telemetry API", lifespan=lifespan)
 # Qual-2.3 fix: CORS configurable via environment variable
 # Default to "*" for local dev, but can restrict to known origins in production
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",") if os.getenv("CORS_ORIGINS") else ["*"]
+# Wildcard origin + credentials is an invalid combination per the CORS spec
+# (browsers reject it) - only allow credentials when explicit origins are configured.
+CORS_ALLOW_CREDENTIALS = CORS_ORIGINS != ["*"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=CORS_ALLOW_CREDENTIALS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -228,17 +234,20 @@ app.add_middleware(
 # --- WebSocket broadcasting ---
 async def send_updates(uid, data):
     """Push latest telemetry for this UID to all connected clients."""
-    if uid not in clients:
-        return
+    with data_lock:
+        if uid not in clients:
+            return
+        ws_list = list(clients[uid])
     dead_clients = set()
-    # Iterate over a copy to avoid RuntimeError: Set changed size during iteration
-    for ws in list(clients[uid]):
+    for ws in ws_list:
         try:
             await ws.send_json(data)
         except Exception:
             dead_clients.add(ws)
-    for ws in dead_clients:
-        clients[uid].discard(ws)
+    if dead_clients:
+        with data_lock:
+            for ws in dead_clients:
+                clients[uid].discard(ws)
 
 def schedule_update(uid, data):
     """Thread-safe schedule to send telemetry to WebSocket clients."""
@@ -497,30 +506,30 @@ def get_device_info(uid: str):
 @app.get("/device/{uid}/telemetry")
 def get_telemetry(uid: str):
     if uid not in devices_data:
-        return {"error": f"Device {uid} not found"}
+        raise HTTPException(status_code=404, detail=f"Device {uid} not found")
     return devices_data[uid].get("latest", {"status": "no data yet"})
 
 @app.get("/device/{uid}/telemetry/{sensor}")
 def get_sensor(uid: str, sensor: str):
     if uid not in devices_data:
-        return {"error": f"Device {uid} not found"}
+        raise HTTPException(status_code=404, detail=f"Device {uid} not found")
     telemetry = devices_data[uid].get("latest")
     if not telemetry:
         return {"error": "No telemetry available yet"}
     if sensor not in telemetry:
-        return {"error": f"Sensor {sensor} not found"}
+        raise HTTPException(status_code=404, detail=f"Sensor {sensor} not found")
     return {sensor: telemetry[sensor]}
 
 @app.get("/device/{uid}/history")
 def get_history(uid: str, limit: int = 100):
     """Get telemetry history with optional limit for performance."""
     if uid not in devices_data:
-        return {"error": f"Device {uid} not found"}
+        raise HTTPException(status_code=404, detail=f"Device {uid} not found")
 
+    limit = max(1, min(limit, Config.MAX_HISTORY_LIMIT))
     history = list(devices_data[uid]["history"])
     # Return only the requested limit (most recent first)
-    if limit > 0:
-        history = history[-limit:]
+    history = history[-limit:]
 
     return {
         "device_id": uid,
@@ -532,25 +541,29 @@ def get_history(uid: str, limit: int = 100):
 @app.get("/device/{uid}/sensors")
 def get_sensors(uid: str):
     if uid not in devices_data:
-        return {"error": f"Device {uid} not found"}
+        raise HTTPException(status_code=404, detail=f"Device {uid} not found")
     telemetry = devices_data[uid].get("latest", {})
     return list(telemetry.keys())
 
 @app.websocket("/device/{uid}/stream")
 async def stream_device(uid: str, ws: WebSocket):
     await ws.accept()
-    if uid not in clients:
-        clients[uid] = set()
-    clients[uid].add(ws)
-    logger.info("[%s] Client connected (%d total)", uid, len(clients[uid]))
+    with data_lock:
+        if uid not in clients:
+            clients[uid] = set()
+        clients[uid].add(ws)
+        client_count = len(clients[uid])
+    logger.info("[%s] Client connected (%d total)", uid, client_count)
     try:
         while True:
             await asyncio.sleep(1)
     except WebSocketDisconnect:
         pass
     finally:
-        clients[uid].discard(ws)  # FIX #6: use discard instead of remove to avoid KeyError
-        logger.info("[%s] Client disconnected (%d total)", uid, len(clients[uid]))
+        with data_lock:
+            clients[uid].discard(ws)  # FIX #6: use discard instead of remove to avoid KeyError
+            client_count = len(clients[uid])
+        logger.info("[%s] Client disconnected (%d total)", uid, client_count)
 
 @app.get("/favicon.ico")
 def favicon():
@@ -611,15 +624,16 @@ def get_device_status(uid: str):
 def start_device_thread(port, uid):
     """Start a telemetry reader thread for a new device."""
     # Initialize device data structure
-    if uid not in devices_data:
-        devices_data[uid] = {
-            "port": port,
-            "latest": {},
-            "history": deque(maxlen=history_length),
-            "info": {}
-        }
-    if uid not in clients:
-        clients[uid] = set()
+    with data_lock:
+        if uid not in devices_data:
+            devices_data[uid] = {
+                "port": port,
+                "latest": {},
+                "history": deque(maxlen=history_length),
+                "info": {}
+            }
+        if uid not in clients:
+            clients[uid] = set()
 
     # Try to read device info
     try:
@@ -676,6 +690,9 @@ def scan_for_devices():
             if port and port not in current_ports:
                 disconnected.append({"uid": uid, "port": port})
                 logger.info("Device %s appears to be disconnected from %s", uid, port)
+                with data_lock:
+                    if uid in devices_data:
+                        devices_data[uid]["connected"] = False
 
         result = {
             "scan_time": datetime.now().isoformat(),
