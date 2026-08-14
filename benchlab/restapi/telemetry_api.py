@@ -14,8 +14,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pathlib import Path
 
-from benchlab_pycore.core import read_sensors, read_device, read_uid, translate_sensor_struct, BENCHLAB_ORIGINAL_PRODUCT_ID, BENCHLAB_CFE_PRODUCT_ID
-from benchlab_pycore.core.serial_io import get_fleet_info, open_serial_connection
+from benchlab_pycore.core import read_sensors, read_device, read_uid, translate_sensor_struct
+from benchlab_pycore.core.serial_io import get_fleet_info
+from benchlab.core import BENCHLAB_ORIGINAL_PRODUCT_ID, BENCHLAB_CFE_PRODUCT_ID
+# benchlab_pycore.core.serial_io has no connection-opening helper; use the
+# local wrapper instead (see benchlab.core.shared_serial).
+from benchlab.core.shared_serial import open_serial_connection
 
 # Import DeviceRegistry so the FastAPI server publishes device lifecycle events
 from benchlab.core.device_registry import DeviceRegistry

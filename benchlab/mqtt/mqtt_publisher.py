@@ -12,10 +12,13 @@ import threading
 import time
 
 from benchlab_pycore.core import translate_sensor_struct, read_sensors, read_device, BENCHLAB_ORIGINAL_PRODUCT_ID
-from benchlab_pycore.core.serial_io import get_fleet_info, open_serial_connection
+from benchlab_pycore.core.serial_io import get_fleet_info
 
 # Import DeviceRegistry so the MQTT publisher publishes device lifecycle events
 from benchlab.core.device_registry import DeviceRegistry
+# benchlab_pycore.core.serial_io has no connection-opening helper; use the
+# local wrapper instead (see benchlab.core.shared_serial).
+from benchlab.core.shared_serial import open_serial_connection
 
 MQTTV5_REASON_CODES = {
     0:  "Success",

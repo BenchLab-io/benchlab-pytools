@@ -1,0 +1,66 @@
+name: pycore compatibility
+
+# Catches drift between pytools and benchlab-pycore's published PyPI API.
+# See issue #9 — issues #6/#7/#8 were caused by silent drift like this.
+on:
+  push:
+    branches: [dev-pycore, main]
+  pull_request:
+  schedule:
+    # Weekly, to catch a new pycore release even with no pytools code changes.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  pinned:
+    name: Import + test against pinned pycore
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies (pinned)
+        run: |
+          pip install -r requirements.txt
+          pip install -r benchlab/csv_log/requirements.txt
+          pip install pytest
+
+      - name: Import smoke test
+        run: >
+          python -c "import benchlab.core, benchlab.core.discovery,
+          benchlab.core.datasource, benchlab.core.shared_serial,
+          benchlab.config.config_client, benchlab.restapi.telemetry_api,
+          benchlab.mqtt.mqtt_publisher, benchlab.hwinfo.hwinfo_export"
+
+      - name: Run non-hardware tests
+        run: pytest tests/test_data_sources.py benchlab/restapi/test_server.py -q -k "not mqtt"
+
+  latest:
+    name: Import + test against latest pycore (PyPI)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies (latest pycore)
+        run: |
+          pip install -r requirements.txt
+          pip install -r benchlab/csv_log/requirements.txt
+          pip install pytest
+          pip install --upgrade benchlab-pycore
+
+      - name: Import smoke test
+        run: >
+          python -c "import benchlab.core, benchlab.core.discovery,
+          benchlab.core.datasource, benchlab.core.shared_serial,
+          benchlab.config.config_client, benchlab.restapi.telemetry_api,
+          benchlab.mqtt.mqtt_publisher, benchlab.hwinfo.hwinfo_export"
+
+      - name: Run non-hardware tests
+        run: pytest tests/test_data_sources.py benchlab/restapi/test_server.py -q -k "not mqtt"

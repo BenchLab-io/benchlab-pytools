@@ -11,7 +11,29 @@ import threading
 import time
 from typing import Any, Dict, Optional
 
+import serial
+
 logger = logging.getLogger("benchlab.core.shared_serial")
+
+# BENCHLAB devices communicate over USB CDC at a fixed 115200 baud.
+# benchlab_pycore.core.serial_io never exposed a connection-opening helper
+# (its own docs just call serial.Serial(port, 115200, timeout=1) directly) —
+# this wraps that same pattern so callers get a consistent
+# "None on failure" contract instead of talking to pyserial directly.
+_BENCHLAB_BAUDRATE = 115200
+_BENCHLAB_TIMEOUT = 1
+
+
+def open_serial_connection(port: str) -> Optional[serial.Serial]:
+    """Open a serial connection to a BENCHLAB device.
+
+    Returns None if the port can't be opened.
+    """
+    try:
+        return serial.Serial(port, _BENCHLAB_BAUDRATE, timeout=_BENCHLAB_TIMEOUT)
+    except (serial.SerialException, OSError) as e:
+        logger.warning("Failed to open serial port %s: %s", port, e)
+        return None
 
 
 class SharedSerialManager:
@@ -70,12 +92,7 @@ class SharedSerialManager:
             SharedConnection wrapper, or None if port can't be opened
         """
         if open_func is None:
-            try:
-                from benchlab_pycore.core.serial_io import open_serial_connection
-                open_func = open_serial_connection
-            except ImportError:
-                logger.error("Cannot import open_serial_connection")
-                return None
+            open_func = open_serial_connection
         
         start = time.time()
         while time.time() - start < timeout:

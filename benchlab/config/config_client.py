@@ -298,18 +298,18 @@ class DirectConfigClient(ConfigClient):
     
     def save_config(self) -> bool:
         """Save configuration to device flash."""
-        from benchlab_pycore.core import send_action
-        return send_action(self.ser, action=0)  # CONFIG_ACTION_SAVE
-    
+        from benchlab_pycore.core.config_io import save_config
+        return save_config(self.ser)
+
     def load_config(self) -> bool:
         """Load configuration from device flash."""
-        from benchlab_pycore.core import send_action
-        return send_action(self.ser, action=1)  # CONFIG_ACTION_LOAD
-    
+        from benchlab_pycore.core.config_io import load_config
+        return load_config(self.ser)
+
     def reset_config(self) -> bool:
         """Reset configuration to factory defaults."""
-        from benchlab_pycore.core import send_action
-        return send_action(self.ser, action=2)  # CONFIG_ACTION_RESET
+        from benchlab_pycore.core.config_io import reset_config
+        return reset_config(self.ser)
     
     def close(self):
         """Close serial connection."""
