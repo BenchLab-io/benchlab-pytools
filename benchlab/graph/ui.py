@@ -1,6 +1,7 @@
 # benchlab/graph/ui.py
 
 import threading
+from collections import deque
 from dearpygui import dearpygui as dpg
 
 
@@ -134,17 +135,26 @@ def build_unified_window(app):
                     )
                     dpg.set_item_user_data(app.graph_line, {"x_data": [], "y_data": []})
 
+    # Remember the main window's graph items so the floating window can
+    # hand control back to them when it is closed.
+    app.main_graph_x_axis = app.graph_x_axis
+    app.main_graph_y_axis = app.graph_y_axis
+    app.main_graph_line = app.graph_line
+
 
 def _reset_session_stats(app):
-    app.session_stats = {"min": None, "max": None, "avg": None, "count": 0, "history": []}
-    for tag, val in [("graph_min", "Min: --"), ("graph_max", "Max: --"), ("graph_avg", "Avg: --")]:
+    app.session_stats = {"min": None, "max": None, "avg": None, "count": 0,
+                          "history": deque(maxlen=1000)}
+    for tag, val in [("graph_min", "Min: --"), ("graph_max", "Max: --"), ("graph_avg", "Avg: --"),
+                      ("graph_min_float", "Min: --"), ("graph_max_float", "Max: --"),
+                      ("graph_avg_float", "Avg: --")]:
         if dpg.does_item_exist(tag):
             dpg.set_value(tag, val)
 
 
 def _update_sensor_selection(app):
     app.selected_sensor = dpg.get_value("##sensor_combo")
-    app.selected_device = dpg.get_value("device_uid")
+    app.selected_device = app.latest_uid if app.latest_uid != "?" else None
     if dpg.does_item_exist("selected_sensor_name"):
         dpg.set_value("selected_sensor_name", app.selected_sensor or "None")
     if dpg.does_item_exist("selected_device_name"):
@@ -156,7 +166,7 @@ def start_graph(app):
     if not app.selected_sensor:
         app.selected_sensor = dpg.get_value("##sensor_combo")
     if not app.selected_device:
-        app.selected_device = dpg.get_value("device_uid")
+        app.selected_device = app.latest_uid if app.latest_uid != "?" else None
     _reset_session_stats(app)
     if not (getattr(app, "graph_updater_thread", None)
             and app.graph_updater_thread.is_alive()):
@@ -188,18 +198,29 @@ def update_current_values_display(app):
 def open_graph_window(app, sender=None, app_data=None):
     """Open a floating graph window for the selected sensor."""
     app.selected_sensor = dpg.get_value("##sensor_combo")
-    app.selected_device = dpg.get_value("device_uid")
+    app.selected_device = app.latest_uid if app.latest_uid != "?" else None
 
     if dpg.does_item_exist("graph_window"):
         dpg.delete_item("graph_window")
 
+    def _on_close(sender, app_data):
+        if dpg.does_item_exist(app.main_graph_line):
+            app.graph_x_axis = app.main_graph_x_axis
+            app.graph_y_axis = app.main_graph_y_axis
+            app.graph_line = app.main_graph_line
+        else:
+            app.graph_x_axis = None
+            app.graph_y_axis = None
+            app.graph_line = None
+
     with dpg.window(label=f"Graph: {app.selected_sensor}",
-                    tag="graph_window", width=701, height=400, pos=(0, 151)):
+                    tag="graph_window", width=701, height=400, pos=(0, 151),
+                    on_close=_on_close):
         dpg.add_text(f"Real-time: {app.selected_sensor} — {app.selected_device}")
         with dpg.group(horizontal=True):
-            dpg.add_text("Min: --", tag="graph_min")
-            dpg.add_text("Max: --", tag="graph_max")
-            dpg.add_text("Avg: --", tag="graph_avg")
+            dpg.add_text("Min: --", tag="graph_min_float")
+            dpg.add_text("Max: --", tag="graph_max_float")
+            dpg.add_text("Avg: --", tag="graph_avg_float")
             dpg.add_button(label="Reset Stats",
                            callback=lambda: _reset_session_stats(app),
                            tag="##reset_stats")
