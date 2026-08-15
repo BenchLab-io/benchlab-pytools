@@ -50,11 +50,15 @@ def test_terminate_spawned_process_posix_uses_killpg():
     # may run there), so patch with create=True to simulate the POSIX
     # branch regardless of host OS.
     proc = _fake_running_proc()
-    with patch.object(sys, "platform", "linux"), \
-            patch("benchlab.launcher.os.getpgid", return_value=99, create=True) as mock_getpgid, \
-            patch("benchlab.launcher.os.killpg", create=True) as mock_killpg, \
-            patch("benchlab.launcher.signal.SIGKILL", 9, create=True), \
-            patch("benchlab.launcher.signal.SIGTERM", 15, create=True):
+    with (
+        patch.object(sys, "platform", "linux"),
+        patch(
+            "benchlab.launcher.os.getpgid", return_value=99,
+            create=True) as mock_getpgid,
+        patch("benchlab.launcher.os.killpg", create=True) as mock_killpg,
+        patch("benchlab.launcher.signal.SIGKILL", 9, create=True),
+        patch("benchlab.launcher.signal.SIGTERM", 15, create=True),
+    ):
         _terminate_spawned_process(proc, force=True)
     mock_getpgid.assert_called_once_with(proc.pid)
     mock_killpg.assert_called_once()
@@ -67,7 +71,8 @@ def test_terminate_spawned_process_never_raises_on_failure():
     platform call rather than always failing."""
     proc = _fake_running_proc()
     with patch.object(sys, "platform", "win32"), \
-            patch("benchlab.launcher.subprocess.run", side_effect=OSError("boom")):
+            patch("benchlab.launcher.subprocess.run",
+                  side_effect=OSError("boom")):
         _terminate_spawned_process(proc, force=False)  # must not raise
 
 
@@ -141,11 +146,13 @@ def test_check_and_setup_source_direct_warns_when_no_device(caplog):
     import logging
     from benchlab.sources import check_and_setup_source
 
-    with patch("benchlab.sources._direct_device_available", return_value=False):
+    with patch("benchlab.sources._direct_device_available",
+               return_value=False):
         with caplog.at_level(logging.WARNING):
             ready = check_and_setup_source("direct")
 
-    assert ready is True  # still tolerant — tool itself may catch a device later
+    # still tolerant — tool itself may catch a device later
+    assert ready is True
     assert any("No BENCHLAB device" in rec.message for rec in caplog.records)
 
 
@@ -175,8 +182,12 @@ def test_check_named_pipe_service_closes_handle_on_write_failure():
     fake_win32pipe = MagicMock()
 
     with patch.object(sys, "platform", "win32"), \
-            patch("benchlab.sources._named_pipe_available", return_value=True), \
-            patch.dict(sys.modules, {"win32file": fake_win32file, "win32pipe": fake_win32pipe, "pywintypes": MagicMock()}):
+            patch("benchlab.sources._named_pipe_available",
+                  return_value=True), \
+            patch.dict(sys.modules, {
+                "win32file": fake_win32file,
+                "win32pipe": fake_win32pipe,
+                "pywintypes": MagicMock()}):
         result = check_named_pipe_service()
 
     assert result is False

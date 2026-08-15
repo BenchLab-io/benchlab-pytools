@@ -61,7 +61,8 @@ def test_record_launch_without_params_does_not_clear_prior_ones(prefs_module):
 
 
 def test_save_prefs_survives_unwritable_path(prefs_module, monkeypatch):
-    """A failed save must not raise -- prefs are a convenience, not critical."""
+    """A failed save must not raise -- prefs are a convenience, not
+    critical."""
     monkeypatch.setattr(
         prefs_module,
         "PREFS_FILE",
@@ -522,7 +523,10 @@ def test_run_picker_screen_falls_back_when_textual_app_fails():
         mock_app.run.side_effect = RuntimeError("no terminal")
         mock_build.return_value = mock_app
 
-        with mock.patch("benchlab.menu._sequential_pick", return_value=("tools", ["vu"], "direct")) as mock_seq:
+        with mock.patch(
+            "benchlab.menu._sequential_pick",
+            return_value=("tools", ["vu"], "direct"),
+        ) as mock_seq:
             result = _run_picker_screen([], None)
 
         mock_seq.assert_called_once()

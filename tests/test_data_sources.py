@@ -53,7 +53,8 @@ from starlette.testclient import TestClient
 # ---------------------------------------------------------------------------
 
 TELEMETRY_TIMEOUT = 15  # seconds to wait for first telemetry reading
-HISTORY_MIN = 2         # minimum history entries to consider accumulation proven
+# minimum history entries to consider accumulation proven
+HISTORY_MIN = 2
 
 SEP = "-" * 60
 
@@ -91,7 +92,8 @@ def _extract_telemetry(snap, uid):
 
 
 def _wait_for_telemetry(get_fn, timeout=TELEMETRY_TIMEOUT):
-    """Poll *get_fn* until it returns a non-empty, non-error dict or timeout."""
+    """Poll *get_fn* until it returns a non-empty, non-error dict or
+    timeout."""
     deadline = time.time() + timeout
     while time.time() < deadline:
         result = get_fn()
@@ -103,13 +105,17 @@ def _wait_for_telemetry(get_fn, timeout=TELEMETRY_TIMEOUT):
 
 def _assert_telemetry_shape(data, source_label):
     """Common assertions that a telemetry payload looks sensible."""
-    assert data is not None, f"[{source_label}] Telemetry timed out – no data received"
+    assert data is not None, (
+        f"[{source_label}] Telemetry timed out – no data received")
     assert isinstance(
         data, dict), f"[{source_label}] Telemetry is not a dict: {data!r}"
-    assert "error" not in data, f"[{source_label}] Telemetry contains error: {data}"
-    assert "timestamp" in data, f"[{source_label}] Telemetry missing 'timestamp' key: {data}"
+    assert "error" not in data, (
+        f"[{source_label}] Telemetry contains error: {data}")
+    assert "timestamp" in data, (
+        f"[{source_label}] Telemetry missing 'timestamp' key: {data}")
     sensor_keys = [k for k in data if k != "timestamp"]
-    assert sensor_keys, f"[{source_label}] Telemetry has no sensor keys: {data}"
+    assert sensor_keys, (
+        f"[{source_label}] Telemetry has no sensor keys: {data}")
     _ok(f"Telemetry shape OK — {len(sensor_keys)} sensor(s): {sensor_keys}")
     sample = {k: data[k] for k in sensor_keys[:3]}
     _info(f"Sample values: {sample}")
@@ -126,7 +132,8 @@ def device():
     devices = discover_devices()
     if not devices:
         pytest.skip(
-            "No BenchLab devices found – skipping integration tests that require a device")
+            "No BenchLab devices found - skipping integration tests "
+            "that require a device")
     dev = devices[0]
     _ok(
         f"Found device: uid={dev['uid']}  port={dev['port']}"
@@ -200,14 +207,16 @@ def fastapi_client(device):
         api_shutdown_event.clear()
         pytest.fail(
             f"FastAPI reader thread failed to produce telemetry from {port} "
-            f"within {TELEMETRY_TIMEOUT}s. Check that the serial port is available."
+            f"within {TELEMETRY_TIMEOUT}s. Check that the serial port "
+            "is available."
         )
     _ok(f"Live telemetry confirmed — {len(live_data)} keys in first reading")
 
     # Patch out lifespan discovery so it doesn't race for the COM port.
     # Our reader thread already has it open; the lifespan scan would just
     # produce a noisy PermissionError and "No devices found" warning.
-    with patch("benchlab.restapi.telemetry_api.find_benchlab_devices", return_value=[]):
+    with patch("benchlab.restapi.telemetry_api.find_benchlab_devices",
+               return_value=[]):
         with TestClient(fastapi_app) as client:
             yield client
 
@@ -229,7 +238,8 @@ class TestDirectSource:
 
     @pytest.mark.integration
     def test_connect_and_snapshot(self, direct_mgr, device):
-        """DataSourceManager connects and returns a snapshot with sensor_data."""
+        """DataSourceManager connects and returns a snapshot with
+        sensor_data."""
         _section("Direct › connect and snapshot")
         time.sleep(2)
         snap = direct_mgr.snapshot()
@@ -300,8 +310,10 @@ class TestFastAPISource:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "healthy"
-        assert data["connected_devices"] >= 1, "Health endpoint reports no connected devices"
-        _ok(f"status={data['status']}  connected_devices={data['connected_devices']}")
+        assert data["connected_devices"] >= 1, (
+            "Health endpoint reports no connected devices")
+        _ok(f"status={data['status']}  "
+            f"connected_devices={data['connected_devices']}")
         _info(
             f"Platform: {data.get('platform')}  "
             f"timestamp: {data.get('timestamp')}"
@@ -387,9 +399,11 @@ class TestFastAPISource:
 
     @pytest.mark.integration
     def test_individual_sensor(self, fastapi_client, device):
-        """/device/{uid}/telemetry/{sensor} returns a value for a known sensor."""
+        """/device/{uid}/telemetry/{sensor} returns a value for a
+        known sensor."""
         _section(
-            f"FastAPI › GET /device/{device['uid'][:12]}…/telemetry/{{sensor}}")
+            f"FastAPI › GET /device/{device['uid'][:12]}…"
+            f"/telemetry/{{sensor}}")
         uid = device["uid"]
         _wait_for_telemetry(
             lambda: fastapi_client.get(f"/device/{uid}/telemetry").json()
@@ -404,7 +418,9 @@ class TestFastAPISource:
         resp = fastapi_client.get(f"/device/{uid}/telemetry/{sensor}")
         assert resp.status_code == 200
         data = resp.json()
-        assert sensor in data, f"Sensor key '{sensor}' missing from response: {data}"
+        assert sensor in data, (
+            f"Sensor key '{sensor}' missing from response: {data}"
+        )
         _ok(f"Queried sensor '{sensor}' → {data[sensor]}")
         _info(f"(Tested 1 of {len(sensors)} available sensors)")
 
@@ -426,8 +442,13 @@ class TestFastAPISource:
             f"expected >= {HISTORY_MIN}"
         )
         for entry in data["data"]:
-            assert "timestamp" in entry, f"History entry missing timestamp: {entry}"
-        _ok(f"{data['count']} history entries (of {data['total_available']} total)")
+            assert "timestamp" in entry, (
+                f"History entry missing timestamp: {entry}"
+            )
+        _ok(
+            f"{data['count']} history entries "
+            f"(of {data['total_available']} total)"
+        )
         _info(f"Oldest: {data['data'][0].get('timestamp')}  "
               f"Newest: {data['data'][-1].get('timestamp')}")
 
@@ -551,9 +572,13 @@ class TestMQTTSource:
             _info(f"MQTT sensor keys ({len(mqtt_keys)}): {sorted(mqtt_keys)}")
             missing = direct_keys - mqtt_keys
             assert not missing, (
-                f"MQTT payload missing sensor keys present in direct source: {missing}"
+                f"MQTT payload missing sensor keys present in "
+                f"direct source: {missing}"
             )
-            _ok(f"All {len(direct_keys)} direct sensor keys present in MQTT payload")
+            _ok(
+                f"All {len(direct_keys)} direct sensor keys present "
+                f"in MQTT payload"
+            )
         finally:
             client.loop_stop()
             client.disconnect()

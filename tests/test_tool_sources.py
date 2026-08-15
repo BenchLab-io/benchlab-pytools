@@ -134,8 +134,9 @@ def _setup_source(source: str, device: dict) -> None:
 
     if not ready:
         pytest.fail(
-            f"Could not set up '{source}' data source within {SOURCE_TIMEOUT}s. "
-            "Check that the device is connected and no other process holds the port."
+            f"Could not set up '{source}' data source within "
+            f"{SOURCE_TIMEOUT}s. Check that the device is connected "
+            "and no other process holds the port."
         )
 
     _ok(f"Source '{source}' ready")
@@ -176,7 +177,8 @@ def _run_tool_in_thread(
         try:
             if tool_id == "tui":
                 pytest.skip(
-                    "tui requires a real terminal; cannot integration-test in pytest")
+                    "tui requires a real terminal; cannot "
+                    "integration-test in pytest")
             else:
                 func(args)
         except KeyboardInterrupt:
@@ -212,7 +214,8 @@ def _run_tool_in_thread(
 
 @pytest.fixture(scope="session")
 def device():
-    """Discover and return the first connected BenchLab device (session-scoped)."""
+    """Discover and return the first connected BenchLab device
+    (session-scoped)."""
     _section("Device Discovery")
     devices = discover_devices()
     if not devices:
@@ -281,7 +284,8 @@ def test_tool_with_source(tool_id: str, source: str, device: dict) -> None:
     if exc is not None:
         traceback.print_exception(type(exc), exc, exc.__traceback__)
         pytest.fail(
-            f"{tool_name} raised {
-                type(exc).__name__} with source '{source}': {exc}")
+            f"{tool_name} raised {type(exc).__name__} "
+            f"with source '{source}': {exc}")
 
-    _ok(f"{tool_name} ran for {TOOL_TIMEOUT}s with source '{source}' without error")
+    _ok(f"{tool_name} ran for {TOOL_TIMEOUT}s with source '{source}' "
+        "without error")
