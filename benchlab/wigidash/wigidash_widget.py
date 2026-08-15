@@ -9,6 +9,7 @@ from benchlab.wigidash.benchlab_utils import get_logger
 
 logger = get_logger("WigidashWidget")
 
+
 class WidgetConfig(Structure):
     _pack_ = 4
     _fields_ = [
@@ -24,10 +25,17 @@ class WidgetConfig(Structure):
     ]
 
     def __str__(self):
-        return (f'X: {self.X}, Y: {self.Y}, Width: {self.Width}, Height: {self.Height}, '
-                f'BaseClr: {self.BaseClr}, DrawAddr: {self.DrawAddr}, '
-                f'DrawLock: {self.DrawLock}, InvalidateFlag: {self.InvalidateFlag}, '
-                f'UpdateFromCache: {self.UpdateFromCache}')
+        return (
+            f'X: {
+                self.X}, Y: {
+                self.Y}, Width: {
+                self.Width}, Height: {
+                    self.Height}, ' f'BaseClr: {
+                        self.BaseClr}, DrawAddr: {
+                            self.DrawAddr}, ' f'DrawLock: {
+                                self.DrawLock}, InvalidateFlag: {
+                                    self.InvalidateFlag}, ' f'UpdateFromCache: {
+                                        self.UpdateFromCache}')
 
     # --- Properties with logging ---
     @property
@@ -45,7 +53,9 @@ class WidgetConfig(Structure):
 
     @InvalidateFlag.setter
     def InvalidateFlag(self, value):
-        logger.debug(f"InvalidateFlag changed: {self._InvalidateFlag} → {value}")
+        logger.debug(
+            f"InvalidateFlag changed: {
+                self._InvalidateFlag} → {value}")
         self._InvalidateFlag = value
 
     @property
@@ -54,7 +64,9 @@ class WidgetConfig(Structure):
 
     @UpdateFromCache.setter
     def UpdateFromCache(self, value):
-        logger.debug(f"UpdateFromCache changed: {self._UpdateFromCache} → {value}")
+        logger.debug(
+            f"UpdateFromCache changed: {
+                self._UpdateFromCache} → {value}")
         self._UpdateFromCache = value
 
     @classmethod

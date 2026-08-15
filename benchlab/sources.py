@@ -100,7 +100,8 @@ def start_fastapi_source(port: int = 8000) -> bool:
         if devices_available:
             logger.info(f"FastAPI server ready on port {port} with device(s)")
         else:
-            logger.warning(f"FastAPI server ready on port {port} but no devices detected")
+            logger.warning(
+                f"FastAPI server ready on port {port} but no devices detected")
     else:
         svc = pm.get_service("fastapi")
         if svc and (svc.stderr_log or svc.stdout_log):
@@ -240,7 +241,8 @@ def check_named_pipe_service() -> bool:
         return False
 
     if not _named_pipe_available():
-        logger.debug("BenchlabDiscovery pipe not found — C# service not running")
+        logger.debug(
+            "BenchlabDiscovery pipe not found — C# service not running")
         return False
 
     # Quick smoke-test: open the pipe and send ListDevices
@@ -281,7 +283,8 @@ def check_named_pipe_service() -> bool:
 SERVICE_HTTP_DEFAULT_PORT = 8585
 
 
-def _service_http_health(host: str = "localhost", port: int = SERVICE_HTTP_DEFAULT_PORT) -> bool:
+def _service_http_health(host: str = "localhost",
+                         port: int = SERVICE_HTTP_DEFAULT_PORT) -> bool:
     """Return True if the C# BenchLab service HTTP API is healthy."""
     try:
         url = f"http://{host}:{port}/health"
@@ -295,7 +298,9 @@ def _service_http_health(host: str = "localhost", port: int = SERVICE_HTTP_DEFAU
     return False
 
 
-def _service_http_devices_available(host: str = "localhost", port: int = SERVICE_HTTP_DEFAULT_PORT) -> bool:
+def _service_http_devices_available(
+        host: str = "localhost",
+        port: int = SERVICE_HTTP_DEFAULT_PORT) -> bool:
     """Return True if the C# service has at least one device."""
     try:
         url = f"http://{host}:{port}/devices"
@@ -358,26 +363,31 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
         os.environ["API_PORT"] = str(port)
 
         if _fastapi_health(host, port):
-            devices_msg = "with device(s)" if _fastapi_devices_available(host, port) else "but no devices detected"
+            devices_msg = "with device(s)" if _fastapi_devices_available(
+                host, port) else "but no devices detected"
             logger.info(f"FastAPI already running at {api_url} {devices_msg}")
             os.environ["BENCHLAB_DATA_SOURCE"] = "fastapi"
             return True
 
         if _port_in_use(host, port):
-            logger.info(f"Port {port} is in use — triggering /scan on existing server")
+            logger.info(
+                f"Port {port} is in use — triggering /scan on existing server")
             _trigger_fastapi_scan(host, port)
             if _fastapi_health(host, port):
-                devices_msg = "with device(s)" if _fastapi_devices_available(host, port) else "but no devices detected"
+                devices_msg = "with device(s)" if _fastapi_devices_available(
+                    host, port) else "but no devices detected"
                 logger.info(f"FastAPI at {api_url} is healthy {devices_msg}")
                 os.environ["BENCHLAB_DATA_SOURCE"] = "fastapi"
                 return True
-            logger.error(f"Port {port} is occupied but server is not responding — cannot start")
+            logger.error(
+                f"Port {port} is occupied but server is not responding — cannot start")
             return False
 
         logger.info(f"FastAPI not detected at {api_url}")
         ok = start_fastapi_source(port)
         if ok:
-            devices_msg = "with device(s)" if _fastapi_devices_available(host, port) else "but no devices detected"
+            devices_msg = "with device(s)" if _fastapi_devices_available(
+                host, port) else "but no devices detected"
             logger.info(f"FastAPI server started on port {port} {devices_msg}")
             os.environ["BENCHLAB_DATA_SOURCE"] = "fastapi"
         return ok
@@ -409,8 +419,7 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
             logger.error(
                 "BenchLab named pipe service not detected.\n"
                 "  → Make sure the BenchLab Windows service (BL_Service) is running.\n"
-                "  → You can start it via Windows Services or by running BL_Service.exe."
-            )
+                "  → You can start it via Windows Services or by running BL_Service.exe.")
             return False
 
         logger.info("BenchLab named pipe service detected and ready")
@@ -429,8 +438,10 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
             )
             return False
 
-        devices_msg = "with device(s)" if _service_http_devices_available(host, port) else "but no devices detected"
-        logger.info(f"BenchLab service HTTP API ready at http://{host}:{port} {devices_msg}")
+        devices_msg = "with device(s)" if _service_http_devices_available(
+            host, port) else "but no devices detected"
+        logger.info(
+            f"BenchLab service HTTP API ready at http://{host}:{port} {devices_msg}")
         os.environ["BENCHLAB_DATA_SOURCE"] = "service_http"
         os.environ["BENCHLAB_SERVICE_URL"] = f"http://{host}:{port}"
         return True
@@ -438,7 +449,8 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
     if source_type == "fastapi_custom":
         base_url = kwargs.get("base_url")
         if not base_url:
-            logger.error("fastapi_custom requires a base_url (e.g., http://192.168.1.100:8000)")
+            logger.error(
+                "fastapi_custom requires a base_url (e.g., http://192.168.1.100:8000)")
             return False
 
         # Parse the URL to get host and port
@@ -452,12 +464,15 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
 
         # Check if the remote server is healthy
         if _fastapi_health(host, port):
-            devices_msg = "with device(s)" if _fastapi_devices_available(host, port) else "but no devices detected"
-            logger.info(f"FastAPI server available at {base_url} {devices_msg}")
+            devices_msg = "with device(s)" if _fastapi_devices_available(
+                host, port) else "but no devices detected"
+            logger.info(
+                f"FastAPI server available at {base_url} {devices_msg}")
             return True
         else:
             logger.error(f"FastAPI server not reachable at {base_url}")
-            logger.error("Make sure the remote server is running and accessible from this machine.")
+            logger.error(
+                "Make sure the remote server is running and accessible from this machine.")
             return False
 
     if source_type == "mqtt_custom":
@@ -469,7 +484,8 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
         # Check if the custom MQTT broker is reachable
         if not check_mqtt_running(broker, mqtt_port):
             logger.error(f"MQTT broker not reachable at {broker}:{mqtt_port}")
-            logger.error("Make sure the MQTT broker is running and accessible.")
+            logger.error(
+                "Make sure the MQTT broker is running and accessible.")
             return False
 
         logger.info(f"MQTT broker available at {broker}:{mqtt_port}")

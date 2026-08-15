@@ -21,7 +21,8 @@ class FieldChange:
 class DiffResult:
     device_name_change: Optional[FieldChange] = None
     # (profileId, fanId) -> list of FieldChange
-    fan_changes: Dict[Tuple[int, int], List[FieldChange]] = field(default_factory=dict)
+    fan_changes: Dict[Tuple[int, int], List[FieldChange]
+                      ] = field(default_factory=dict)
     # profileId -> list of FieldChange
     rgb_changes: Dict[int, List[FieldChange]] = field(default_factory=dict)
     calibration_changed: bool = False
@@ -36,7 +37,8 @@ class DiffResult:
         )
 
 
-def _dict_diff(current: Dict[str, Any], desired: Dict[str, Any], skip_keys=()) -> List[FieldChange]:
+def _dict_diff(current: Dict[str, Any], desired: Dict[str,
+               Any], skip_keys=()) -> List[FieldChange]:
     """Return FieldChanges for keys present in *desired* whose value differs
     from *current* (missing-in-current counts as a difference, e.g. first
     import onto a fresh device)."""
@@ -46,11 +48,16 @@ def _dict_diff(current: Dict[str, Any], desired: Dict[str, Any], skip_keys=()) -
             continue
         current_v = current.get(k) if current else None
         if current_v != desired_v:
-            changes.append(FieldChange(field=k, current=current_v, desired=desired_v))
+            changes.append(
+                FieldChange(
+                    field=k,
+                    current=current_v,
+                    desired=desired_v))
     return changes
 
 
-def compute_diff(current_state: Dict[str, Any], desired_device_config) -> DiffResult:
+def compute_diff(current_state: Dict[str, Any],
+                 desired_device_config) -> DiffResult:
     """Compare a device's current state against a DeviceConfig (pydantic model).
 
     Args:
@@ -68,8 +75,9 @@ def compute_diff(current_state: Dict[str, Any], desired_device_config) -> DiffRe
         current_name = current_state.get('deviceName')
         if current_name != desired_device_config.deviceName:
             result.device_name_change = FieldChange(
-                field='deviceName', current=current_name, desired=desired_device_config.deviceName
-            )
+                field='deviceName',
+                current=current_name,
+                desired=desired_device_config.deviceName)
 
     # Fan profiles: index current by (profileId, fanId)
     current_fans: Dict[Tuple[int, int], Dict[str, Any]] = {}
@@ -82,7 +90,10 @@ def compute_diff(current_state: Dict[str, Any], desired_device_config) -> DiffRe
         for fan in profile.fans:
             key = (profile.profileId, fan.fanId)
             fan_dict = fan.model_dump()
-            changes = _dict_diff(current_fans.get(key, {}), fan_dict, skip_keys=('fanId',))
+            changes = _dict_diff(
+                current_fans.get(
+                    key, {}), fan_dict, skip_keys=(
+                    'fanId',))
             if changes:
                 result.fan_changes[key] = changes
 
@@ -92,13 +103,18 @@ def compute_diff(current_state: Dict[str, Any], desired_device_config) -> DiffRe
     }
     for rgb in (desired_device_config.rgbProfiles or []):
         rgb_dict = rgb.model_dump()
-        changes = _dict_diff(current_rgb.get(rgb.profileId, {}), rgb_dict, skip_keys=('profileId',))
+        changes = _dict_diff(
+            current_rgb.get(
+                rgb.profileId, {}), rgb_dict, skip_keys=(
+                'profileId',))
         if changes:
             result.rgb_changes[rgb.profileId] = changes
 
-    # Calibration: whole-blob comparison, not meant to be hand-edited field by field
+    # Calibration: whole-blob comparison, not meant to be hand-edited field by
+    # field
     if desired_device_config.calibration is not None:
-        if current_state.get('calibration') != desired_device_config.calibration:
+        if current_state.get(
+                'calibration') != desired_device_config.calibration:
             result.calibration_changed = True
 
     return result

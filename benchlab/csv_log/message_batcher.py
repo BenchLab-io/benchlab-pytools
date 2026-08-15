@@ -89,11 +89,12 @@ class MessageBatcher:
             self.metrics.total_flushes += 1
             self.metrics.last_flush_time = elapsed
             if self.metrics.total_flushes > 0:
-                self.metrics.avg_flush_time = (
-                    (self.metrics.avg_flush_time * (self.metrics.total_flushes - 1) + elapsed)
-                    / self.metrics.total_flushes
-                )
-            self.logger.debug(f"Flushed {len(messages_to_flush)} messages in {elapsed:.3f}s")
+                self.metrics.avg_flush_time = ((self.metrics.avg_flush_time * (
+                    self.metrics.total_flushes - 1) + elapsed) / self.metrics.total_flushes)
+            self.logger.debug(
+                f"Flushed {
+                    len(messages_to_flush)} messages in {
+                    elapsed:.3f}s")
             return True
 
         except Exception as e:
@@ -103,7 +104,8 @@ class MessageBatcher:
                 self.buffer.extend(messages_to_flush)
             return False
 
-    def set_flush_callback(self, callback: Callable[[List[Dict[str, Any]]], None]):
+    def set_flush_callback(
+            self, callback: Callable[[List[Dict[str, Any]]], None]):
         self.flush_callback = callback
 
     def set_metrics_callback(self, callback: Callable[[BatchMetrics], None]):
@@ -111,7 +113,8 @@ class MessageBatcher:
 
     def get_metrics(self) -> BatchMetrics:
         with self.buffer_lock:
-            self.metrics.buffer_utilization = len(self.buffer) / self.config.max_buffer_size
+            self.metrics.buffer_utilization = len(
+                self.buffer) / self.config.max_buffer_size
         return self.metrics
 
     def _flush_worker(self):
@@ -135,7 +138,11 @@ class MessageBatcher:
 class CSVBatchWriter:
     """Batch writer for CSV files."""
 
-    def __init__(self, output_dir: str, batch_size: int = 100, format: str = "csv"):
+    def __init__(
+            self,
+            output_dir: str,
+            batch_size: int = 100,
+            format: str = "csv"):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.batch_size = batch_size
@@ -211,25 +218,33 @@ class CSVBatchWriter:
                     self._write_csv_batch(uid, file_info, messages_to_write)
                 elif self.format == "json":
                     self._write_json_batch(file_info, messages_to_write)
-                self.logger.debug(f"Wrote {len(messages_to_write)} rows for {uid}")
+                self.logger.debug(
+                    f"Wrote {
+                        len(messages_to_write)} rows for {uid}")
             except Exception as e:
                 self.logger.error(f"Failed to write batch for {uid}: {e}")
                 buf.extend(messages_to_write)  # restore on failure
 
-    def _write_csv_batch(self, uid: str, file_info: Dict, messages: List[Dict[str, Any]]):
+    def _write_csv_batch(self, uid: str, file_info: Dict,
+                         messages: List[Dict[str, Any]]):
         filepath = file_info["filepath"]
         headers = self.fieldnames.get(uid) or list(messages[0].keys())
         with open(filepath, "a", newline="", encoding="utf-8") as f:
             # extrasaction="ignore": drop keys not in the file's header (e.g. a
             # sensor that reappeared with a new field) instead of raising.
             # restval="": leave missing keys blank instead of raising.
-            writer = csv.DictWriter(f, fieldnames=headers, extrasaction="ignore", restval="")
+            writer = csv.DictWriter(
+                f,
+                fieldnames=headers,
+                extrasaction="ignore",
+                restval="")
             if not file_info["headers_written"]:
                 writer.writeheader()
                 file_info["headers_written"] = True
             writer.writerows(messages)
 
-    def _write_json_batch(self, file_info: Dict, messages: List[Dict[str, Any]]):
+    def _write_json_batch(self, file_info: Dict,
+                          messages: List[Dict[str, Any]]):
         filepath = file_info["filepath"]
         with open(filepath, "a", encoding="utf-8") as f:
             for message in messages:
@@ -256,12 +271,17 @@ class CSVBatchWriter:
 class BatchingLogger:
     """High-level batching logger combining MessageBatcher and CSVBatchWriter."""
 
-    def __init__(self, output_dir: str, config: BatchConfig = None, format: str = "csv"):
+    def __init__(
+            self,
+            output_dir: str,
+            config: BatchConfig = None,
+            format: str = "csv"):
         self.config = config or BatchConfig()
         self.format = format
         self.logger = logging.getLogger(__name__)
 
-        self.writer = CSVBatchWriter(output_dir, self.config.batch_size, self.format)
+        self.writer = CSVBatchWriter(
+            output_dir, self.config.batch_size, self.format)
         self.batcher = MessageBatcher(self.config)
         self.batcher.set_flush_callback(self.writer.write_batch)
         self.batcher.set_metrics_callback(self._on_metrics_update)
@@ -330,6 +350,7 @@ def create_high_frequency_batcher(
     output_dir: str, batch_size: int = 10, flush_interval: float = 5.0
 ) -> BatchingLogger:
     config = BatchConfig(
-        batch_size=batch_size, flush_interval=flush_interval, max_buffer_size=1000
-    )
+        batch_size=batch_size,
+        flush_interval=flush_interval,
+        max_buffer_size=1000)
     return BatchingLogger(output_dir, config, format="csv")

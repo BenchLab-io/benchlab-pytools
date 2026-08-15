@@ -11,9 +11,11 @@ from benchlab.vu.devices import load_vu_server_config, _DEFAULT_VU_CONFIG
 
 def test_loads_existing_config(tmp_path):
     config_path = tmp_path / "vu_server.config"
-    config_path.write_text('{"vu_server_url": "http://localhost:9999", "api_key": "abc"}')
+    config_path.write_text(
+        '{"vu_server_url": "http://localhost:9999", "api_key": "abc"}')
 
-    result = load_vu_server_config(config_path, tmp_path / "unused_template.json")
+    result = load_vu_server_config(
+        config_path, tmp_path / "unused_template.json")
 
     assert result["vu_server_url"] == "http://localhost:9999"
     assert result["api_key"] == "abc"
@@ -22,7 +24,8 @@ def test_loads_existing_config(tmp_path):
 def test_creates_config_from_valid_template(tmp_path):
     config_path = tmp_path / "vu_server.config"
     template_path = tmp_path / "vu_server.config_template"
-    template_path.write_text('{"vu_server_url": "http://localhost:5340", "api_key": "", "logo_file": ""}')
+    template_path.write_text(
+        '{"vu_server_url": "http://localhost:5340", "api_key": "", "logo_file": ""}')
 
     result = load_vu_server_config(config_path, template_path)
 
@@ -56,6 +59,7 @@ def test_falls_back_to_default_on_malformed_existing_config(tmp_path):
     config_path = tmp_path / "vu_server.config"
     config_path.write_text("{ not valid json")
 
-    result = load_vu_server_config(config_path, tmp_path / "unused_template.json")
+    result = load_vu_server_config(
+        config_path, tmp_path / "unused_template.json")
 
     assert result == _DEFAULT_VU_CONFIG

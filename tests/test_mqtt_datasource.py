@@ -34,7 +34,8 @@ class FakeMsg:
 
 def test_on_message_default_topic_prefix():
     ds = MQTTDataSource(broker="localhost")
-    ds._on_message(None, None, FakeMsg("benchlab/UID1/telemetry", {"temp": 42.0}))
+    ds._on_message(None, None, FakeMsg(
+        "benchlab/UID1/telemetry", {"temp": 42.0}))
     assert ds._latest_data["UID1"] == {"temp": 42.0}
 
 
@@ -43,19 +44,22 @@ def test_on_message_custom_topic_prefix():
     prefix check regardless of self.topic_prefix, so a custom prefix
     silently dropped every message."""
     ds = MQTTDataSource(broker="localhost", topic_prefix="custom-prefix")
-    ds._on_message(None, None, FakeMsg("custom-prefix/UID2/telemetry", {"temp": 10.0}))
+    ds._on_message(None, None, FakeMsg(
+        "custom-prefix/UID2/telemetry", {"temp": 10.0}))
     assert ds._latest_data["UID2"] == {"temp": 10.0}
 
 
 def test_on_message_info_payload():
     ds = MQTTDataSource(broker="localhost", topic_prefix="custom-prefix")
-    ds._on_message(None, None, FakeMsg("custom-prefix/UID3/info", {"firmware": "1.2.3"}))
+    ds._on_message(None, None, FakeMsg(
+        "custom-prefix/UID3/info", {"firmware": "1.2.3"}))
     assert ds._device_info["UID3"] == {"firmware": "1.2.3"}
 
 
 def test_on_message_ignores_mismatched_prefix():
     ds = MQTTDataSource(broker="localhost", topic_prefix="custom-prefix")
-    ds._on_message(None, None, FakeMsg("wrong-prefix/UID4/telemetry", {"temp": 1.0}))
+    ds._on_message(None, None, FakeMsg(
+        "wrong-prefix/UID4/telemetry", {"temp": 1.0}))
     assert "UID4" not in ds._latest_data
 
 

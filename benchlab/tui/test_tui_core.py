@@ -23,7 +23,9 @@ import pytest
 
 from benchlab.core.statistics import ChannelStats
 
-pytestmark = pytest.mark.skipif(not HAS_CURSES, reason="curses not available in this environment")
+pytestmark = pytest.mark.skipif(
+    not HAS_CURSES,
+    reason="curses not available in this environment")
 
 
 # A sensor_data dict where every commonly-read key is present but None,
@@ -50,8 +52,14 @@ SENSOR_DATA_ALL_NONE = {
     **{f"VIN_{i}": None for i in range(13)},
 }
 
-DEVICE_INFO_VALID = {"VendorId": 0x1234, "ProductId": 0x10, "FwVersion": 0x01020304}
-DEVICE_INFO_MALFORMED = {"VendorId": None, "ProductId": "bad", "FwVersion": object()}
+DEVICE_INFO_VALID = {
+    "VendorId": 0x1234,
+    "ProductId": 0x10,
+    "FwVersion": 0x01020304}
+DEVICE_INFO_MALFORMED = {
+    "VendorId": None,
+    "ProductId": "bad",
+    "FwVersion": object()}
 
 
 def _snapshot(**overrides):
@@ -94,11 +102,17 @@ def _render_tab(tab_index, snapshot, fleet_devices=None):
         pytest.skip("curses screen too small / unavailable in this environment")
 
 
-@pytest.mark.parametrize(
-    "tab_index",
-    range(8),
-    ids=["fleet", "device", "system", "motherboard", "hpwr", "voltage", "temperature", "fans"],
-)
+@pytest.mark.parametrize("tab_index",
+                         range(8),
+                         ids=["fleet",
+                              "device",
+                              "system",
+                              "motherboard",
+                              "hpwr",
+                              "voltage",
+                              "temperature",
+                              "fans"],
+                         )
 def test_render_tab_survives_none_sensor_values(tab_index):
     """Every tab must render without raising when sensor_data values are None.
 
@@ -108,8 +122,10 @@ def test_render_tab_survives_none_sensor_values(tab_index):
     defensively coerce None itself.
     """
     snapshot = _snapshot()
-    fleet_devices = [{"uid": "TEST-UID-0001", "port": "COM_TEST", "firmware": 0x01020304,
-                       "variant": "ORIGINAL"}]
+    fleet_devices = [{"uid": "TEST-UID-0001",
+                      "port": "COM_TEST",
+                      "firmware": 0x01020304,
+                      "variant": "ORIGINAL"}]
     _render_tab(tab_index, snapshot, fleet_devices)
 
 
@@ -128,11 +144,17 @@ def test_fleet_tab_survives_disconnected_and_empty_fleet():
     _render_tab(0, snapshot, fleet_devices=[])  # Fleet tab
 
 
-@pytest.mark.parametrize(
-    "tab_index",
-    range(8),
-    ids=["fleet", "device", "system", "motherboard", "hpwr", "voltage", "temperature", "fans"],
-)
+@pytest.mark.parametrize("tab_index",
+                         range(8),
+                         ids=["fleet",
+                              "device",
+                              "system",
+                              "motherboard",
+                              "hpwr",
+                              "voltage",
+                              "temperature",
+                              "fans"],
+                         )
 def test_render_tab_survives_disconnected(tab_index):
     """All tabs must render their disconnected state without raising."""
     snapshot = _snapshot(connected=False, sensor_data=None, uid=None)
@@ -200,7 +222,8 @@ def test_help_modal_renders_without_stomping_main_refresh():
     def _run(stdscr):
         real_height, real_width = stdscr.getmaxyx()
         if real_height < 10 or real_width < 20:
-            pytest.skip(f"console too small for a help modal: {real_width}x{real_height}")
+            pytest.skip(
+                f"console too small for a help modal: {real_width}x{real_height}")
 
         core = TUICore(stdscr, version="test")
         core.show_help_modal = True

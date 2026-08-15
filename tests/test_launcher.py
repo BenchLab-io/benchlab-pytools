@@ -37,7 +37,7 @@ def _fake_running_proc():
 def test_terminate_spawned_process_windows_uses_taskkill():
     proc = _fake_running_proc()
     with patch.object(sys, "platform", "win32"), \
-         patch("benchlab.launcher.subprocess.run") as mock_run:
+            patch("benchlab.launcher.subprocess.run") as mock_run:
         _terminate_spawned_process(proc, force=False)
     mock_run.assert_called_once()
     cmd = mock_run.call_args[0][0]
@@ -51,10 +51,10 @@ def test_terminate_spawned_process_posix_uses_killpg():
     # branch regardless of host OS.
     proc = _fake_running_proc()
     with patch.object(sys, "platform", "linux"), \
-         patch("benchlab.launcher.os.getpgid", return_value=99, create=True) as mock_getpgid, \
-         patch("benchlab.launcher.os.killpg", create=True) as mock_killpg, \
-         patch("benchlab.launcher.signal.SIGKILL", 9, create=True), \
-         patch("benchlab.launcher.signal.SIGTERM", 15, create=True):
+            patch("benchlab.launcher.os.getpgid", return_value=99, create=True) as mock_getpgid, \
+            patch("benchlab.launcher.os.killpg", create=True) as mock_killpg, \
+            patch("benchlab.launcher.signal.SIGKILL", 9, create=True), \
+            patch("benchlab.launcher.signal.SIGTERM", 15, create=True):
         _terminate_spawned_process(proc, force=True)
     mock_getpgid.assert_called_once_with(proc.pid)
     mock_killpg.assert_called_once()
@@ -67,7 +67,7 @@ def test_terminate_spawned_process_never_raises_on_failure():
     platform call rather than always failing."""
     proc = _fake_running_proc()
     with patch.object(sys, "platform", "win32"), \
-         patch("benchlab.launcher.subprocess.run", side_effect=OSError("boom")):
+            patch("benchlab.launcher.subprocess.run", side_effect=OSError("boom")):
         _terminate_spawned_process(proc, force=False)  # must not raise
 
 
@@ -75,7 +75,7 @@ def test_terminate_spawned_process_skips_already_exited():
     proc = MagicMock(spec=subprocess.Popen)
     proc.poll.return_value = 0
     with patch("benchlab.launcher.subprocess.run") as mock_run, \
-         patch("benchlab.launcher.os.killpg", create=True) as mock_killpg:
+            patch("benchlab.launcher.os.killpg", create=True) as mock_killpg:
         _terminate_spawned_process(proc, force=False)
     mock_run.assert_not_called()
     mock_killpg.assert_not_called()
@@ -84,7 +84,7 @@ def test_terminate_spawned_process_skips_already_exited():
 @pytest.fixture(autouse=True)
 def _clean_link_env():
     keys = ["REMOTE_MQTT_HOST", "REMOTE_MQTT_PORT", "REMOTE_MQTT_USER",
-             "REMOTE_MQTT_PASS", "LINK_TOPIC_PATTERN", "REMOTE_MQTT_TLS"]
+            "REMOTE_MQTT_PASS", "LINK_TOPIC_PATTERN", "REMOTE_MQTT_TLS"]
     saved = {k: os.environ.pop(k, None) for k in keys}
     yield
     for k, v in saved.items():
@@ -132,7 +132,8 @@ def test_export_link_env_makes_spawned_link_config_reach_resolve_config():
         remote_user=None, remote_pass=None, topic_pattern=None, no_tls=False,
     )
     _export_link_env(args)
-    cfg = _resolve_config(args=None)  # simulates a spawned process's fresh state
+    # simulates a spawned process's fresh state
+    cfg = _resolve_config(args=None)
     assert cfg["host"] == "cloud.example.com"
 
 
@@ -157,7 +158,8 @@ def test_check_and_setup_source_direct_no_warning_when_device_present(caplog):
             ready = check_and_setup_source("direct")
 
     assert ready is True
-    assert not any("No BENCHLAB device" in rec.message for rec in caplog.records)
+    assert not any(
+        "No BENCHLAB device" in rec.message for rec in caplog.records)
 
 
 def test_check_named_pipe_service_closes_handle_on_write_failure():
@@ -168,12 +170,13 @@ def test_check_named_pipe_service_closes_handle_on_write_failure():
     fake_handle = object()
     fake_win32file = MagicMock()
     fake_win32file.CreateFile.return_value = fake_handle
-    fake_win32file.WriteFile.side_effect = RuntimeError("simulated write failure")
+    fake_win32file.WriteFile.side_effect = RuntimeError(
+        "simulated write failure")
     fake_win32pipe = MagicMock()
 
     with patch.object(sys, "platform", "win32"), \
-         patch("benchlab.sources._named_pipe_available", return_value=True), \
-         patch.dict(sys.modules, {"win32file": fake_win32file, "win32pipe": fake_win32pipe, "pywintypes": MagicMock()}):
+            patch("benchlab.sources._named_pipe_available", return_value=True), \
+            patch.dict(sys.modules, {"win32file": fake_win32file, "win32pipe": fake_win32pipe, "pywintypes": MagicMock()}):
         result = check_named_pipe_service()
 
     assert result is False

@@ -95,7 +95,14 @@ def test_fan_config_new_fan_shows_full_diff():
     current = _empty_state()
     desired = DeviceConfig(
         selector=_selector(),
-        fanProfiles=[FanProfile(profileId=0, fans=[FanConfig(fanId=0, FanMode=1, TempSource=0)])],
+        fanProfiles=[
+            FanProfile(
+                profileId=0,
+                fans=[
+                    FanConfig(
+                        fanId=0,
+                        FanMode=1,
+                        TempSource=0)])],
     )
 
     diff = compute_diff(current, desired)
@@ -104,13 +111,26 @@ def test_fan_config_new_fan_shows_full_diff():
 
 
 def test_rgb_config_change_detected():
-    current = {
-        **_empty_state(),
-        "rgbProfiles": [{"profileId": 0, "Mode": 9, "Red": 255, "Green": 0, "Blue": 0, "Direction": 0, "Speed": 50}],
-    }
+    current = {**_empty_state(),
+               "rgbProfiles": [{"profileId": 0,
+                                "Mode": 9,
+                                "Red": 255,
+                                "Green": 0,
+                                "Blue": 0,
+                                "Direction": 0,
+                                "Speed": 50}],
+               }
     desired = DeviceConfig(
         selector=_selector(),
-        rgbProfiles=[RGBConfig(profileId=0, Mode=5, Red=0, Green=0, Blue=255, Direction=0, Speed=50)],
+        rgbProfiles=[
+            RGBConfig(
+                profileId=0,
+                Mode=5,
+                Red=0,
+                Green=0,
+                Blue=255,
+                Direction=0,
+                Speed=50)],
     )
 
     diff = compute_diff(current, desired)
@@ -133,7 +153,8 @@ def test_calibration_change_detected_as_whole_blob():
 
 def test_calibration_unset_in_desired_is_not_a_change():
     current = {**_empty_state(), "calibration": {"Crc": 1}}
-    desired = DeviceConfig(selector=_selector())  # calibration defaults to None
+    # calibration defaults to None
+    desired = DeviceConfig(selector=_selector())
 
     diff = compute_diff(current, desired)
 
@@ -157,8 +178,23 @@ def test_format_diff_renders_fan_and_rgb_sections():
     desired = DeviceConfig(
         selector=_selector(),
         deviceName="NewName",
-        fanProfiles=[FanProfile(profileId=1, fans=[FanConfig(fanId=2, FanMode=1, TempSource=0)])],
-        rgbProfiles=[RGBConfig(profileId=0, Mode=5, Red=1, Green=2, Blue=3, Direction=0, Speed=10)],
+        fanProfiles=[
+            FanProfile(
+                profileId=1,
+                fans=[
+                    FanConfig(
+                        fanId=2,
+                        FanMode=1,
+                        TempSource=0)])],
+        rgbProfiles=[
+            RGBConfig(
+                profileId=0,
+                Mode=5,
+                Red=1,
+                Green=2,
+                Blue=3,
+                Direction=0,
+                Speed=10)],
     )
 
     diff = compute_diff(current, desired)

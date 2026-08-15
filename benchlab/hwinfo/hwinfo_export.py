@@ -28,10 +28,12 @@ if winreg is not None:
     HWINFO_CUSTOM_ROOT = winreg.HKEY_CURRENT_USER
     HWINFO_CUSTOM_PATH = r"Software\HWiNFO64\Sensors\Custom"
 
-IGNORE_KEYS = [f"Fan{i+1}_Status" for i in range(FAN_NUM)]
+IGNORE_KEYS = [f"Fan{i + 1}_Status" for i in range(FAN_NUM)]
 exported_devices = set()
 
 # --- Map keys to HWiNFO types & units ---
+
+
 def get_sensor_type_and_unit(key):
     key_lower = key.lower()
     if "temp" in key_lower or key_lower in ("chip_temp", "ambient_temp"):
@@ -53,6 +55,7 @@ def get_sensor_type_and_unit(key):
     else:
         return "Other", "%"
 
+
 def write_hwinfo_sensor(device_name, sensor_type, idx, name, value, unit=None):
     key_path = f"{HWINFO_CUSTOM_PATH}\\{device_name}\\{sensor_type}{idx}"
     try:
@@ -62,7 +65,9 @@ def write_hwinfo_sensor(device_name, sensor_type, idx, name, value, unit=None):
 
             # Write Value
             if isinstance(value, float):
-                winreg.SetValueEx(key, "Value", 0, winreg.REG_SZ, f"{value:.3f}")
+                winreg.SetValueEx(
+                    key, "Value", 0, winreg.REG_SZ, f"{
+                        value:.3f}")
             else:
                 winreg.SetValueEx(key, "Value", 0, winreg.REG_SZ, str(value))
 
@@ -76,13 +81,19 @@ def write_hwinfo_sensor(device_name, sensor_type, idx, name, value, unit=None):
 
         log_value = f"{value:.3f}" if isinstance(value, float) else str(value)
         if unit:
-            logger.info("Created HWiNFO key: %s | Name=%s | Value=%s | Unit=%s",
-                        key_path, name, log_value, unit)
+            logger.info(
+                "Created HWiNFO key: %s | Name=%s | Value=%s | Unit=%s",
+                key_path,
+                name,
+                log_value,
+                unit)
         else:
             logger.info("Created HWiNFO key: %s | Name=%s | Value=%s",
                         key_path, name, log_value)
     except Exception as e:
-        logger.warning("Failed to write %s%d for %s: %s", sensor_type, idx, device_name, e)
+        logger.warning("Failed to write %s%d for %s: %s",
+                       sensor_type, idx, device_name, e)
+
 
 def _process_sensor_data(data: dict) -> dict:
     """Translate raw sensor dict into HWiNFO grouped sensors with rounding."""
@@ -125,13 +136,24 @@ def _process_sensor_data(data: dict) -> dict:
 def _export_grouped(device_name: str, grouped_sensors: dict):
     """Write grouped sensors to HWiNFO registry."""
     seq_counters = {k: 0 for k in grouped_sensors.keys()}
-    for group in ["Power", "Volt", "Current", "Temp", "Usage", "Clock", "Fan", "Other"]:
+    for group in [
+        "Power",
+        "Volt",
+        "Current",
+        "Temp",
+        "Usage",
+        "Clock",
+        "Fan",
+            "Other"]:
         for key, value, unit in grouped_sensors[group]:
             idx = seq_counters[group]
             seq_counters[group] += 1
             write_hwinfo_sensor(device_name, group, idx, key, value, unit)
 
-    summary = ", ".join(f"{k}: {len(v)}" for k, v in grouped_sensors.items() if v)
+    summary = ", ".join(
+        f"{k}: {
+            len(v)}" for k,
+        v in grouped_sensors.items() if v)
     logger.debug("Device %s export summary: %s", device_name, summary)
 
 
@@ -155,7 +177,10 @@ def export_device_sensors(device_info, datasource=None):
         # Use provided data source
         data = datasource.get_telemetry(uid)
         if not data:
-            logger.debug("No telemetry for %s via %s yet", uid, datasource.source_type)
+            logger.debug(
+                "No telemetry for %s via %s yet",
+                uid,
+                datasource.source_type)
     else:
         # Fallback: direct probe via pycore (legacy behavior)
         try:
@@ -165,12 +190,14 @@ def export_device_sensors(device_info, datasource=None):
             if not ser:
                 logger.error("Cannot open serial port for device %s", uid)
                 return False
-            # Get product_id for correct sensor interpretation (BL2 vs ORIGINAL)
+            # Get product_id for correct sensor interpretation (BL2 vs
+            # ORIGINAL)
             product_id = BENCHLAB_ORIGINAL_PRODUCT_ID
             try:
                 device_info = read_device(ser)
                 if device_info:
-                    product_id = device_info.get('ProductId', BENCHLAB_ORIGINAL_PRODUCT_ID)
+                    product_id = device_info.get(
+                        'ProductId', BENCHLAB_ORIGINAL_PRODUCT_ID)
             except Exception:
                 pass
             sensor_struct = read_sensors(ser, product_id=product_id)
@@ -180,7 +207,8 @@ def export_device_sensors(device_info, datasource=None):
                 return False
             data = translate_sensor_struct(sensor_struct)
         except Exception as e:
-            logger.error("Error exporting sensors for device %s (fallback): %s", uid, e)
+            logger.error(
+                "Error exporting sensors for device %s (fallback): %s", uid, e)
             return False
 
     if not data:
@@ -194,6 +222,7 @@ def export_device_sensors(device_info, datasource=None):
     except Exception as e:
         logger.error("Error exporting sensors for device %s: %s", uid, e)
         return False
+
 
 def delete_registry_tree(root, path):
     try:
@@ -219,11 +248,16 @@ def delete_registry_tree(root, path):
     except OSError as e:
         logger.warning("Failed to remove key %s: %s", path, e)
 
+
 def cleanup_registry():
     for device_name in exported_devices:
-        delete_registry_tree(HWINFO_CUSTOM_ROOT, f"{HWINFO_CUSTOM_PATH}\\{device_name}")
+        delete_registry_tree(
+            HWINFO_CUSTOM_ROOT,
+            f"{HWINFO_CUSTOM_PATH}\\{device_name}")
+
 
 atexit.register(cleanup_registry)
+
 
 def _select_datasource() -> DataSource:
     """Select a data source based on environment config or default to direct."""
@@ -231,18 +265,22 @@ def _select_datasource() -> DataSource:
     kwargs = {}
 
     if source_type in ("fastapi", "fastapi_custom"):
-        kwargs["base_url"] = os.environ.get("BENCHLAB_API_URL", "http://127.0.0.1:8000")
+        kwargs["base_url"] = os.environ.get(
+            "BENCHLAB_API_URL", "http://127.0.0.1:8000")
     elif source_type == "mqtt":
         kwargs["broker"] = os.environ.get("MQTT_BROKER", "localhost")
         kwargs["port"] = int(os.environ.get("MQTT_PORT", "1883"))
-        kwargs["topic_prefix"] = os.environ.get("MQTT_TOPIC_PREFIX", "benchlab")
+        kwargs["topic_prefix"] = os.environ.get(
+            "MQTT_TOPIC_PREFIX", "benchlab")
 
     ds = create_datasource(source_type, **kwargs)
     if ds.connect():
         logger.info("Using data source: %s", source_type)
         return ds
     else:
-        logger.warning("Failed to connect via %s, falling back to direct", source_type)
+        logger.warning(
+            "Failed to connect via %s, falling back to direct",
+            source_type)
         ds = create_datasource("direct")
         if ds.connect():
             return ds
@@ -258,8 +296,11 @@ def export_all_devices(update_interval=1, datasource=None):
     """
     # Check Windows availability (BUG-7.2)
     if winreg is None:
-        logger.error("HWiNFO export is only supported on Windows. Please run on a Windows system.")
-        raise RuntimeError(f"HWiNFO export requires Windows. Current platform: {sys.platform}")
+        logger.error(
+            "HWiNFO export is only supported on Windows. Please run on a Windows system.")
+        raise RuntimeError(
+            f"HWiNFO export requires Windows. Current platform: {
+                sys.platform}")
 
     # Remove only old BenchLab entries, not user-created sensors
     try:
@@ -269,7 +310,8 @@ def export_all_devices(update_interval=1, datasource=None):
                 try:
                     subkey_name = winreg.EnumKey(root_key, i)
                     if subkey_name.startswith("BENCHLAB_"):
-                        delete_registry_tree(HWINFO_CUSTOM_ROOT, f"{HWINFO_CUSTOM_PATH}\\{subkey_name}")
+                        delete_registry_tree(
+                            HWINFO_CUSTOM_ROOT, f"{HWINFO_CUSTOM_PATH}\\{subkey_name}")
                     else:
                         i += 1
                 except OSError:
@@ -286,17 +328,22 @@ def export_all_devices(update_interval=1, datasource=None):
             # Get device list from data source
             fleet = datasource.list_devices()
 
-            # Remove registry entries for devices no longer present in the fleet
+            # Remove registry entries for devices no longer present in the
+            # fleet
             current_device_names = {
                 f"BENCHLAB_{device.get('port', 'unknown')}_{device.get('uid', 'unknown')}"
                 for device in fleet
             }
             for stale_name in exported_devices - current_device_names:
-                delete_registry_tree(HWINFO_CUSTOM_ROOT, f"{HWINFO_CUSTOM_PATH}\\{stale_name}")
+                delete_registry_tree(
+                    HWINFO_CUSTOM_ROOT,
+                    f"{HWINFO_CUSTOM_PATH}\\{stale_name}")
                 exported_devices.discard(stale_name)
 
             if not fleet:
-                logger.warning("No BenchLab devices found via %s", datasource.source_type)
+                logger.warning(
+                    "No BenchLab devices found via %s",
+                    datasource.source_type)
                 time.sleep(update_interval)
                 continue
 
@@ -319,6 +366,7 @@ def export_all_devices(update_interval=1, datasource=None):
         logger.info("Cleaning up registry keys...")
         cleanup_registry()
         logger.info("Done.")
+
 
 if __name__ == "__main__":
     logger.info("Starting BenchLab HWiNFO exporter")

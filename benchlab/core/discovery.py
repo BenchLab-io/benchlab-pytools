@@ -35,7 +35,8 @@ from .retry import retry, RetryPolicy
 logger = logging.getLogger("benchlab.core.discovery")
 
 
-@retry(RetryPolicy(max_retries=3, backoff_factor=2.0, base_delay=0.5, allowed_exceptions=(Exception,)))
+@retry(RetryPolicy(max_retries=3, backoff_factor=2.0,
+       base_delay=0.5, allowed_exceptions=(Exception,)))
 def discover_devices() -> List[Dict[str, Any]]:
     """Return a list of connected BenchLab devices.
 
@@ -65,10 +66,17 @@ def discover_devices() -> List[Dict[str, Any]]:
             ser.close()
             if uid:
                 fw = info.get("FwVersion", "?")
-                product_id = info.get("ProductId", BENCHLAB_ORIGINAL_PRODUCT_ID)
+                product_id = info.get(
+                    "ProductId", BENCHLAB_ORIGINAL_PRODUCT_ID)
                 variant = "BL2" if product_id == BENCHLAB_BL2_PRODUCT_ID else "ORIGINAL"
-                devices.append({"uid": uid, "port": port, "fw": fw, "variant": variant})
-                logger.info("Discovered BenchLab device UID=%s on %s (FW=%s, Variant=%s)", uid, port, fw, variant)
+                devices.append({"uid": uid, "port": port,
+                               "fw": fw, "variant": variant})
+                logger.info(
+                    "Discovered BenchLab device UID=%s on %s (FW=%s, Variant=%s)",
+                    uid,
+                    port,
+                    fw,
+                    variant)
             else:
                 logger.debug("No UID read from port %s", port)
         except Exception as exc:  # pragma: no cover – defensive logging

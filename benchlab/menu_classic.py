@@ -39,7 +39,7 @@ def print_banner() -> None:
 ██████╔╝███████╗██║ ╚████║╚██████╗██║  ██║███████╗██║  ██║██████╔╝
 ╚═════╝ ╚══════╝╚═╝  ╚═══╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═════╝
 
-        ██████╗ ██╗   ██╗████████╗ ██████╗  ██████╗ ██╗     ███████╗  
+        ██████╗ ██╗   ██╗████████╗ ██████╗  ██████╗ ██╗     ███████╗
         ██╔══██╗╚██╗ ██╔╝╚══██╔══╝██╔═══██╗██╔═══██╗██║     ██╔════╝
         ██████╔╝ ╚████╔╝    ██║   ██║   ██║██║   ██║██║     ███████╗
         ██╔═══╝   ╚██╔╝     ██║   ██║   ██║██║   ██║██║     ╚════██║
@@ -204,7 +204,8 @@ def step2_multi_tool() -> None:
 # Step 3 – Source Selection & Launch
 # ──────────────────────────────────────────────────────────────
 
-def _build_source_menu(is_multi: bool, supported_sources: Optional[List[str]] = None) -> dict:
+def _build_source_menu(is_multi: bool,
+                       supported_sources: Optional[List[str]] = None) -> dict:
     """Build the source selection menu.
 
     Args:
@@ -217,33 +218,37 @@ def _build_source_menu(is_multi: bool, supported_sources: Optional[List[str]] = 
     OS-unsupported ones get a note.
     """
     is_windows = sys.platform.startswith("win")
-    os_name = "Windows" if is_windows else ("macOS" if sys.platform == "darwin" else "Linux")
+    os_name = "Windows" if is_windows else (
+        "macOS" if sys.platform == "darwin" else "Linux")
 
     # Build all possible sources
     all_sources = []
-    
+
     if not is_multi:
         all_sources.append(("Direct (serial port)", "direct"))
-    
+
     all_sources.append(("FastAPI server (Python)", "fastapi"))
     all_sources.append(("FastAPI server (custom URL)", "fastapi_custom"))
     all_sources.append(("MQTT (Python, experimental)", "mqtt"))
     all_sources.append(("MQTT (custom)", "mqtt_custom"))
-    
+
     pipe_note = "" if is_windows else f"  (not available on {os_name})"
-    all_sources.append((f"BenchLab service - named pipe{pipe_note}", "named_pipe"))
-    all_sources.append((f"BenchLab service - HTTP API (port {SERVICE_HTTP_DEFAULT_PORT})", "service_http"))
-    
+    all_sources.append(
+        (f"BenchLab service - named pipe{pipe_note}", "named_pipe"))
+    all_sources.append(
+        (f"BenchLab service - HTTP API (port {SERVICE_HTTP_DEFAULT_PORT})",
+         "service_http"))
+
     # Filter by supported_sources if provided
     if supported_sources is not None:
-        all_sources = [(label, src_type) for label, src_type in all_sources 
+        all_sources = [(label, src_type) for label, src_type in all_sources
                        if src_type in supported_sources]
-    
+
     # Build numbered menu
     sources = {}
     for key, (label, src_type) in enumerate(all_sources, 1):
         sources[str(key)] = (label, src_type)
-    
+
     return sources
 
 
@@ -322,16 +327,20 @@ def step3_select_source(tool_ids: List[str], tool_names: List[str]) -> None:
         print(f"  → Using MQTT broker at {broker}:{mqtt_port}")
     elif source_type == "service_http":
         import urllib.parse
-        svc_url = os.environ.get("BENCHLAB_SERVICE_URL", f"http://localhost:{SERVICE_HTTP_DEFAULT_PORT}")
+        svc_url = os.environ.get(
+            "BENCHLAB_SERVICE_URL",
+            f"http://localhost:{SERVICE_HTTP_DEFAULT_PORT}")
         parsed = urllib.parse.urlparse(svc_url)
-        setup_kwargs = {"host": parsed.hostname or "localhost", "port": parsed.port or SERVICE_HTTP_DEFAULT_PORT}
+        setup_kwargs = {"host": parsed.hostname or "localhost",
+                        "port": parsed.port or SERVICE_HTTP_DEFAULT_PORT}
 
     source_ready = check_and_setup_source(source_type, **setup_kwargs)
 
     if not source_ready:
         print(f"\n  ✗ Could not set up {source_type} data source.")
         if source_type in ("named_pipe", "service_http"):
-            print("  → Start the BenchLab Windows service (BL_Service.exe) and try again.")
+            print(
+                "  → Start the BenchLab Windows service (BL_Service.exe) and try again.")
         return
 
     print()

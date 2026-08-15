@@ -130,7 +130,11 @@ class DeviceRegistry:
             is_new = uid not in self._devices
             self._devices[uid] = info
         if is_new:
-            logger.info("Device registered: %s on %s (source=%s)", uid, port, data_source)
+            logger.info(
+                "Device registered: %s on %s (source=%s)",
+                uid,
+                port,
+                data_source)
             self._emit_connect(info)
 
     def unregister(self, uid: str) -> None:

@@ -46,7 +46,8 @@ try:
     except ImportError:
         from benchlab_pycore.core import BENCHLAB_CFE_PRODUCT_ID as BENCHLAB_BL2_PRODUCT_ID
 except ImportError:
-    logger.warning("benchlab_pycore not installed; using fallback product ID constants")
+    logger.warning(
+        "benchlab_pycore not installed; using fallback product ID constants")
     BENCHLAB_ORIGINAL_PRODUCT_ID = 0x10
     BENCHLAB_BL2_PRODUCT_ID = 0x11
 
@@ -63,7 +64,7 @@ __all__ = [
     "DataSourceManager",
     # Statistics tracking
     "ChannelStats",
-    "StatsFormatter", 
+    "StatsFormatter",
     "create_stats_callback",
     # Device and process management
     "DeviceRegistry",

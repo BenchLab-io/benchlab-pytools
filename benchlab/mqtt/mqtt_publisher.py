@@ -24,25 +24,27 @@ from benchlab.core.shared_serial import open_serial_connection
 from benchlab.core.datasource import resolve_mqtt_protocol as _resolve_mqtt_protocol
 
 MQTTV5_REASON_CODES = {
-    0:  "Success",
-    128:"Unspecified error",
-    129:"Malformed packet",
-    130:"Protocol error",
-    131:"Implementation specific error",
-    132:"Unsupported protocol version",
-    133:"Client identifier not valid",
-    134:"Bad username or password",
-    135:"Not authorized",
-    136:"Server unavailable",
-    137:"Server busy",
-    138:"Banned",
-    140:"Topic name invalid",
-    143:"Packet too large",
-    144:"Quota exceeded",
-    149:"Connection rate exceeded",
+    0: "Success",
+    128: "Unspecified error",
+    129: "Malformed packet",
+    130: "Protocol error",
+    131: "Implementation specific error",
+    132: "Unsupported protocol version",
+    133: "Client identifier not valid",
+    134: "Bad username or password",
+    135: "Not authorized",
+    136: "Server unavailable",
+    137: "Server busy",
+    138: "Banned",
+    140: "Topic name invalid",
+    143: "Packet too large",
+    144: "Quota exceeded",
+    149: "Connection rate exceeded",
 }
 
 # --- Logger setup ---
+
+
 class JsonFormatter(logging.Formatter):
     def format(self, record):
         log_record = {
@@ -57,18 +59,22 @@ class JsonFormatter(logging.Formatter):
             log_record["exception"] = self.formatException(record.exc_info)
         return json.dumps(log_record)
 
+
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 
 logger = logging.getLogger("mqtt_publisher")
 logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
 handler = logging.StreamHandler(sys.stdout)
-formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", "%Y-%m-%d %H:%M:%S")
+formatter = logging.Formatter(
+    "%(asctime)s [%(levelname)s] %(message)s",
+    "%Y-%m-%d %H:%M:%S")
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 # Graceful shutdown flags (QUAL-3.1: per-device stop events)
 global_stop_event = threading.Event()
 device_stop_events = {}  # {uid: threading.Event}
+
 
 def resolve_mqtt_protocol(value):
     """Resolve *value* to one of paho's MQTTv31/MQTTv311/MQTTv5 int constants.
@@ -95,13 +101,15 @@ def load_local_config(filename="mqtt.config"):
         poll_rate = 1  # default if file missing
     return poll_rate
 
+
 def load_mqtt_config():
     poll_rate = load_local_config()
 
     return {
         "broker": os.getenv("MQTT_BROKER", "localhost"),
         "port": int(os.getenv("MQTT_PORT", 1883)),
-        "transport": os.getenv("MQTT_TRANSPORT", "tcp"),   # default tcp, can override
+        # default tcp, can override
+        "transport": os.getenv("MQTT_TRANSPORT", "tcp"),
         "username": os.getenv("MQTT_USERNAME"),
         "password": os.getenv("MQTT_PASSWORD"),
         "protocol": resolve_mqtt_protocol(os.getenv("MQTT_PROTOCOL", mqtt.MQTTv311)),
@@ -111,6 +119,7 @@ def load_mqtt_config():
         # QUAL-3.2 fix: Make topic prefix configurable
         "topic_prefix": os.getenv("MQTT_TOPIC_PREFIX", "benchlab")
     }
+
 
 def map_sensors_to_payload(sensor_struct, timestamp):
     """
@@ -125,6 +134,7 @@ def map_sensors_to_payload(sensor_struct, timestamp):
     except Exception as e:
         logger.error("Failed to translate sensor_struct: %s", e)
         return None
+
 
 def reason_code_lookup(rc):
     """Resolve an MQTTV5 reason string for *rc*.
@@ -150,14 +160,20 @@ def mqtt_publish(client, topic, payload, qos=0, retain=False):
 
         logger.debug("Publishing to %s: %s", topic, json_payload)
 
-        result = client.publish(topic, json_payload.encode("utf-8"), qos=qos, retain=retain)
+        result = client.publish(
+            topic,
+            json_payload.encode("utf-8"),
+            qos=qos,
+            retain=retain)
 
         if result.rc != mqtt.MQTT_ERR_SUCCESS:
             # Look up reason if using MQTTv5
             reason_str = MQTTV5_REASON_CODES.get(result.rc, "Unknown reason")
             logger.warning(
-                "Publish failed to topic %s, rc=%s (%s)", topic, result.rc, reason_str
-            )
+                "Publish failed to topic %s, rc=%s (%s)",
+                topic,
+                result.rc,
+                reason_str)
 
         return result
 
@@ -166,6 +182,8 @@ def mqtt_publish(client, topic, payload, qos=0, retain=False):
         return None
 
 # Main MQTT loop
+
+
 def device_thread(device, cfg, publish_interval=1):
     port = device["port"]
     uid = device["uid"]
@@ -223,7 +241,9 @@ def device_thread(device, cfg, publish_interval=1):
         def on_disconnect(c, userdata, flags, reason_code, properties=None):
             rc = reason_code if reason_code else 0
             if rc == 0:
-                logger.info("MQTT client %s disconnected cleanly", local_client_id)
+                logger.info(
+                    "MQTT client %s disconnected cleanly",
+                    local_client_id)
             else:
                 reason = reason_code_lookup(rc)
                 logger.warning(
@@ -249,7 +269,9 @@ def device_thread(device, cfg, publish_interval=1):
 
         def on_disconnect(c, userdata, rc):
             if rc == 0:
-                logger.info("MQTT client %s disconnected cleanly", local_client_id)
+                logger.info(
+                    "MQTT client %s disconnected cleanly",
+                    local_client_id)
             else:
                 reason = reason_code_lookup(rc)
                 logger.warning(
@@ -280,7 +302,8 @@ def device_thread(device, cfg, publish_interval=1):
     device_stop_events[uid] = device_stop_event
 
     # Wait until connected (non-blocking, allows graceful shutdown)
-    while not client.connected_flag and not global_stop_event.is_set() and not device_stop_event.is_set():
+    while not client.connected_flag and not global_stop_event.is_set(
+    ) and not device_stop_event.is_set():
         time.sleep(0.5)
 
     # Serial connection loop
@@ -295,21 +318,34 @@ def device_thread(device, cfg, publish_interval=1):
                     ser = open_serial_connection(port)
                     retry_count = 0
                 except OSError as e:
-                    # open_serial_connection raises OSError on failure; we no longer depend on serial.SerialException
-                    logger.warning("Failed to open serial port %s: %s", port, e)
+                    # open_serial_connection raises OSError on failure; we no
+                    # longer depend on serial.SerialException
+                    logger.warning(
+                        "Failed to open serial port %s: %s", port, e)
                     retry_count += 1
                     if retry_count >= max_retries:
-                        logger.error("Too many failed attempts for %s, stopping thread.", uid)
+                        logger.error(
+                            "Too many failed attempts for %s, stopping thread.", uid)
                         break
                     time.sleep(1)
                     continue
 
-                # Send initial info payload (retain=True so late subscribers like the TUI can discover this device)
-                info_payload = {"uid": uid, "com_port": port, "firmware": device.get("firmware")}
+                # Send initial info payload (retain=True so late subscribers
+                # like the TUI can discover this device)
+                info_payload = {
+                    "uid": uid,
+                    "com_port": port,
+                    "firmware": device.get("firmware")}
                 topic_info = f"{cfg['topic_prefix']}/{uid}/info"
-                mqtt_publish(client, topic_info, info_payload, qos=qos, retain=True)
+                mqtt_publish(
+                    client,
+                    topic_info,
+                    info_payload,
+                    qos=qos,
+                    retain=True)
 
-                # Register device in the DeviceRegistry so tools can discover it
+                # Register device in the DeviceRegistry so tools can discover
+                # it
                 registry = DeviceRegistry.get_instance()
                 registry.register(
                     uid=uid,
@@ -320,28 +356,34 @@ def device_thread(device, cfg, publish_interval=1):
 
             # Read sensors and publish telemetry
             try:
-                # Get product_id for correct sensor interpretation (BL2 vs ORIGINAL)
+                # Get product_id for correct sensor interpretation (BL2 vs
+                # ORIGINAL)
                 product_id = BENCHLAB_ORIGINAL_PRODUCT_ID
                 try:
                     device_info = read_device(ser)
                     if device_info:
-                        product_id = device_info.get('ProductId', BENCHLAB_ORIGINAL_PRODUCT_ID)
+                        product_id = device_info.get(
+                            'ProductId', BENCHLAB_ORIGINAL_PRODUCT_ID)
                 except Exception:
                     pass
                 sensors = read_sensors(ser, product_id=product_id)
-                payload = map_sensors_to_payload(sensors, int(time.time() * 1000))
+                payload = map_sensors_to_payload(
+                    sensors, int(time.time() * 1000))
                 topic_telemetry = f"{cfg['topic_prefix']}/{uid}/telemetry"
-                result = mqtt_publish(client, topic_telemetry, payload, qos=qos)
+                result = mqtt_publish(
+                    client, topic_telemetry, payload, qos=qos)
 
                 if result and payload:  # only log if a payload was actually sent
                     payload_size = len(json.dumps(payload))
-                    logger.debug("%s payload sent: %d bytes", uid, payload_size)
+                    logger.debug(
+                        "%s payload sent: %d bytes", uid, payload_size)
 
                 retry_count = 0
-                time.sleep(publish_interval) 
+                time.sleep(publish_interval)
 
             except OSError as e:
-                # Serial connection errors surface as OSError from open_serial_connection/read_sensors
+                # Serial connection errors surface as OSError from
+                # open_serial_connection/read_sensors
                 logger.warning("Lost connection to %s: %s", uid, e)
                 try:
                     if ser:
@@ -353,20 +395,24 @@ def device_thread(device, cfg, publish_interval=1):
                 # Wait a moment before rescanning (allow /dev to settle)
                 time.sleep(0.5)
 
-                # Attempt to rescan for devices and see if this UID still exists
+                # Attempt to rescan for devices and see if this UID still
+                # exists
                 try:
                     current_fleet = get_fleet_info()
                     uids = [d["uid"] for d in current_fleet]
                     if uid not in uids:
-                        logger.info("Device %s removed from fleet, stopping thread.", uid)
+                        logger.info(
+                            "Device %s removed from fleet, stopping thread.", uid)
                         break  # exit device thread gracefully
                     else:
-                        logger.info("Device %s still detected, retrying connection...", uid)
+                        logger.info(
+                            "Device %s still detected, retrying connection...", uid)
                 except Exception as scan_err:
                     logger.error("Rescan failed: %s", scan_err)
 
                 retry_count += 1
-                # Cap retry_count to prevent overflow and use exponential backoff
+                # Cap retry_count to prevent overflow and use exponential
+                # backoff
                 capped_retry = min(retry_count, 5)
                 time.sleep(min(2 ** capped_retry, 30))
 
@@ -394,6 +440,7 @@ def device_thread(device, cfg, publish_interval=1):
         client.disconnect()
         logger.info("MQTT client %s disconnected.", uid)
 
+
 def log_connected_devices_periodically(fleet, interval=30):
     """
     Periodically logs all devices in fleet.
@@ -402,6 +449,7 @@ def log_connected_devices_periodically(fleet, interval=30):
         device_list = ", ".join(f"{d['port']} {d['uid']}" for d in fleet)
         logger.info("Connected devices: %s", device_list)
         time.sleep(interval)
+
 
 def run_mqtt_mode(broker_type="localhost"):
     fleet = get_fleet_info()
@@ -412,14 +460,18 @@ def run_mqtt_mode(broker_type="localhost"):
     cfg = load_mqtt_config()
     poll_rate = cfg["poll_rate"]
 
-    logger.info("MQTT mode: %s, sending to %s:%s", broker_type, cfg['broker'], cfg['port'])
+    logger.info(
+        "MQTT mode: %s, sending to %s:%s",
+        broker_type,
+        cfg['broker'],
+        cfg['port'])
     logger.info("Using poll_rate = %s seconds", cfg["poll_rate"])
 
     threads = []
     for device in fleet:
         t = threading.Thread(
-            target=device_thread, 
-            args=(device, cfg, cfg["poll_rate"]), 
+            target=device_thread,
+            args=(device, cfg, cfg["poll_rate"]),
             daemon=True
         )
         t.start()
@@ -427,7 +479,8 @@ def run_mqtt_mode(broker_type="localhost"):
 
     # Start periodic logging thread
     # The periodic log thread sleeps for a relatively long interval (default 30 s).
-    # Store the interval so we can use an appropriate join timeout during shutdown.
+    # Store the interval so we can use an appropriate join timeout during
+    # shutdown.
     log_interval = 30
     log_thread = threading.Thread(
         target=log_connected_devices_periodically,
@@ -448,7 +501,10 @@ def run_mqtt_mode(broker_type="localhost"):
         except Exception as e:
             logger.error("Error while joining thread %s: %s", thread.name, e)
         if thread.is_alive():
-            logger.warning("Thread %s did not terminate within %.1f seconds", thread.name, timeout)
+            logger.warning(
+                "Thread %s did not terminate within %.1f seconds",
+                thread.name,
+                timeout)
 
     # Wait until Ctrl+C. The outer try/except ensures a second interrupt during
     # shutdown does not produce a second traceback.
@@ -464,7 +520,8 @@ def run_mqtt_mode(broker_type="localhost"):
         # Join device threads with timeout protection.
         for t in threads:
             safe_join(t, timeout=5.0)
-        # Join the periodic log thread with a timeout longer than its sleep interval.
+        # Join the periodic log thread with a timeout longer than its sleep
+        # interval.
         safe_join(log_thread, timeout=log_interval + 5.0)
     # Ensure any stray KeyboardInterrupts during the cleanup are ignored.
     except KeyboardInterrupt:

@@ -10,6 +10,8 @@ Requires dearpygui, which creates a real (offscreen) viewport/context even
 in CI — this works headlessly on windows-latest runners.
 """
 
+from benchlab.graph.app import GraphApp
+from benchlab.graph import ui
 import threading
 import time
 
@@ -22,10 +24,9 @@ except ImportError:
     dpg = None
     HAS_DPG = False
 
-pytestmark = pytest.mark.skipif(not HAS_DPG, reason="dearpygui not available in this environment")
-
-from benchlab.graph import ui
-from benchlab.graph.app import GraphApp
+pytestmark = pytest.mark.skipif(
+    not HAS_DPG,
+    reason="dearpygui not available in this environment")
 
 
 class FakeDataSource:

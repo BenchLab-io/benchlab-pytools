@@ -14,6 +14,7 @@ class TelemetryHistory:
     """
     Keep historical data for all telemetry points dynamically, with timestamps.
     """
+
     def __init__(self, max_samples=1000):
         self.max_samples = max_samples
         self.data = defaultdict(lambda: deque(maxlen=self.max_samples))
@@ -75,7 +76,9 @@ def telemetry_step(app, device_info=None, sensor_struct=None):
 
         # sensor_struct is always a pre-translated dict from DataSourceManager
         if not isinstance(sensor_struct, dict):
-            logger.warning("Unexpected sensor_struct type: %s", type(sensor_struct))
+            logger.warning(
+                "Unexpected sensor_struct type: %s",
+                type(sensor_struct))
             return
         data = dict(sensor_struct)
 

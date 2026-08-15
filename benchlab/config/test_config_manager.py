@@ -18,7 +18,8 @@ import pytest
 from benchlab.config.config_manager import ConfigManager
 
 
-def test_select_device_productid_on_direct_logs_warning_and_returns_none(caplog):
+def test_select_device_productid_on_direct_logs_warning_and_returns_none(
+        caplog):
     """Regression test for issue #32: productId selector used to be a
     silent no-op (`pass`) for the direct source, giving no indication of
     why device selection failed."""
@@ -26,7 +27,8 @@ def test_select_device_productid_on_direct_logs_warning_and_returns_none(caplog)
     devices = [{"port": "COM4", "uid": "ABC123"}]
 
     with caplog.at_level(logging.WARNING):
-        result = mgr.select_device({"type": "productId", "value": 0x10}, devices)
+        result = mgr.select_device(
+            {"type": "productId", "value": 0x10}, devices)
 
     assert result is None
     assert any("productId" in rec.message for rec in caplog.records)
@@ -65,7 +67,8 @@ def test_export_config_closes_client_on_exception():
     client.close() was only called at the end of the try block."""
     mgr = ConfigManager(source="direct")
     fake_client = MagicMock()
-    fake_client.get_device_info.side_effect = RuntimeError("simulated read failure")
+    fake_client.get_device_info.side_effect = RuntimeError(
+        "simulated read failure")
 
     with patch("benchlab.config.config_manager.create_config_client", return_value=fake_client):
         result = mgr.export_config("COM4", "unused_output.json")
@@ -79,9 +82,12 @@ def test_apply_device_config_closes_client_on_exception():
 
     mgr = ConfigManager(source="direct")
     fake_client = MagicMock()
-    fake_client.write_device_name.side_effect = RuntimeError("simulated write failure")
+    fake_client.write_device_name.side_effect = RuntimeError(
+        "simulated write failure")
 
-    device_config = DeviceConfig(selector=DeviceSelector(type="any"), deviceName="Test")
+    device_config = DeviceConfig(
+        selector=DeviceSelector(
+            type="any"), deviceName="Test")
 
     with patch("benchlab.config.config_manager.create_config_client", return_value=fake_client):
         result = mgr._apply_device_config("COM4", device_config)
@@ -98,7 +104,8 @@ def test_read_current_state_tolerates_partial_failures():
     fake_client.read_device_name.return_value = "MyDevice"
     fake_client.read_fan_config.return_value = None
     fake_client.read_rgb_config.return_value = None
-    fake_client.read_calibration.side_effect = RuntimeError("calibration read timeout")
+    fake_client.read_calibration.side_effect = RuntimeError(
+        "calibration read timeout")
 
     state = mgr._read_current_state(fake_client)
 

@@ -11,16 +11,14 @@ real serial device -- write_calibration is invoked directly on an instance
 built without going through __init__'s serial connection.
 """
 
-import pytest
-
-pytest.importorskip("benchlab_pycore")
-
+from benchlab.config.config_client import DirectConfigClient
 from benchlab_pycore.core import (
     CalibrationStruct, CalibrationStructBL2,
     BENCHLAB_BL2_PRODUCT_ID, BENCHLAB_ORIGINAL_PRODUCT_ID,
 )
+import pytest
 
-from benchlab.config.config_client import DirectConfigClient
+pytest.importorskip("benchlab_pycore")
 
 
 def _make_client(product_id):
@@ -39,14 +37,18 @@ def test_write_calibration_selects_bl2_struct_for_bl2_device(monkeypatch):
     client = _make_client(BENCHLAB_BL2_PRODUCT_ID)
 
     captured = {}
+
     def fake_write_calibration(ser, calibration, product_id=None):
         captured["struct_type"] = type(calibration)
         return True
-    monkeypatch.setattr("benchlab_pycore.core.write_calibration", fake_write_calibration)
+    monkeypatch.setattr(
+        "benchlab_pycore.core.write_calibration",
+        fake_write_calibration)
 
     cal_dict = {
         "Crc": 0,
-        "Ts": [{"Offset": i, "GainOffset": 0} for i in range(8)],  # BL2 has 8 sensors
+        # BL2 has 8 sensors
+        "Ts": [{"Offset": i, "GainOffset": 0} for i in range(8)],
     }
 
     result = client.write_calibration(cal_dict)
@@ -55,18 +57,23 @@ def test_write_calibration_selects_bl2_struct_for_bl2_device(monkeypatch):
     assert captured["struct_type"] is CalibrationStructBL2
 
 
-def test_write_calibration_selects_original_struct_for_original_device(monkeypatch):
+def test_write_calibration_selects_original_struct_for_original_device(
+        monkeypatch):
     client = _make_client(BENCHLAB_ORIGINAL_PRODUCT_ID)
 
     captured = {}
+
     def fake_write_calibration(ser, calibration, product_id=None):
         captured["struct_type"] = type(calibration)
         return True
-    monkeypatch.setattr("benchlab_pycore.core.write_calibration", fake_write_calibration)
+    monkeypatch.setattr(
+        "benchlab_pycore.core.write_calibration",
+        fake_write_calibration)
 
     cal_dict = {
         "Crc": 0,
-        "Ts": [{"Offset": i, "GainOffset": 0} for i in range(4)],  # Original has 4 sensors
+        # Original has 4 sensors
+        "Ts": [{"Offset": i, "GainOffset": 0} for i in range(4)],
     }
 
     result = client.write_calibration(cal_dict)

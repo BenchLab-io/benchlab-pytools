@@ -48,7 +48,8 @@ class RetryPolicy:
     allowed_exceptions: tuple[type[BaseException], ...] = (Exception,)
 
 
-def retry(policy: RetryPolicy) -> Callable[[Callable[..., T]], Callable[..., T]]:
+def retry(
+        policy: RetryPolicy) -> Callable[[Callable[..., T]], Callable[..., T]]:
     """Decorator that retries a function according to *policy*.
 
     The wrapped function is called up to ``policy.max_retries + 1``
@@ -70,7 +71,8 @@ def retry(policy: RetryPolicy) -> Callable[[Callable[..., T]], Callable[..., T]]
                             f"{func.__name__} failed after {attempt + 1} attempts: {exc}"
                         )
                         raise
-                    delay = policy.base_delay * (policy.backoff_factor ** attempt)
+                    delay = policy.base_delay * \
+                        (policy.backoff_factor ** attempt)
                     logger.warning(
                         f"{func.__name__} attempt {attempt + 1} failed ({exc}); retrying in {delay:.2f}s"
                     )

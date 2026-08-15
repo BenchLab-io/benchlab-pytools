@@ -32,7 +32,8 @@ def test_writer_handles_extra_key_in_later_message(tmp_path):
 
     writer.write_batch([{"Timestamp": "t1", "uid": "dev1", "SYS_Power": 10}])
     # Second message carries a key not present in the header.
-    writer.write_batch([{"Timestamp": "t2", "uid": "dev1", "SYS_Power": 11, "GPU_Power": 5}])
+    writer.write_batch(
+        [{"Timestamp": "t2", "uid": "dev1", "SYS_Power": 11, "GPU_Power": 5}])
     writer.flush_all()
 
     files = list(tmp_path.glob("*.csv"))
@@ -48,7 +49,8 @@ def test_writer_handles_missing_key_in_later_message(tmp_path):
     """A later message missing a header key must leave that column blank."""
     writer = CSVBatchWriter(str(tmp_path), batch_size=10)
 
-    writer.write_batch([{"Timestamp": "t1", "uid": "dev1", "SYS_Power": 10, "GPU_Power": 5}])
+    writer.write_batch(
+        [{"Timestamp": "t1", "uid": "dev1", "SYS_Power": 10, "GPU_Power": 5}])
     writer.write_batch([{"Timestamp": "t2", "uid": "dev1", "SYS_Power": 11}])
     writer.flush_all()
 
@@ -89,7 +91,11 @@ def test_batcher_flushes_at_batch_size():
 
 
 def test_batcher_drops_messages_when_buffer_full():
-    batcher = MessageBatcher(BatchConfig(batch_size=1000, max_buffer_size=2, flush_interval=999))
+    batcher = MessageBatcher(
+        BatchConfig(
+            batch_size=1000,
+            max_buffer_size=2,
+            flush_interval=999))
     try:
         assert batcher.add_message({"i": 0}) is True
         assert batcher.add_message({"i": 1}) is True
@@ -115,7 +121,11 @@ def test_retry_manager_retries_then_succeeds():
             raise OSError("transient")
         return "ok"
 
-    manager = SmartRetryManager(RetryConfig(max_retries=3, base_delay=0.01, circuit_breaker_enabled=False))
+    manager = SmartRetryManager(
+        RetryConfig(
+            max_retries=3,
+            base_delay=0.01,
+            circuit_breaker_enabled=False))
     assert manager.execute(flaky) == "ok"
     assert attempts["n"] == 2
 
@@ -124,6 +134,10 @@ def test_retry_manager_raises_after_max_retries():
     def always_fails():
         raise OSError("nope")
 
-    manager = SmartRetryManager(RetryConfig(max_retries=2, base_delay=0.01, circuit_breaker_enabled=False))
+    manager = SmartRetryManager(
+        RetryConfig(
+            max_retries=2,
+            base_delay=0.01,
+            circuit_breaker_enabled=False))
     with pytest.raises(OSError):
         manager.execute(always_fails)

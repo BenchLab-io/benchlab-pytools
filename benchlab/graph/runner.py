@@ -25,7 +25,7 @@ def run_graph_mode(args=None):
         ds_kwargs["base_url"] = args.api_url
     elif source == "mqtt":
         ds_kwargs["broker"] = args.mqtt_broker
-        ds_kwargs["port"]   = args.mqtt_port
+        ds_kwargs["port"] = args.mqtt_port
 
     datasource = DataSourceManager(source_type=source, **ds_kwargs)
     if not datasource.connect():

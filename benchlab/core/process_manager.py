@@ -121,7 +121,8 @@ class ProcessManager:
         with self._mutex:
             if name in self._services:
                 existing = self._services[name]
-                logger.warning("Service %s already registered — stopping it first", name)
+                logger.warning(
+                    "Service %s already registered — stopping it first", name)
                 self._stop_process(existing)
 
         if isinstance(cmd, str):
@@ -131,10 +132,16 @@ class ProcessManager:
 
         mp = ManagedProcess(name=name, cmd=cmd_list, health_check=health_check)
 
-        # Use shell execution when cmd is a single string (e.g. inline Python one-liner)
+        # Use shell execution when cmd is a single string (e.g. inline Python
+        # one-liner)
         use_shell = isinstance(cmd, str)
 
-        log_file_prefix = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs", f"svc_{name}")
+        log_file_prefix = os.path.join(
+            os.path.dirname(
+                os.path.abspath(__file__)),
+            "..",
+            "logs",
+            f"svc_{name}")
         os.makedirs(os.path.dirname(log_file_prefix), exist_ok=True)
 
         stdout_path = f"{log_file_prefix}_stdout.log"
@@ -152,7 +159,8 @@ class ProcessManager:
                 cwd=cwd,
                 env=env,
                 shell=use_shell,
-                # On Linux, ensure the process doesn't inherit unnecessary file descriptors
+                # On Linux, ensure the process doesn't inherit unnecessary file
+                # descriptors
                 close_fds=True,
             )
             # Store file handles for cleanup when service stops
@@ -176,7 +184,10 @@ class ProcessManager:
                     mp.stdout_log = f.read()
             except OSError:
                 pass
-            logger.warning("Service %s failed health check within %.0fs", name, timeout)
+            logger.warning(
+                "Service %s failed health check within %.0fs",
+                name,
+                timeout)
             with self._mutex:
                 self._services[name] = mp
             return False
@@ -225,13 +236,20 @@ class ProcessManager:
             # Check if process crashed
             ret = mp.process.poll()
             if ret is not None:
-                logger.error("Service %s exited unexpectedly with code %d", mp.name, ret)
+                logger.error(
+                    "Service %s exited unexpectedly with code %d",
+                    mp.name,
+                    ret)
                 try:
                     stderr_path = f"{mp.name}"
                     # try to capture the log
                     log_base = os.path.join(
-                        os.path.dirname(os.path.abspath(__file__)), "..", "logs", f"svc_{mp.name}"
-                    )
+                        os.path.dirname(
+                            os.path.abspath(__file__)),
+                        "..",
+                        "logs",
+                        f"svc_{
+                            mp.name}")
                     with open(f"{log_base}_stderr.log", "r", encoding="utf-8") as f:
                         mp.stderr_log = f.read()
                 except OSError:
@@ -247,10 +265,16 @@ class ProcessManager:
 
             time.sleep(0.5)
 
-        logger.error("Service %s health check timed out after %.0fs", mp.name, timeout)
+        logger.error(
+            "Service %s health check timed out after %.0fs",
+            mp.name,
+            timeout)
         return False
 
-    def _stop_process(self, mp: ManagedProcess, graceful_timeout: float = 5.0) -> bool:
+    def _stop_process(
+            self,
+            mp: ManagedProcess,
+            graceful_timeout: float = 5.0) -> bool:
         """Terminate or kill a single ManagedProcess."""
         proc = mp.process
         if proc is None:
@@ -259,12 +283,18 @@ class ProcessManager:
             return True
 
         if proc.poll() is not None:
-            logger.info("Service %s already exited (code %d)", mp.name, proc.returncode)
+            logger.info(
+                "Service %s already exited (code %d)",
+                mp.name,
+                proc.returncode)
             self._close_log_files(mp)
             return True
 
         # Graceful: SIGTERM / taskkill
-        logger.info("Stopping service %s (PID %d) gracefully.", mp.name, proc.pid)
+        logger.info(
+            "Stopping service %s (PID %d) gracefully.",
+            mp.name,
+            proc.pid)
         self._send_terminate(proc)
 
         try:

@@ -62,7 +62,8 @@ def _make_link(topic_pattern, client_uuid, snapshots):
 
 
 def test_publish_all_interpolates_uid_only_pattern():
-    link = _make_link("benchlab/{uid}/telemetry", None, {"dev-1": {"temp": 42}})
+    link = _make_link("benchlab/{uid}/telemetry",
+                      None, {"dev-1": {"temp": 42}})
     published = link.publish_all()
     assert published == 1
     topic, payload, qos = link.cloud.published[0]
@@ -130,11 +131,15 @@ def test_build_client_pins_callback_api_version_v2(monkeypatch):
     }
     CloudMQTTClient(cfg)
 
-    assert captured.get("callback_api_version") == mqtt.CallbackAPIVersion.VERSION2
+    assert captured.get(
+        "callback_api_version") == mqtt.CallbackAPIVersion.VERSION2
 
 
 def test_on_connect_uses_v2_five_arg_signature():
-    cfg = {"client_id": "test-client", "transport": "tcp", "protocol": "mqtt.MQTTv5"}
+    cfg = {
+        "client_id": "test-client",
+        "transport": "tcp",
+        "protocol": "mqtt.MQTTv5"}
     client = CloudMQTTClient(cfg)
 
     # v2 callback signature: (client, userdata, flags, reason_code, properties)

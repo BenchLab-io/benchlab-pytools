@@ -147,7 +147,8 @@ def _detect_terminal() -> str | None:
         for term in windows_candidates:
             if shutil.which(term):
                 return term
-        # Also check Linux terminals that might be installed on Windows (e.g., via WSL or standalone)
+        # Also check Linux terminals that might be installed on Windows (e.g.,
+        # via WSL or standalone)
         for term in linux_candidates:
             if shutil.which(term):
                 return term
@@ -159,7 +160,9 @@ def _detect_terminal() -> str | None:
     return None
 
 
-def _spawn_tool_in_terminal(tool_id: str, args: _types.SimpleNamespace) -> subprocess.Popen:
+def _spawn_tool_in_terminal(
+        tool_id: str,
+        args: _types.SimpleNamespace) -> subprocess.Popen:
     """Spawn tool in a new isolated terminal window (Linux-first, robust)."""
 
     tool = CONSUMER_TOOLS[tool_id]
@@ -242,11 +245,26 @@ def _spawn_tool_in_terminal(tool_id: str, args: _types.SimpleNamespace) -> subpr
         # The actual size depends on the user's Windows Terminal profile configuration.
         # For guaranteed sizing, users should configure their default profile
         # with adequate rows/columns in settings.json (profiles.defaults)
-        wt_cmd = ["wt", "new-tab", "--title", title, 
-                  sys.executable, "-m", "benchlab",
-                  tool["flag"], "--source", args.source, "--api-url", args.api_url,
-                  "--api-port", str(args.api_port), "--mqtt-broker", args.mqtt_broker,
-                  "--mqtt-port", str(args.mqtt_port), "--service-url", args.service_url]
+        wt_cmd = ["wt",
+                  "new-tab",
+                  "--title",
+                  title,
+                  sys.executable,
+                  "-m",
+                  "benchlab",
+                  tool["flag"],
+                  "--source",
+                  args.source,
+                  "--api-url",
+                  args.api_url,
+                  "--api-port",
+                  str(args.api_port),
+                  "--mqtt-broker",
+                  args.mqtt_broker,
+                  "--mqtt-port",
+                  str(args.mqtt_port),
+                  "--service-url",
+                  args.service_url]
         return subprocess.Popen(wt_cmd, env=env, stderr=subprocess.PIPE)
 
     # --- PowerShell ---
@@ -285,9 +303,11 @@ def _spawn_tool_in_terminal(tool_id: str, args: _types.SimpleNamespace) -> subpr
     )
 
 
-def launch_tools_concurrent(tool_ids: List[str], source_ready_delay: float = 2.0) -> None:
+def launch_tools_concurrent(
+        tool_ids: List[str],
+        source_ready_delay: float = 2.0) -> None:
     """Spawn each tool in its own terminal window, then wait until interrupted.
-    
+
     Args:
         tool_ids: List of tool IDs to launch.
         source_ready_delay: Time to wait after source is ready before launching tools (default: 2.0s).
@@ -298,7 +318,8 @@ def launch_tools_concurrent(tool_ids: List[str], source_ready_delay: float = 2.0
 
     # Wait for the source to be fully ready before spawning any tools
     if source_ready_delay > 0:
-        logger.info(f"Waiting {source_ready_delay}s for data source to stabilize before launching tools...")
+        logger.info(
+            f"Waiting {source_ready_delay}s for data source to stabilize before launching tools...")
         time.sleep(source_ready_delay)
 
     for idx, tid in enumerate(tool_ids):
@@ -310,11 +331,13 @@ def launch_tools_concurrent(tool_ids: List[str], source_ready_delay: float = 2.0
         # Some terminal launchers (like Windows Terminal 'wt') exit immediately with code 0
         # after successfully launching the terminal window
         if proc.poll() is not None and proc.returncode != 0:
-            logger.error(f"{tool['name']} terminal failed to launch (exit code {proc.returncode})")
+            logger.error(
+                f"{tool['name']} terminal failed to launch (exit code {proc.returncode})")
             continue
 
         # Graceful launch: wait between tool spawns to avoid overwhelming the system
-        # First tool launches immediately after source delay, subsequent tools wait 1 second each
+        # First tool launches immediately after source delay, subsequent tools
+        # wait 1 second each
         if idx < len(tool_ids) - 1:  # Don't sleep after the last tool
             time.sleep(1.0)
 
@@ -328,7 +351,8 @@ def launch_tools_concurrent(tool_ids: List[str], source_ready_delay: float = 2.0
         t.start()
         monitors.append(t)
 
-    logger.info("All tools launched in terminals. Press Ctrl+C to stop launcher.")
+    logger.info(
+        "All tools launched in terminals. Press Ctrl+C to stop launcher.")
 
     try:
         while True:

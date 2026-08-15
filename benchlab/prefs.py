@@ -48,7 +48,10 @@ def save_prefs(prefs: Dict[str, Any]) -> None:
         logger.debug(f"Could not save menu preferences: {e}")
 
 
-def record_launch(tool_ids: List[str], source: str, source_params: Optional[Dict[str, Any]] = None) -> None:
+def record_launch(tool_ids: List[str],
+                  source: str,
+                  source_params: Optional[Dict[str,
+                                               Any]] = None) -> None:
     """Record a successful tool/source selection for next run's defaults."""
     prefs = load_prefs()
     prefs["last_tool_ids"] = list(tool_ids)

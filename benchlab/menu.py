@@ -64,7 +64,14 @@ SOURCE_LABELS: Dict[str, str] = {
     "service_http": f"BenchLab service - HTTP API (port {SERVICE_HTTP_DEFAULT_PORT})",
 }
 
-SOURCE_ORDER = ["direct", "fastapi", "fastapi_custom", "mqtt", "mqtt_custom", "named_pipe", "service_http"]
+SOURCE_ORDER = [
+    "direct",
+    "fastapi",
+    "fastapi_custom",
+    "mqtt",
+    "mqtt_custom",
+    "named_pipe",
+    "service_http"]
 
 PROVIDER_LABELS: Dict[str, str] = {
     "fastapi": "FastAPI Server - REST API + WebSocket on port 8000",
@@ -80,7 +87,8 @@ def print_banner() -> None:
 # Source compatibility (pure logic, reused by the picker and tests)
 # ──────────────────────────────────────────────────────────────
 
-def _available_sources(is_multi: bool, supported_sources: Optional[List[str]]) -> List[Tuple[str, str]]:
+def _available_sources(
+        is_multi: bool, supported_sources: Optional[List[str]]) -> List[Tuple[str, str]]:
     """Return (source_id, label) pairs valid for the given tool selection."""
     is_windows = sys.platform.startswith("win")
 
@@ -126,14 +134,23 @@ def _combined_supported_sources(tool_ids: List[str]) -> Optional[List[str]]:
 PickerResult = Union[Tuple[str, List[str], str], Tuple[str, str], None]
 
 
-def _build_launcher_app(default_tool_ids: List[str], default_source: Optional[str]):
+def _build_launcher_app(
+        default_tool_ids: List[str],
+        default_source: Optional[str]):
     """Construct (but don't run) the Textual LauncherApp. Split out from
     _run_picker_screen so tests can inspect app state without a real
     terminal (Textual apps can run headless via App.run_test())."""
     from textual.app import App, ComposeResult
     from textual.containers import Vertical
     from textual.widgets import (
-        Footer, SelectionList, RadioSet, RadioButton, Button, Static, TabbedContent, TabPane,
+        Footer,
+        SelectionList,
+        RadioSet,
+        RadioButton,
+        Button,
+        Static,
+        TabbedContent,
+        TabPane,
     )
     from textual.widgets.selection_list import Selection
     from textual.binding import Binding
@@ -235,7 +252,9 @@ def _build_launcher_app(default_tool_ids: List[str], default_source: Optional[st
         def _current_source_items(self) -> List[Tuple[str, str]]:
             tool_ids = self._selected_tool_ids()
             supported = _combined_supported_sources(tool_ids)
-            sources = _available_sources(is_multi=len(tool_ids) > 1, supported_sources=supported)
+            sources = _available_sources(
+                is_multi=len(tool_ids) > 1,
+                supported_sources=supported)
             return sources
 
         async def _refresh_sources(self) -> None:
@@ -250,7 +269,8 @@ def _build_launcher_app(default_tool_ids: List[str], default_source: Optional[st
             else:
                 preferred_idx = 0
                 if self._default_source in self._source_ids:
-                    preferred_idx = self._source_ids.index(self._default_source)
+                    preferred_idx = self._source_ids.index(
+                        self._default_source)
                 buttons = [RadioButton(label) for _, label in sources]
                 await radio_set.mount(*buttons)
                 # RadioSet only auto-selects a pre-checked button in its own
@@ -267,7 +287,8 @@ def _build_launcher_app(default_tool_ids: List[str], default_source: Optional[st
         def _current_source_id(self) -> Optional[str]:
             radio_set = self.query_one("#sources", RadioSet)
             idx = radio_set.pressed_index
-            if idx is None or idx < 0 or not getattr(self, "_source_ids", None):
+            if idx is None or idx < 0 or not getattr(
+                    self, "_source_ids", None):
                 return None
             if idx >= len(self._source_ids):
                 return None
@@ -276,8 +297,10 @@ def _build_launcher_app(default_tool_ids: List[str], default_source: Optional[st
         def _update_tools_summary(self) -> None:
             tool_ids = self._selected_tool_ids()
             source = self._current_source_id()
-            tool_names = ", ".join(CONSUMER_TOOLS[tid]["name"] for tid in tool_ids) or "(none selected)"
-            source_label = SOURCE_LABELS.get(source, "(none)") if source else "(none)"
+            tool_names = ", ".join(
+                CONSUMER_TOOLS[tid]["name"] for tid in tool_ids) or "(none selected)"
+            source_label = SOURCE_LABELS.get(
+                source, "(none)") if source else "(none)"
             summary = self.query_one("#tools-summary", Static)
             summary.update(f"Tools: {tool_names}   |   Source: {source_label}")
 
@@ -333,7 +356,9 @@ def _build_launcher_app(default_tool_ids: List[str], default_source: Optional[st
     return LauncherApp()
 
 
-def _run_picker_screen(default_tool_ids: List[str], default_source: Optional[str]) -> PickerResult:
+def _run_picker_screen(
+        default_tool_ids: List[str],
+        default_source: Optional[str]) -> PickerResult:
     """Run the full-screen picker. Returns a PickerResult (see above) or
     None if cancelled.
 
@@ -344,7 +369,8 @@ def _run_picker_screen(default_tool_ids: List[str], default_source: Optional[str
     try:
         app.run()
     except Exception as e:
-        logger.debug(f"Textual picker failed ({e}); falling back to sequential prompts")
+        logger.debug(
+            f"Textual picker failed ({e}); falling back to sequential prompts")
         return _sequential_pick(default_tool_ids, default_source)
     except KeyboardInterrupt:
         return None
@@ -355,12 +381,15 @@ def _run_picker_screen(default_tool_ids: List[str], default_source: Optional[str
 # Sequential fallback (used if the full-screen app can't run)
 # ──────────────────────────────────────────────────────────────
 
-def _fuzzy_pick(items: List[Tuple[str, str]], title: str, default: Optional[str] = None) -> Optional[str]:
+def _fuzzy_pick(items: List[Tuple[str, str]], title: str,
+                default: Optional[str] = None) -> Optional[str]:
     """Single-select picker over (value, label) pairs, printing the full
     option list up front. Accepts a number or enough of a label to match
     exactly one option.
     """
-    default_index = next((i for i, (value, _) in enumerate(items, 1) if value == default), None)
+    default_index = next(
+        (i for i, (value, _) in enumerate(
+            items, 1) if value == default), None)
 
     print(f"\n{title}")
     for i, (_, label) in enumerate(items, 1):
@@ -415,7 +444,9 @@ def _multi_pick(items: List[Tuple[str, str]], title: str) -> List[str]:
     return selected
 
 
-def _sequential_pick(default_tool_ids: List[str], default_source: Optional[str]) -> PickerResult:
+def _sequential_pick(
+        default_tool_ids: List[str],
+        default_source: Optional[str]) -> PickerResult:
     """Fallback flow when the full-screen picker can't run: choose tools
     vs. data-provider mode, then pick accordingly, via sequential prompts."""
     mode_choice = _fuzzy_pick(
@@ -427,16 +458,21 @@ def _sequential_pick(default_tool_ids: List[str], default_source: Optional[str])
         return None
 
     if mode_choice == "provider":
-        provider = _fuzzy_pick(list(PROVIDER_LABELS.items()), "Select a data provider:")
+        provider = _fuzzy_pick(
+            list(
+                PROVIDER_LABELS.items()),
+            "Select a data provider:")
         if provider is None:
             return None
         return ("provider", provider)
 
-    tool_values = [(tid, f"{t['name']} - {t['description']}") for tid, t in CONSUMER_TOOLS.items()]
+    tool_values = [(tid, f"{t['name']} - {t['description']}")
+                   for tid, t in CONSUMER_TOOLS.items()]
 
     print("\n=== Select Tool(s) ===")
     try:
-        sub_mode = input("Single tool or multiple? (s/m) [s]: ").strip().lower() or "s"
+        sub_mode = input(
+            "Single tool or multiple? (s/m) [s]: ").strip().lower() or "s"
     except (EOFError, KeyboardInterrupt):
         return None
 
@@ -446,13 +482,18 @@ def _sequential_pick(default_tool_ids: List[str], default_source: Optional[str])
             print("  No tools selected.")
             return None
     else:
-        tool_id = _fuzzy_pick(tool_values, "Select a tool:", default=default_tool_ids[0] if default_tool_ids else None)
+        tool_id = _fuzzy_pick(
+            tool_values,
+            "Select a tool:",
+            default=default_tool_ids[0] if default_tool_ids else None)
         if tool_id is None:
             return None
         tool_ids = [tool_id]
 
     supported = _combined_supported_sources(tool_ids)
-    sources = _available_sources(is_multi=len(tool_ids) > 1, supported_sources=supported)
+    sources = _available_sources(
+        is_multi=len(tool_ids) > 1,
+        supported_sources=supported)
     if not sources:
         print("  No compatible data source available for this selection.")
         return None
@@ -504,13 +545,25 @@ def _setup_source(source_type: str) -> bool:
         remembered = {"host": host, "port": port}
 
     elif source_type == "mqtt":
-        broker = os.environ.get("MQTT_BROKER", remembered.get("broker", "localhost"))
-        mqtt_port = int(os.environ.get("MQTT_PORT", remembered.get("mqtt_port", 1883)))
+        broker = os.environ.get(
+            "MQTT_BROKER", remembered.get(
+                "broker", "localhost"))
+        mqtt_port = int(
+            os.environ.get(
+                "MQTT_PORT",
+                remembered.get(
+                    "mqtt_port",
+                    1883)))
         setup_kwargs = {"broker": broker, "mqtt_port": mqtt_port}
 
     elif source_type == "mqtt_custom":
-        broker = _prompt_default("Broker host", remembered.get("broker", "localhost"))
-        mqtt_port = _prompt_default("Broker port", str(remembered.get("mqtt_port", 1883)))
+        broker = _prompt_default(
+            "Broker host", remembered.get(
+                "broker", "localhost"))
+        mqtt_port = _prompt_default(
+            "Broker port", str(
+                remembered.get(
+                    "mqtt_port", 1883)))
         try:
             mqtt_port = int(mqtt_port)
         except ValueError:
@@ -522,10 +575,11 @@ def _setup_source(source_type: str) -> bool:
     elif source_type == "service_http":
         import urllib.parse
         svc_url = os.environ.get(
-            "BENCHLAB_SERVICE_URL", f"http://localhost:{SERVICE_HTTP_DEFAULT_PORT}"
-        )
+            "BENCHLAB_SERVICE_URL",
+            f"http://localhost:{SERVICE_HTTP_DEFAULT_PORT}")
         parsed = urllib.parse.urlparse(svc_url)
-        setup_kwargs = {"host": parsed.hostname or "localhost", "port": parsed.port or SERVICE_HTTP_DEFAULT_PORT}
+        setup_kwargs = {"host": parsed.hostname or "localhost",
+                        "port": parsed.port or SERVICE_HTTP_DEFAULT_PORT}
 
     ready = check_and_setup_source(source_type, **setup_kwargs)
     _last_source_params[source_type] = remembered
@@ -618,7 +672,9 @@ def interactive_loop() -> None:
     while True:
         try:
             prefs = load_prefs()
-            default_tool_ids = [tid for tid in (prefs.get("last_tool_ids") or []) if tid in CONSUMER_TOOLS]
+            default_tool_ids = [
+                tid for tid in (
+                    prefs.get("last_tool_ids") or []) if tid in CONSUMER_TOOLS]
             default_source = prefs.get("last_source")
 
             picked = _run_picker_screen(default_tool_ids, default_source)

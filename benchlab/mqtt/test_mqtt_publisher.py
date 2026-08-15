@@ -40,7 +40,8 @@ def test_reason_code_lookup_plain_int_unknown():
     assert reason_code_lookup(999) == "Unknown reason code 999"
 
 
-@pytest.mark.skipif(not HAS_REASONCODES, reason="paho.mqtt.reasoncodes not available")
+@pytest.mark.skipif(not HAS_REASONCODES,
+                    reason="paho.mqtt.reasoncodes not available")
 def test_reason_code_lookup_handles_unhashable_reasoncode_object():
     """Regression test for issue #24: paho-mqtt v2's ReasonCode object is
     unhashable, so a plain dict.get(rc, ...) raises TypeError on any real
@@ -141,7 +142,8 @@ def test_load_mqtt_config_protocol_defaults_to_v311(monkeypatch):
     assert cfg["protocol"] == mqtt.MQTTv311
 
 
-def test_resolved_protocol_does_not_crash_paho_client_construction(monkeypatch):
+def test_resolved_protocol_does_not_crash_paho_client_construction(
+        monkeypatch):
     """End-to-end regression test for the original bug: constructing a real
     paho Client with the resolved protocol value must not raise when paho
     internally does int(self._protocol) (previously crashed with
