@@ -56,6 +56,9 @@ jobs:
       - name: Test - graph application logic
         run: pytest benchlab/graph/test_graph.py -v -k "not mqtt"
 
+      - name: Test - hwinfo export
+        run: pytest benchlab/hwinfo/test_hwinfo_export.py -v -k "not mqtt"
+
   latest:
     name: Import + test against latest pycore (PyPI)
     runs-on: windows-latest
@@ -100,3 +103,6 @@ jobs:
 
       - name: Test - graph application logic
         run: pytest benchlab/graph/test_graph.py -v -k "not mqtt"
+
+      - name: Test - hwinfo export
+        run: pytest benchlab/hwinfo/test_hwinfo_export.py -v -k "not mqtt"
