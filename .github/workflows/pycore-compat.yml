@@ -85,6 +85,9 @@ jobs:
       - name: Test - vu devices config loading
         run: pytest benchlab/vu/test_devices.py -v
 
+      - name: Test - vu tui logic
+        run: pytest benchlab/vu/test_vu_tui.py -v
+
   latest:
     name: Import + test against latest pycore (PyPI)
     runs-on: windows-latest
@@ -158,3 +161,6 @@ jobs:
 
       - name: Test - vu devices config loading
         run: pytest benchlab/vu/test_devices.py -v
+
+      - name: Test - vu tui logic
+        run: pytest benchlab/vu/test_vu_tui.py -v
