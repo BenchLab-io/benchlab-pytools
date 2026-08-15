@@ -5,7 +5,12 @@ import sys
 import time
 import logging
 import atexit
-from benchlab_pycore.core import translate_sensor_struct, FAN_NUM, read_device, BENCHLAB_ORIGINAL_PRODUCT_ID
+from benchlab_pycore.core import (
+    translate_sensor_struct,
+    FAN_NUM,
+    read_device,
+    BENCHLAB_ORIGINAL_PRODUCT_ID,
+)
 from benchlab.core.datasource import create_datasource, DataSource
 
 # Conditional import for Windows-only winreg module (BUG-7.2)
@@ -37,7 +42,8 @@ def get_sensor_type_and_unit(key):
     key_lower = key.lower()
     if "temp" in key_lower or key_lower in ("chip_temp", "ambient_temp"):
         return "Temp", None
-    elif "volt" in key_lower or key_lower.startswith("vin") or key_lower in ("vdd", "vref"):
+    elif ("volt" in key_lower or key_lower.startswith("vin")
+          or key_lower in ("vdd", "vref")):
         return "Volt", None
     elif "power" in key_lower:
         return "Power", None
@@ -161,7 +167,8 @@ def export_device_sensors(device_info, datasource=None):
 
     Args:
         device_info: Device info dict with uid and port
-        datasource: Optional DataSource to use (falls back to DirectDataSource env config if None)
+        datasource: Optional DataSource to use (falls back to
+            DirectDataSource env config if None)
 
     Returns:
         True if export succeeded, False otherwise.
@@ -259,7 +266,8 @@ atexit.register(cleanup_registry)
 
 
 def _select_datasource() -> DataSource:
-    """Select a data source based on environment config or default to direct."""
+    """Select a data source based on environment config or default to
+    direct."""
     source_type = os.environ.get("BENCHLAB_DATA_SOURCE", "direct")
     kwargs = {}
 
@@ -291,26 +299,31 @@ def export_all_devices(update_interval=1, datasource=None):
 
     Args:
         update_interval: Seconds between export cycles
-        datasource: Optional DataSource to use. If None, auto-selects via env config.
+        datasource: Optional DataSource to use. If None, auto-selects via
+            env config.
     """
     # Check Windows availability (BUG-7.2)
     if winreg is None:
         logger.error(
-            "HWiNFO export is only supported on Windows. Please run on a Windows system.")
+            "HWiNFO export is only supported on Windows. "
+            "Please run on a Windows system.")
         raise RuntimeError(
             f"HWiNFO export requires Windows. Current platform: {
                 sys.platform}")
 
     # Remove only old BenchLab entries, not user-created sensors
     try:
-        with winreg.OpenKey(HWINFO_CUSTOM_ROOT, HWINFO_CUSTOM_PATH, 0, winreg.KEY_ALL_ACCESS) as root_key:
+        with winreg.OpenKey(
+                HWINFO_CUSTOM_ROOT, HWINFO_CUSTOM_PATH, 0,
+                winreg.KEY_ALL_ACCESS) as root_key:
             i = 0
             while True:
                 try:
                     subkey_name = winreg.EnumKey(root_key, i)
                     if subkey_name.startswith("BENCHLAB_"):
                         delete_registry_tree(
-                            HWINFO_CUSTOM_ROOT, f"{HWINFO_CUSTOM_PATH}\\{subkey_name}")
+                            HWINFO_CUSTOM_ROOT,
+                            f"{HWINFO_CUSTOM_PATH}\\{subkey_name}")
                     else:
                         i += 1
                 except OSError:
@@ -330,7 +343,8 @@ def export_all_devices(update_interval=1, datasource=None):
             # Remove registry entries for devices no longer present in the
             # fleet
             current_device_names = {
-                f"BENCHLAB_{device.get('port', 'unknown')}_{device.get('uid', 'unknown')}"
+                f"BENCHLAB_{device.get('port', 'unknown')}"
+                f"_{device.get('uid', 'unknown')}"
                 for device in fleet
             }
             for stale_name in exported_devices - current_device_names:
