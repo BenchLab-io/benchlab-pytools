@@ -11,7 +11,11 @@ DataSourceManager are stubbed out. Covers:
 
 import pytest
 
-from benchlab.link.link_main import BenchlabLink, CloudMQTTClient, _resolve_config
+from benchlab.link.link_main import (
+    BenchlabLink,
+    CloudMQTTClient,
+    _resolve_config,
+)
 
 
 class FakeDataSourceManager:

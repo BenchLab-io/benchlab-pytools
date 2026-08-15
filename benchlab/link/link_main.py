@@ -20,13 +20,16 @@ REMOTE_MQTT_USER      MQTT username
 REMOTE_MQTT_PASS      MQTT password
 REMOTE_MQTT_PATH      WebSocket path                  (default: /mqtt)
 REMOTE_MQTT_TRANSPORT Transport: websockets | tcp      (default: websockets)
-REMOTE_MQTT_PROTOCOL  Protocol: mqtt.MQTTv5 | mqtt.MQTTv311 (default: mqtt.MQTTv5)
+REMOTE_MQTT_PROTOCOL  Protocol: mqtt.MQTTv5 | mqtt.MQTTv311
+                                                (default: mqtt.MQTTv5)
 REMOTE_MQTT_QOS       QoS level: 0 | 1 | 2            (default: 1)
 REMOTE_MQTT_TLS       Enable TLS: "true" / "false"    (default: true)
 CLIENT_UUID           Device UUID for identification
 MQTT_POLL_RATE        Poll/publish interval in seconds (default: 2)
-LINK_TOPIC_PATTERN    Topic pattern with {uid}/{client_uuid} tokens (default: benchlab/{uid}/telemetry)
-LINK_CLIENT_ID        MQTT client ID                   (default: benchlab-link-<hostname>)
+LINK_TOPIC_PATTERN    Topic pattern with {uid}/{client_uuid} tokens
+                                    (default: benchlab/{uid}/telemetry)
+LINK_CLIENT_ID        MQTT client ID
+                                (default: benchlab-link-<hostname>)
 
 .env file
 ---------
@@ -68,7 +71,10 @@ RECONNECT_DELAY = 5.0   # seconds between reconnect attempts
 # ---------------------------------------------------------------------------
 
 def _load_env_file(env_path: Optional[Path] = None) -> None:
-    """Load .env file into os.environ as fallback (only sets vars not already set)."""
+    """Load .env file into os.environ as fallback.
+
+    Only sets vars not already set.
+    """
     path = env_path or DEFAULT_ENV_PATH
     if not path.exists():
         return
@@ -99,7 +105,10 @@ def _load_config(config_path: Optional[Path] = None) -> dict:
 
 
 def _resolve_config(args=None) -> dict:
-    """Merge all config sources. Priority: args > env vars > .env > config file > defaults."""
+    """Merge all config sources.
+
+    Priority: args > env vars > .env > config file > defaults.
+    """
     _load_env_file()
     file_cfg = _load_config()
 
@@ -267,7 +276,9 @@ class CloudMQTTClient:
             logger.info("Cloud broker: connection established")
         else:
             logger.error(
-                f"Cloud broker: connection refused (reason_code={reason_code})")
+                "Cloud broker: connection refused "
+                f"(reason_code={reason_code})"
+            )
 
     def _on_disconnect(
             self,
@@ -280,7 +291,9 @@ class CloudMQTTClient:
             self._connected = False
         if reason_code != 0:
             logger.warning(
-                f"Cloud broker: unexpected disconnect (reason_code={reason_code})")
+                "Cloud broker: unexpected disconnect "
+                f"(reason_code={reason_code})"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -337,7 +350,10 @@ class BenchlabLink:
             self._stop.wait(self.cfg["interval"])
 
     def publish_all(self) -> int:
-        """Publish latest snapshot for every known device. Returns count published."""
+        """Publish latest snapshot for every known device.
+
+        Returns count published.
+        """
         topic_pattern = self.cfg["topic"]
         qos = self.cfg.get("qos", 1)
         client_uuid = self.cfg.get("client_uuid") or ""
@@ -438,7 +454,9 @@ def run_link(args=None):
             # Reconnect if dropped
             if not cloud.is_connected:
                 logger.warning(
-                    f"Cloud broker disconnected — retrying in {RECONNECT_DELAY}s")
+                    "Cloud broker disconnected — retrying in "
+                    f"{RECONNECT_DELAY}s"
+                )
                 time.sleep(RECONNECT_DELAY)
                 cloud.reconnect()
                 continue

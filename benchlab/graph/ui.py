@@ -23,7 +23,10 @@ def build_unified_window(app):
                     dpg.add_combo(
                         items=[
                             d["port"] for d in app.devices],
-                        default_value=app.devices[0]["port"] if app.devices else "<No devices>",
+                        default_value=(
+                            app.devices[0]["port"]
+                            if app.devices else "<No devices>"
+                        ),
                         callback=app.device_changed,
                         tag="##device_combo",
                         width=180,
@@ -153,7 +156,10 @@ def build_unified_window(app):
                     dpg.add_text("Max: --", tag="graph_max")
                     dpg.add_text("Avg: --", tag="graph_avg")
                 dpg.add_separator()
-                with dpg.plot(label="Sensor Data", height=-1, width=-1, tag="##main_plot"):
+                with dpg.plot(
+                    label="Sensor Data", height=-1, width=-1,
+                    tag="##main_plot",
+                ):
                     dpg.add_plot_legend()
                     app.graph_x_axis = dpg.add_plot_axis(
                         dpg.mvXAxis, label="Time")
@@ -176,9 +182,14 @@ def build_unified_window(app):
 def _reset_session_stats(app):
     app.session_stats = {"min": None, "max": None, "avg": None, "count": 0,
                          "history": deque(maxlen=1000)}
-    for tag, val in [("graph_min", "Min: --"), ("graph_max", "Max: --"), ("graph_avg", "Avg: --"),
-                     ("graph_min_float", "Min: --"), ("graph_max_float", "Max: --"),
-                     ("graph_avg_float", "Avg: --")]:
+    for tag, val in [
+        ("graph_min", "Min: --"),
+        ("graph_max", "Max: --"),
+        ("graph_avg", "Avg: --"),
+        ("graph_min_float", "Min: --"),
+        ("graph_max_float", "Max: --"),
+        ("graph_avg_float", "Avg: --"),
+    ]:
         if dpg.does_item_exist(tag):
             dpg.set_value(tag, val)
 
