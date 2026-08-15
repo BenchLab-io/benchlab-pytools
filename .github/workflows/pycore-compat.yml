@@ -70,6 +70,9 @@ jobs:
       - name: Test - mqtt publisher
         run: pytest benchlab/mqtt/test_mqtt_publisher.py -v
 
+      - name: Test - mqtt datasource
+        run: pytest tests/test_mqtt_datasource.py -v
+
   latest:
     name: Import + test against latest pycore (PyPI)
     runs-on: windows-latest
@@ -128,3 +131,6 @@ jobs:
 
       - name: Test - mqtt publisher
         run: pytest benchlab/mqtt/test_mqtt_publisher.py -v
+
+      - name: Test - mqtt datasource
+        run: pytest tests/test_mqtt_datasource.py -v

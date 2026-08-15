@@ -19,6 +19,9 @@ from benchlab.core.device_registry import DeviceRegistry
 # benchlab_pycore.core.serial_io has no connection-opening helper; use the
 # local wrapper instead (see benchlab.core.shared_serial).
 from benchlab.core.shared_serial import open_serial_connection
+# Shared with benchlab.core.datasource.MQTTDataSource so both the publisher
+# and consumer sides resolve MQTT_PROTOCOL the same way.
+from benchlab.core.datasource import resolve_mqtt_protocol as _resolve_mqtt_protocol
 
 MQTTV5_REASON_CODES = {
     0:  "Success",
@@ -67,42 +70,15 @@ logger.addHandler(handler)
 global_stop_event = threading.Event()
 device_stop_events = {}  # {uid: threading.Event}
 
-_MQTT_PROTOCOL_ALIASES = {
-    "3": mqtt.MQTTv31,
-    "3.1": mqtt.MQTTv31,
-    "v3.1": mqtt.MQTTv31,
-    "mqttv31": mqtt.MQTTv31,
-    "4": mqtt.MQTTv311,
-    "3.1.1": mqtt.MQTTv311,
-    "v3.1.1": mqtt.MQTTv311,
-    "mqttv311": mqtt.MQTTv311,
-    "mqttv3.1.1": mqtt.MQTTv311,
-    "5": mqtt.MQTTv5,
-    "v5": mqtt.MQTTv5,
-    "mqttv5": mqtt.MQTTv5,
-}
-
-
 def resolve_mqtt_protocol(value):
     """Resolve *value* to one of paho's MQTTv31/MQTTv311/MQTTv5 int constants.
 
-    Accepts the int constants themselves, or common name/version strings
-    (case-insensitive, e.g. "MQTTv5", "v3.1.1", "5"). Raises ValueError
-    immediately on anything unrecognized, so a bad MQTT_PROTOCOL value is
-    caught at startup instead of crashing silently inside paho's background
-    network thread once a broker actually accepts the connection.
+    Thin wrapper around benchlab.core.datasource.resolve_mqtt_protocol,
+    kept here (with this module's paho import already available) so both
+    the publisher and MQTTDataSource share one resolver implementation.
+    See that function's docstring for accepted value formats.
     """
-    if value in (mqtt.MQTTv31, mqtt.MQTTv311, mqtt.MQTTv5):
-        return value
-
-    key = str(value).strip().lower()
-    if key in _MQTT_PROTOCOL_ALIASES:
-        return _MQTT_PROTOCOL_ALIASES[key]
-
-    raise ValueError(
-        f"Unrecognized MQTT_PROTOCOL value: {value!r}. "
-        f"Expected one of: MQTTv31 (3.1), MQTTv311 (3.1.1, default), MQTTv5."
-    )
+    return _resolve_mqtt_protocol(value, mqtt)
 
 
 def load_local_config(filename="mqtt.config"):
