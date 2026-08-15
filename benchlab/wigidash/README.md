@@ -59,16 +59,18 @@ Dependencies include:
 wigidash/
 ├─ README.md
 ├─ assets/ # Fonts, logos, and other UI resources
-├─ init.py
+├─ __init__.py
 ├─ benchlab_fleet.py # Fleet selection UI
 ├─ benchlab_graph.py # Graph rendering and metric selection
 ├─ benchlab_overview.py # Overview page for system telemetry
 ├─ benchlab_telemetry.py # Data logging and historical telemetry handling
+├─ benchlab_ui.py # Shared UI toolkit: theme, buttons, header/footer drawing
 ├─ benchlab_utils.py # Utilities for image display, logging, and device management
 ├─ wigidash_device.py # Device abstraction layer
+├─ wigidash_manager.py # Top-level orchestrator: device discovery, session/telemetry management
+├─ wigidash_session.py # Per-device UI session and page lifecycle
 ├─ wigidash_usb.py # USB communication layer
 ├─ wigidash_widget.py # Dashboard widget configuration
-├─ wigidash_launcher.py # Launcher for the dashboard
 └─ requirements.txt
 
 
@@ -79,7 +81,7 @@ wigidash/
 ### Launch the Dashboard
 
 ```
-python wigidash_launcher.py
+python benchlab.py -wigidash
 ```
 
 Behavior:

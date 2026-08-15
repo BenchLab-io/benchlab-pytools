@@ -77,11 +77,13 @@ def telemetry_step(app, device_info=None, sensor_struct=None):
         if not isinstance(sensor_struct, dict):
             logger.warning("Unexpected sensor_struct type: %s", type(sensor_struct))
             return
-        data = sensor_struct
+        data = dict(sensor_struct)
 
         # --- Cleanup & normalization ---
-        data.setdefault("Fans", [])
-        data.setdefault("Vin", [])
+        # Copy Fans/Vin too so the in-place mutations below don't leak back
+        # into the caller's original lists/dicts.
+        data["Fans"] = [dict(fan) for fan in data.get("Fans", [])]
+        data["Vin"] = list(data.get("Vin", []))
         for fan in data["Fans"]:
             fan.setdefault("RPM", 0)
             fan.setdefault("Duty", 0)

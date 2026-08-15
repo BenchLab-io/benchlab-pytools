@@ -27,6 +27,7 @@ jobs:
           pip install -r requirements.txt
           pip install -r benchlab/csv_log/requirements.txt
           pip install -r benchlab/graph/requirements.txt
+          pip install -r benchlab/wigidash/requirements.txt
           pip install pytest
 
       - name: Import smoke test
@@ -36,7 +37,11 @@ jobs:
           benchlab.config.config_client, benchlab.restapi.telemetry_api,
           benchlab.mqtt.mqtt_publisher, benchlab.hwinfo.hwinfo_export,
           benchlab.tui.config, benchlab.tui.tui_core, benchlab.tui.tui_main,
-          benchlab.graph.app, benchlab.graph.ui"
+          benchlab.graph.app, benchlab.graph.ui,
+          benchlab.wigidash.wigidash_manager, benchlab.wigidash.wigidash_usb,
+          benchlab.wigidash.wigidash_device, benchlab.wigidash.wigidash_session,
+          benchlab.wigidash.benchlab_telemetry, benchlab.wigidash.benchlab_fleet,
+          benchlab.wigidash.benchlab_overview, benchlab.wigidash.benchlab_graph"
 
       - name: Test - core data sources
         run: pytest tests/test_data_sources.py -v -k "not mqtt"
@@ -58,6 +63,9 @@ jobs:
 
       - name: Test - hwinfo export
         run: pytest benchlab/hwinfo/test_hwinfo_export.py -v -k "not mqtt"
+
+      - name: Test - wigidash
+        run: pytest benchlab/wigidash/test_wigidash.py -v -k "not mqtt"
 
   latest:
     name: Import + test against latest pycore (PyPI)
@@ -74,6 +82,7 @@ jobs:
           pip install -r requirements.txt
           pip install -r benchlab/csv_log/requirements.txt
           pip install -r benchlab/graph/requirements.txt
+          pip install -r benchlab/wigidash/requirements.txt
           pip install pytest
           pip install --upgrade benchlab-pycore
 
@@ -84,7 +93,11 @@ jobs:
           benchlab.config.config_client, benchlab.restapi.telemetry_api,
           benchlab.mqtt.mqtt_publisher, benchlab.hwinfo.hwinfo_export,
           benchlab.tui.config, benchlab.tui.tui_core, benchlab.tui.tui_main,
-          benchlab.graph.app, benchlab.graph.ui"
+          benchlab.graph.app, benchlab.graph.ui,
+          benchlab.wigidash.wigidash_manager, benchlab.wigidash.wigidash_usb,
+          benchlab.wigidash.wigidash_device, benchlab.wigidash.wigidash_session,
+          benchlab.wigidash.benchlab_telemetry, benchlab.wigidash.benchlab_fleet,
+          benchlab.wigidash.benchlab_overview, benchlab.wigidash.benchlab_graph"
 
       - name: Test - core data sources
         run: pytest tests/test_data_sources.py -v -k "not mqtt"
@@ -106,3 +119,6 @@ jobs:
 
       - name: Test - hwinfo export
         run: pytest benchlab/hwinfo/test_hwinfo_export.py -v -k "not mqtt"
+
+      - name: Test - wigidash
+        run: pytest benchlab/wigidash/test_wigidash.py -v -k "not mqtt"

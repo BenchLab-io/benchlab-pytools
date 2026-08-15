@@ -54,6 +54,7 @@ class BenchlabOverview:
         self.requested_graph_metrics = None
         self.x1 = self.x2 = self.x3 = 0
         self.col1_width = self.col2_width = self.col3_width = 0
+        self.last_touch_time = 0
 
     # -------------------------------
     # Page Handling
@@ -72,11 +73,13 @@ class BenchlabOverview:
             return
 
         now = int(time.monotonic() * 1000)
-        if now - getattr(self, "last_touch_time", 0) < 0.1:
+        if now - self.last_touch_time < 150:
             return
 
         if touch is None or getattr(touch, "Type", 0) == 0:
             return
+
+        self.last_touch_time = now
 
         x, y = getattr(touch, "X", 0), getattr(touch, "Y", 0)
 
@@ -134,10 +137,6 @@ class BenchlabOverview:
             if x0 <= x <= x1 and y0 <= y <= y1:
                 logger.info(f"Card pressed, opening graph for: {metrics}")
                 self.running = False
-                try:
-                    self.stop()
-                except:
-                    pass
                 self.requested_graph_metrics = metrics
                 return
 
