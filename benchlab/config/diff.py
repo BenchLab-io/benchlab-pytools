@@ -128,7 +128,7 @@ def format_diff(diff: DiffResult, device_label: str) -> str:
     if diff.device_name_change:
         has_content = True
         c = diff.device_name_change
-        lines.append(f"  Device Name:")
+        lines.append("  Device Name:")
         lines.append(f"    {c.current!r} -> {c.desired!r}")
 
     for (profile_id, fan_id), changes in sorted(diff.fan_changes.items()):

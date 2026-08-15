@@ -16,7 +16,7 @@ import os
 import sys
 import traceback
 
-from .tools import CONSUMER_TOOLS, LAUNCH_PROFILES
+from .tools import CONSUMER_TOOLS, LAUNCH_PROFILES  # noqa: F401 - CONSUMER_TOOLS re-exported for benchlab.main.CONSUMER_TOOLS consumers
 from .sources import check_and_setup_source, cleanup_all_services
 from .launcher import launch_tools_concurrent
 
@@ -269,7 +269,7 @@ def _run_with_source(
         call_fn,
         tool_label: str) -> None:
     """Set up source, call call_fn, then clean up."""
-    from .tools import CONSUMER_TOOLS, ensure_tool_dependencies
+    from .tools import ensure_tool_dependencies
     tool_id = next((tid for tid, t in CONSUMER_TOOLS.items()
                     if t["module"] == import_path), None)
     if tool_id:

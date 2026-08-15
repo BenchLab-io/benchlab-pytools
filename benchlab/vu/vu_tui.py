@@ -277,7 +277,6 @@ class VUTUI:
         self.stdscr.clear()
         self.h, self.w = self.stdscr.getmaxyx()
         y_start = 4
-        footer_height = 1
         y = y_start
 
         # --- Header ---
@@ -690,7 +689,6 @@ class VUTUI:
             curses.napms(2000)
             return
 
-        max_display_rows = h - 6
         num_sensors = len(self.SENSORS)
         col_width = max(len(s) for s in self.SENSORS) + 4
         num_cols = max(1, w // col_width)

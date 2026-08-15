@@ -458,7 +458,6 @@ def run_mqtt_mode(broker_type="localhost"):
         return
 
     cfg = load_mqtt_config()
-    poll_rate = cfg["poll_rate"]
 
     logger.info(
         "MQTT mode: %s, sending to %s:%s",

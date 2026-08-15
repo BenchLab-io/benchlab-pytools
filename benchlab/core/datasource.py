@@ -15,9 +15,11 @@ import logging
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections import deque
 from datetime import datetime, UTC
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .config import SerialConfig, FastAPIConfig, MQTTConfig
 
 logger = logging.getLogger("benchlab.core.datasource")
 

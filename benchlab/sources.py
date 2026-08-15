@@ -221,7 +221,6 @@ def _named_pipe_available() -> bool:
         return False
     try:
         import win32pipe
-        import pywintypes
         # WaitNamedPipe with a very short timeout just checks existence
         win32pipe.WaitNamedPipe(r"\\.\pipe\BenchlabDiscovery", 1000)
         return True
@@ -250,7 +249,6 @@ def check_named_pipe_service() -> bool:
     try:
         import win32file
         import win32pipe
-        import pywintypes
 
         path = r"\\.\pipe\BenchlabDiscovery"
         win32pipe.WaitNamedPipe(path, 2000)

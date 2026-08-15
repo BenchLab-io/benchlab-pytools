@@ -6,7 +6,6 @@ import time
 import logging
 import atexit
 from benchlab_pycore.core import translate_sensor_struct, FAN_NUM, read_device, BENCHLAB_ORIGINAL_PRODUCT_ID
-from benchlab_pycore.core.serial_io import get_fleet_info
 from benchlab.core.datasource import create_datasource, DataSource
 
 # Conditional import for Windows-only winreg module (BUG-7.2)

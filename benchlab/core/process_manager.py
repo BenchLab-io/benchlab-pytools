@@ -34,8 +34,8 @@ import subprocess
 import sys
 import threading
 import time
-from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Callable, Dict, Optional
 
 logger = logging.getLogger("benchlab.core.process_manager")
 
@@ -241,7 +241,6 @@ class ProcessManager:
                     mp.name,
                     ret)
                 try:
-                    stderr_path = f"{mp.name}"
                     # try to capture the log
                     log_base = os.path.join(
                         os.path.dirname(

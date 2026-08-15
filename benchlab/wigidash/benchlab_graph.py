@@ -3,12 +3,10 @@
 from benchlab.wigidash.benchlab_utils import display_image, get_logger
 from benchlab.wigidash.benchlab_ui import load_fonts, draw_header, draw_footer, bind_button, load_logo, UIButton, UITheme, BUTTON_DEFS
 import time
-import signal
-import os
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 from datetime import datetime
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 import io
 import matplotlib
@@ -183,10 +181,6 @@ class BenchlabGraph:
         header_height = self.HEADER_HEIGHT
         footer_height = self.FOOTER_HEIGHT
 
-        title_spacing = 2
-        line_height = 18
-        data = self.wigi.sensor_data or {}
-
         self.padding = padding
         self.header_height = header_height
 
@@ -262,10 +256,6 @@ class BenchlabGraph:
                   fill=self.COLOR_SECTION,
                   font=self.ui_fonts["title"])
         panel_y += self.ui_fonts["title"].getbbox("Metrics")[3] + 8
-
-        METRIC_BUTTON_COLOR = BUTTON_DEFS.get(
-            UIButton.GRAPH_METRIC, {}).get(
-            "color", (0, 0, 0))
 
         # Split numeric metrics into fan pairs and others
         fan_pairs = []
@@ -393,13 +383,11 @@ class BenchlabGraph:
                     "text": btn["text"]
                 })
 
-         # ---- Graph area ----
+        # ---- Graph area ----
         graph_x = panel_width + 2 * padding
         graph_y = header_height + padding
         graph_w = self.SCREEN_WIDTH - graph_x - padding
         graph_h = self.SCREEN_HEIGHT - graph_y - footer_height - padding
-        x_label = "Value"
-        y_label = "Value"
 
         if self.plot_metrics:
             fig, ax = plt.subplots(

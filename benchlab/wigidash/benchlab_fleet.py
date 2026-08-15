@@ -1,10 +1,9 @@
 # benchlab_fleet.py
 
-from PIL import Image, ImageDraw, ImageFont
-import os
+from PIL import Image, ImageDraw
 import time
 
-from benchlab.wigidash.benchlab_ui import load_fonts, draw_header, draw_footer, bind_button, load_logo, UIButton, UITheme, BUTTON_DEFS
+from benchlab.wigidash.benchlab_ui import load_fonts, draw_header, draw_footer, bind_button, load_logo, UIButton
 from benchlab.wigidash.benchlab_utils import display_image, get_logger, KeepAliveManager
 
 logger = get_logger("BenchlabFleet")

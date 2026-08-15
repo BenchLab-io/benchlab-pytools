@@ -2,9 +2,6 @@
 
 from ctypes import Structure, c_int16, c_uint16, c_uint8, c_uint32
 
-import logging
-import sys
-
 from benchlab.wigidash.benchlab_utils import get_logger
 
 logger = get_logger("WigidashWidget")

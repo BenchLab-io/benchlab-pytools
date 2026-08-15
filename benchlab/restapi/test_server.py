@@ -4,13 +4,7 @@ Test script for the improved BenchLab FastAPI telemetry server.
 This script tests the basic functionality without requiring actual BenchLab devices.
 """
 
-import asyncio
-import json
-import requests
-import subprocess
 import sys
-import time
-import threading
 from pathlib import Path
 
 # Add the parent directory to the path so we can import benchlab modules
@@ -102,9 +96,6 @@ def test_error_handling():
     print("\nTesting error handling...")
 
     try:
-        import os
-        import importlib
-
         # Test invalid configuration by creating a new Config class instance
         # We need to test the validation logic directly
 

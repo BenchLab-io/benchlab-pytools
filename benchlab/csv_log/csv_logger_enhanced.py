@@ -3,7 +3,6 @@ Enhanced CSV Fleet Logger for BENCHLAB
 Lightweight, robust, and cross-platform compatible
 """
 
-import csv
 import os
 import configparser
 import threading

@@ -10,7 +10,6 @@ Covers:
 """
 
 import importlib
-import json
 import sys
 from pathlib import Path
 
@@ -131,7 +130,7 @@ def test_combined_supported_sources_is_intersection_across_tools():
     the Data Source column must only offer sources ALL selected tools
     support -- not the union (which could offer a source one of the tools
     can't actually use)."""
-    from benchlab.menu import _combined_supported_sources, CONSUMER_TOOLS
+    from benchlab.menu import _combined_supported_sources
 
     # config only supports direct/named_pipe; tui supports everything.
     # The intersection with an unrestricted tool is still config's set.

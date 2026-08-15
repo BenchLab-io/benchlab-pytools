@@ -4,7 +4,6 @@ import json
 import logging
 import os
 import signal
-import sys
 import threading
 import time
 import types
@@ -74,7 +73,7 @@ def load_json(path, default=None):
 
 
 def reload_dial_config():
-    global VU_DIAL_LAST_MTIME, previous_dial_cfg
+    global VU_DIAL_LAST_MTIME
     if not VU_DIAL_CONFIG.exists():
         return []
     mtime = VU_DIAL_CONFIG.stat().st_mtime

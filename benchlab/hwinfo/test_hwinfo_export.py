@@ -10,7 +10,6 @@ disconnected devices, and the dead sensor-type branch.
 
 from benchlab.hwinfo import hwinfo_export as hw
 import sys
-import types
 
 import pytest
 

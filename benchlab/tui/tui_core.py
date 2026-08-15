@@ -9,7 +9,7 @@ import curses
 import logging
 import time
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Callable
+from typing import Dict, Any, List, Optional
 
 from .config import Config
 from benchlab.core.statistics import ChannelStats, StatsFormatter

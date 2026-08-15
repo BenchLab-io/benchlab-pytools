@@ -1,14 +1,11 @@
 # benchlab_overview.py
 
-import os
-import signal
 import time
-import threading
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
-from benchlab.wigidash.benchlab_ui import load_fonts, draw_header, draw_footer, bind_button, load_logo, UIButton, UITheme, BUTTON_DEFS
-from benchlab.wigidash.benchlab_utils import display_image, KeepAliveManager, get_logger, clear_display
+from benchlab.wigidash.benchlab_ui import load_fonts, draw_header, draw_footer, bind_button, load_logo, UIButton, UITheme
+from benchlab.wigidash.benchlab_utils import display_image, KeepAliveManager, get_logger
 
 logger = get_logger("BenchlabOverview")
 

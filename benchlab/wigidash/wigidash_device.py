@@ -1,11 +1,8 @@
 # wigidash_device.py
 
-import logging
 import time
 import struct
-import sys
-import threading
-from ctypes import c_uint16, c_uint32, sizeof
+from ctypes import c_uint16, sizeof
 
 from benchlab.wigidash.benchlab_utils import get_logger
 

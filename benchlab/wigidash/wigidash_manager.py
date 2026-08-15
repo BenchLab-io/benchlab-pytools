@@ -1,15 +1,12 @@
-from PIL import Image, ImageDraw, ImageFont
-
 import os
-import sys
 import threading
 import time
 import types
 
 from benchlab.core.datasource_manager import DataSourceManager
 from benchlab.wigidash.benchlab_telemetry import TelemetryHistory, telemetry_step, TelemetryContext
-from benchlab.wigidash.benchlab_utils import get_logger, display_image
-from benchlab.wigidash.wigidash_usb import scan_wigidash, USBDevice
+from benchlab.wigidash.benchlab_utils import get_logger
+from benchlab.wigidash.wigidash_usb import scan_wigidash
 from benchlab.wigidash.wigidash_session import BenchlabWigiSession
 
 logger = get_logger("WigidashManager")

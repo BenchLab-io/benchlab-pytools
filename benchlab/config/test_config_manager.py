@@ -13,8 +13,6 @@ with mocked ConfigClient instances -- no real device or hardware needed:
 import logging
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from benchlab.config.config_manager import ConfigManager
 
 

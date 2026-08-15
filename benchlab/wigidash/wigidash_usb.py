@@ -1,7 +1,6 @@
 # wigidash_usb.py
 
 import glob
-import logging
 import os
 import re
 import sys

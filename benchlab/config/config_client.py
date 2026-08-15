@@ -235,7 +235,6 @@ class DirectConfigClient(ConfigClient):
                          config: Dict[str, Any]) -> bool:
         """Write fan configuration."""
         from benchlab_pycore.core import write_fan_profile, FanConfigStruct
-        import ctypes
 
         # Convert dict to struct
         cfg = FanConfigStruct()
@@ -332,7 +331,6 @@ class DirectConfigClient(ConfigClient):
 
     def _dict_to_struct(self, data: Any, struct_type):
         """Recursively convert dictionaries back to ctypes structures."""
-        import ctypes
 
         if isinstance(data, dict):
             # Create struct instance

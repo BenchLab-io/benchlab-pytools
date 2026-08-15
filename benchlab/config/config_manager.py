@@ -9,7 +9,7 @@ import logging
 from typing import Optional, Dict, Any, List
 
 from .config_client import create_config_client, ConfigClient, query_named_pipe, DISCOVERY_PIPE_NAME
-from .schema import ConfigFile, validate_config_file
+from .schema import validate_config_file
 from .diff import compute_diff, format_diff, DiffResult
 
 logger = logging.getLogger("benchlab.config.manager")

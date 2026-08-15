@@ -6,7 +6,7 @@ for easy customization and maintenance.
 """
 
 import curses
-from typing import Dict, Tuple, Any
+from typing import Tuple
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

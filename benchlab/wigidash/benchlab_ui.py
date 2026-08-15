@@ -95,7 +95,7 @@ def load_logo(max_size=(60, 60)):
         logo_img = Image.open(logo_path).convert("RGBA")
         logo_img.thumbnail(max_size, Image.Resampling.LANCZOS)
         return logo_img
-    except Exception as e:
+    except Exception:
         # Optionally log warning here if you have a logger
         return None
 

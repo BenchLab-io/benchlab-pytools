@@ -9,11 +9,8 @@ DataSourceManager are stubbed out. Covers:
   on_connect/on_disconnect callbacks use the matching 5-arg v2 signature
 """
 
-import os
-
 import pytest
 
-from benchlab.link import link_main
 from benchlab.link.link_main import BenchlabLink, CloudMQTTClient, _resolve_config
 
 

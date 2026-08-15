@@ -9,10 +9,9 @@ This replaces the original monolithic tui_main.py with a much cleaner implementa
 """
 import curses
 import logging
-import os
 import sys
 import time
-from typing import List, Dict, Any, TextIO
+from typing import List, Dict, Any
 
 from benchlab.tui.__init__ import __version__
 from benchlab.core.datasource_manager import DataSourceManager

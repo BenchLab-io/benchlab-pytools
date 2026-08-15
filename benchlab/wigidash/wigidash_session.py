@@ -1,6 +1,6 @@
 # wigidash_session.py
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 
 import os
 import time
@@ -9,7 +9,7 @@ import threading
 from benchlab.wigidash.benchlab_fleet import BenchlabFleetSelect
 from benchlab.wigidash.benchlab_overview import BenchlabOverview
 from benchlab.wigidash.benchlab_graph import BenchlabGraph
-from benchlab.wigidash.benchlab_ui import load_fonts, draw_header, draw_footer, bind_button, load_logo, UIButton, UITheme, BUTTON_DEFS
+from benchlab.wigidash.benchlab_ui import UITheme
 from benchlab.wigidash.benchlab_utils import display_image, get_logger, KeepAliveManager
 
 from benchlab.wigidash.wigidash_device import WigidashDevice
