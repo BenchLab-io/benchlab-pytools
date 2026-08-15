@@ -236,8 +236,8 @@ class GraphApp:
                         value = self.get_sensor_value(
                             self.sensor_struct, self.selected_sensor)
 
-                if value is not None and self.graph_line and dpg.does_item_exist(
-                        self.graph_line):
+                if (value is not None and self.graph_line
+                        and dpg.does_item_exist(self.graph_line)):
                     t += 1
                     x_data.append(t)
                     y_data.append(value)
@@ -253,8 +253,8 @@ class GraphApp:
                     max_y = max(y_data)
                     margin = (max_y - min_y) * 0.1 if max_y != min_y else 1
 
-                    if x_data and self.graph_x_axis is not None and dpg.does_item_exist(
-                            self.graph_x_axis):
+                    if (x_data and self.graph_x_axis is not None
+                            and dpg.does_item_exist(self.graph_x_axis)):
                         dpg.set_axis_limits(self.graph_x_axis, float(
                             x_data[0]), float(x_data[-1]))
                     if self.graph_y_axis is not None and dpg.does_item_exist(
@@ -269,9 +269,13 @@ class GraphApp:
                         s['max']:.2f}" if s["max"] is not None else "Max: --"
                     avg_text = f"Avg: {
                         s['avg']:.2f}" if s["avg"] is not None else "Avg: --"
-                    for tag, text in (("graph_min", min_text), ("graph_min_float", min_text),
-                                      ("graph_max", max_text), ("graph_max_float", max_text),
-                                      ("graph_avg", avg_text), ("graph_avg_float", avg_text)):
+                    for tag, text in (
+                            ("graph_min", min_text),
+                            ("graph_min_float", min_text),
+                            ("graph_max", max_text),
+                            ("graph_max_float", max_text),
+                            ("graph_avg", avg_text),
+                            ("graph_avg_float", avg_text)):
                         if dpg.does_item_exist(tag):
                             dpg.set_value(tag, text)
             except Exception as e:
@@ -313,7 +317,8 @@ class GraphApp:
         try:
             while dpg.is_dearpygui_running():
                 with self.lock:
-                    status_text = "Connected" if self.connected else "Disconnected"
+                    status_text = (
+                        "Connected" if self.connected else "Disconnected")
                     status_color = (
                         0, 255, 0) if self.connected else (
                         255, 0, 0)
@@ -323,15 +328,18 @@ class GraphApp:
                     if dpg.does_item_exist("device_uid"):
                         dpg.set_value(
                             "device_uid",
-                            self.latest_uid if self.latest_uid != "?" else "Unknown")
+                            self.latest_uid
+                            if self.latest_uid != "?" else "Unknown")
 
                     # Populate sensor combo once first data arrives
                     if not _sensors_populated and self.sensor_struct:
                         keys = [
-                            k for k in self.sensor_struct if k.lower() != "timestamp"]
+                            k for k in self.sensor_struct
+                            if k.lower() != "timestamp"]
                         if keys and dpg.does_item_exist("##sensor_combo"):
                             dpg.configure_item(
-                                "##sensor_combo", items=keys, default_value=keys[0])
+                                "##sensor_combo", items=keys,
+                                default_value=keys[0])
                             _sensors_populated = True
 
                     ui.update_current_values_display(self)
@@ -339,6 +347,7 @@ class GraphApp:
         finally:
             self.stop_event.set()
             self._stop_sensor_thread()
-            if self.graph_updater_thread and self.graph_updater_thread.is_alive():
+            if (self.graph_updater_thread
+                    and self.graph_updater_thread.is_alive()):
                 self.graph_updater_thread.join(timeout=2)
             dpg.destroy_context()
