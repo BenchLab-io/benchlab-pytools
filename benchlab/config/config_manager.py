@@ -8,8 +8,10 @@ import json
 import logging
 from typing import Optional, Dict, Any, List
 
-from .config_client import create_config_client, ConfigClient, query_named_pipe, DISCOVERY_PIPE_NAME
-from .schema import ConfigFile, validate_config_file
+from .config_client import (
+    create_config_client, ConfigClient, query_named_pipe,
+    DISCOVERY_PIPE_NAME)
+from .schema import validate_config_file
 from .diff import compute_diff, format_diff, DiffResult
 
 logger = logging.getLogger("benchlab.config.manager")
@@ -17,25 +19,26 @@ logger = logging.getLogger("benchlab.config.manager")
 
 def _default_confirm(diff: DiffResult, device_label: str) -> bool:
     """Default confirm_callback for import_config: interactive y/n prompt."""
-    answer = input(f"Apply these changes to {device_label}? (yes/no): ").strip().lower()
+    answer = input(
+        f"Apply these changes to {device_label}? (yes/no): ").strip().lower()
     return answer in ('y', 'yes')
 
 
 class ConfigManager:
     """Manages device configuration import/export operations."""
-    
+
     def __init__(self, source: str = 'direct'):
         """Initialize configuration manager.
-        
+
         Args:
             source: Data source type ('direct' or 'named_pipe')
         """
         self.source = source
         logger.info(f"Initialized ConfigManager with source: {source}")
-    
+
     def discover_devices(self) -> List[Dict[str, Any]]:
         """Discover available devices.
-        
+
         Returns:
             List of device info dictionaries
         """
@@ -45,18 +48,20 @@ class ConfigManager:
             return self._discover_named_pipe()
         else:
             raise ValueError(f"Invalid source: {self.source}")
-    
+
     def _discover_direct(self) -> List[Dict[str, Any]]:
         """Discover devices via direct serial connection."""
         try:
             from benchlab_pycore.core import get_fleet_info
             devices = get_fleet_info()
-            logger.info(f"Discovered {len(devices)} device(s) via direct serial")
+            logger.info(
+                f"Discovered {
+                    len(devices)} device(s) via direct serial")
             return devices
         except Exception as e:
             logger.error(f"Failed to discover direct devices: {e}")
             return []
-    
+
     def _discover_named_pipe(self) -> List[Dict[str, Any]]:
         """Discover devices via the BenchlabDiscovery named pipe's ListDevices
         command -- a single round-trip that returns all devices' info
@@ -92,14 +97,16 @@ class ConfigManager:
         except Exception as e:
             logger.error(f"Failed to discover named pipe devices: {e}")
             return []
-    
-    def select_device(self, selector: Dict[str, Any], devices: List[Dict[str, Any]]) -> Optional[str]:
+
+    def select_device(
+            self, selector: Dict[str, Any],
+            devices: List[Dict[str, Any]]) -> Optional[str]:
         """Select device based on selector criteria.
-        
+
         Args:
             selector: Device selector from config
             devices: List of available devices
-            
+
         Returns:
             Device identifier (port or pipe name), or None if not found
         """
@@ -132,13 +139,15 @@ class ConfigManager:
                 # Named pipe matching
                 if sel_type == 'guid' and device.get('guid') == sel_value:
                     return device.get('pipe')
-                elif sel_type == 'productId' and device.get('productId') == sel_value:
+                elif (sel_type == 'productId'
+                        and device.get('productId') == sel_value):
                     return device.get('pipe')
-                elif sel_type == 'pipeName' and device.get('pipe') == sel_value:
+                elif (sel_type == 'pipeName'
+                        and device.get('pipe') == sel_value):
                     return device.get('pipe')
 
         return None
-    
+
     def _read_current_state(self, client: ConfigClient) -> Dict[str, Any]:
         """Read a device's current name/fan/RGB/calibration state.
 
@@ -166,8 +175,11 @@ class ConfigManager:
                 try:
                     fan_config = client.read_fan_config(profile_id, fan_id)
                 except Exception as e:
-                    logger.warning(f"Could not read fan config {profile_id}/{fan_id}: {e}")
-                    read_errors.append(f"fan profile {profile_id} fan {fan_id}: {e}")
+                    logger.warning(
+                        f"Could not read fan config "
+                        f"{profile_id}/{fan_id}: {e}")
+                    read_errors.append(
+                        f"fan profile {profile_id} fan {fan_id}: {e}")
                     continue
                 if fan_config:
                     fan_config['fanId'] = fan_id
@@ -231,7 +243,8 @@ class ConfigManager:
                 logger.error("Failed to read device info")
                 return False
 
-            # Build selector based on available info - prefer UID/GUID over port
+            # Build selector based on available info - prefer UID/GUID over
+            # port
             uid = device_info.get('uid')
             guid = device_info.get('guid')
 
@@ -259,7 +272,8 @@ class ConfigManager:
             # Build config structure
             config = {
                 'version': '1.0',
-                'description': f'Exported from {state["deviceName"] or identifier}',
+                'description':
+                    f'Exported from {state["deviceName"] or identifier}',
                 'devices': [{
                     'selector': selector,
                     'deviceName': state['deviceName'],
@@ -282,7 +296,7 @@ class ConfigManager:
             return False
         finally:
             client.close()
-    
+
     def import_config(
         self,
         config_file: str,
@@ -301,8 +315,9 @@ class ConfigManager:
             config_file: Input JSON file path
             dry_run: If True, show the diff for each device but don't apply
                      or prompt for confirmation.
-            save_to_flash: If True, override saveToFlash in config and save to flash.
-                          If False, override and don't save. If None, use config file setting.
+            save_to_flash: If True, override saveToFlash in config and save
+                          to flash. If False, override and don't save.
+                          If None, use config file setting.
             auto_confirm: If True, skip the confirmation prompt and apply
                           immediately after showing the diff (for automation).
             confirm_callback: Called with the rendered diff text; return True
@@ -335,12 +350,15 @@ class ConfigManager:
             # Apply configuration to each device
             success_count = 0
             for i, device_config in enumerate(config.devices):
-                logger.info(f"--- Device {i+1}/{len(config.devices)} ---")
+                logger.info(f"--- Device {i + 1}/{len(config.devices)} ---")
 
                 # Select device
-                identifier = self.select_device(device_config.selector.model_dump(), devices)
+                identifier = self.select_device(
+                    device_config.selector.model_dump(), devices)
                 if not identifier:
-                    logger.error(f"Device not found matching selector: {device_config.selector}")
+                    logger.error(
+                        f"Device not found matching selector: {
+                            device_config.selector}")
                     continue
 
                 logger.info(f"Selected: {identifier}")
@@ -374,7 +392,8 @@ class ConfigManager:
                         continue
 
                 # Apply configuration
-                if self._apply_device_config(identifier, device_config, save_to_flash):
+                if self._apply_device_config(
+                        identifier, device_config, save_to_flash):
                     logger.info("Configuration applied successfully")
                     success_count += 1
                 else:
@@ -384,21 +403,28 @@ class ConfigManager:
                 logger.info("DRY RUN - No changes were applied")
                 return True
 
-            logger.info(f"{success_count}/{len(config.devices)} devices configured successfully")
+            logger.info(
+                f"{success_count}/{len(config.devices)} devices "
+                f"configured successfully")
             return success_count == len(config.devices)
 
         except Exception as e:
             logger.error(f"Failed to import config: {e}")
             return False
-    
-    def _apply_device_config(self, identifier: str, device_config, save_to_flash: Optional[bool] = None) -> bool:
+
+    def _apply_device_config(
+            self,
+            identifier: str,
+            device_config,
+            save_to_flash: Optional[bool] = None) -> bool:
         """Apply configuration to a single device.
-        
+
         Args:
             identifier: Device identifier
             device_config: DeviceConfig object
-            save_to_flash: Override saveToFlash setting (None = use config file setting)
-            
+            save_to_flash: Override saveToFlash setting
+                (None = use config file setting)
+
         Returns:
             True if successful
         """
@@ -424,8 +450,11 @@ class ConfigManager:
                         fan_dict = fan.model_dump()
                         fan_id = fan_dict.pop('fanId')
 
-                        if not client.write_fan_config(profile.profileId, fan_id, fan_dict):
-                            logger.error(f"Failed to write fan config {profile.profileId}/{fan_id}")
+                        if not client.write_fan_config(
+                                profile.profileId, fan_id, fan_dict):
+                            logger.error(
+                                f"Failed to write fan config {
+                                    profile.profileId}/{fan_id}")
                             success = False
 
             # Apply RGB profiles
@@ -435,7 +464,8 @@ class ConfigManager:
                     profile_id = rgb_dict.pop('profileId')
 
                     if not client.write_rgb_config(profile_id, rgb_dict):
-                        logger.error(f"Failed to write RGB config {profile_id}")
+                        logger.error(
+                            f"Failed to write RGB config {profile_id}")
                         success = False
 
             # Apply calibration
@@ -445,7 +475,9 @@ class ConfigManager:
                     success = False
 
             # Determine whether to save to flash (override takes precedence)
-            should_save = save_to_flash if save_to_flash is not None else device_config.saveToFlash
+            should_save = (
+                save_to_flash if save_to_flash is not None
+                else device_config.saveToFlash)
 
             if should_save:
                 if not client.save_config():

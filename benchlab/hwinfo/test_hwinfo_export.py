@@ -8,16 +8,14 @@ timestamp leaking into the exported sensors, stale registry entries for
 disconnected devices, and the dead sensor-type branch.
 """
 
+from benchlab.hwinfo import hwinfo_export as hw
 import sys
-import types
 
 import pytest
 
 pytestmark = pytest.mark.skipif(
     not sys.platform.startswith("win"), reason="hwinfo export is Windows-only"
 )
-
-from benchlab.hwinfo import hwinfo_export as hw
 
 
 def test_get_sensor_type_and_unit_fanextduty_still_other_percent():
@@ -70,9 +68,14 @@ def test_export_all_devices_removes_stale_registry_entry(monkeypatch):
     hw.exported_devices.clear()
 
     deleted_paths = []
-    monkeypatch.setattr(hw, "delete_registry_tree", lambda root, path: deleted_paths.append(path))
+    monkeypatch.setattr(
+        hw,
+        "delete_registry_tree",
+        lambda root,
+        path: deleted_paths.append(path))
     monkeypatch.setattr(hw, "write_hwinfo_sensor", lambda *a, **kw: None)
-    monkeypatch.setattr(hw.winreg, "OpenKey", lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError()))
+    monkeypatch.setattr(hw.winreg, "OpenKey", lambda *a, **
+                        kw: (_ for _ in ()).throw(FileNotFoundError()))
 
     device = {"uid": "UID-1", "port": "COM3"}
     device_name = "BENCHLAB_COM3_UID-1"

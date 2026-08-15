@@ -21,8 +21,12 @@ def build_unified_window(app):
                     dpg.add_text("Port:", color=(180, 180, 180))
                     dpg.add_spacer(width=4)
                     dpg.add_combo(
-                        items=[d["port"] for d in app.devices],
-                        default_value=app.devices[0]["port"] if app.devices else "<No devices>",
+                        items=[
+                            d["port"] for d in app.devices],
+                        default_value=(
+                            app.devices[0]["port"]
+                            if app.devices else "<No devices>"
+                        ),
                         callback=app.device_changed,
                         tag="##device_combo",
                         width=180,
@@ -33,10 +37,18 @@ def build_unified_window(app):
                 with dpg.group(horizontal=True):
                     dpg.add_text("Status:", color=(180, 180, 180))
                     dpg.add_spacer(width=4)
-                    dpg.add_text("Disconnected", tag="device_status", color=(255, 0, 0))
+                    dpg.add_text(
+                        "Disconnected",
+                        tag="device_status",
+                        color=(
+                            255,
+                            0,
+                            0))
                     dpg.add_spacer(width=8)
                     dpg.add_text("UID:", color=(180, 180, 180))
-                    dpg.add_text("Unknown", tag="device_uid", color=(200, 200, 200))
+                    dpg.add_text(
+                        "Unknown", tag="device_uid", color=(
+                            200, 200, 200))
 
                 dpg.add_separator()
 
@@ -47,27 +59,45 @@ def build_unified_window(app):
                     dpg.add_spacer(width=8)
                     dpg.add_input_int(
                         default_value=app.history_length,
-                        min_value=10, max_value=1000,
-                        callback=lambda s, v: setattr(app, "history_length", v),
-                        tag="##history_length", width=120,
+                        min_value=10,
+                        max_value=1000,
+                        callback=lambda s,
+                        v: setattr(
+                            app,
+                            "history_length",
+                            v),
+                        tag="##history_length",
+                        width=120,
                     )
                 with dpg.group(horizontal=True):
                     dpg.add_text("Graph Update:", color=(180, 180, 180))
                     dpg.add_spacer(width=4)
                     dpg.add_input_float(
                         default_value=app.graph_update_interval,
-                        min_value=0.05, max_value=5.0,
-                        callback=lambda s, v: setattr(app, "graph_update_interval", v),
-                        tag="##graph_update_interval", width=120,
+                        min_value=0.05,
+                        max_value=5.0,
+                        callback=lambda s,
+                        v: setattr(
+                            app,
+                            "graph_update_interval",
+                            v),
+                        tag="##graph_update_interval",
+                        width=120,
                     )
                 with dpg.group(horizontal=True):
                     dpg.add_text("Sensor Read:", color=(180, 180, 180))
                     dpg.add_spacer(width=4)
                     dpg.add_input_float(
                         default_value=app.sensor_read_interval,
-                        min_value=0.1, max_value=10.0,
-                        callback=lambda s, v: setattr(app, "sensor_read_interval", v),
-                        tag="##sensor_read_interval", width=120,
+                        min_value=0.1,
+                        max_value=10.0,
+                        callback=lambda s,
+                        v: setattr(
+                            app,
+                            "sensor_read_interval",
+                            v),
+                        tag="##sensor_read_interval",
+                        width=120,
                     )
 
                 dpg.add_separator()
@@ -126,14 +156,21 @@ def build_unified_window(app):
                     dpg.add_text("Max: --", tag="graph_max")
                     dpg.add_text("Avg: --", tag="graph_avg")
                 dpg.add_separator()
-                with dpg.plot(label="Sensor Data", height=-1, width=-1, tag="##main_plot"):
+                with dpg.plot(
+                    label="Sensor Data", height=-1, width=-1,
+                    tag="##main_plot",
+                ):
                     dpg.add_plot_legend()
-                    app.graph_x_axis = dpg.add_plot_axis(dpg.mvXAxis, label="Time")
-                    app.graph_y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Value")
+                    app.graph_x_axis = dpg.add_plot_axis(
+                        dpg.mvXAxis, label="Time")
+                    app.graph_y_axis = dpg.add_plot_axis(
+                        dpg.mvYAxis, label="Value")
                     app.graph_line = dpg.add_line_series(
                         [], [], label="Sensor Data", parent=app.graph_y_axis
                     )
-                    dpg.set_item_user_data(app.graph_line, {"x_data": [], "y_data": []})
+                    dpg.set_item_user_data(
+                        app.graph_line, {
+                            "x_data": [], "y_data": []})
 
     # Remember the main window's graph items so the floating window can
     # hand control back to them when it is closed.
@@ -144,10 +181,15 @@ def build_unified_window(app):
 
 def _reset_session_stats(app):
     app.session_stats = {"min": None, "max": None, "avg": None, "count": 0,
-                          "history": deque(maxlen=1000)}
-    for tag, val in [("graph_min", "Min: --"), ("graph_max", "Max: --"), ("graph_avg", "Avg: --"),
-                      ("graph_min_float", "Min: --"), ("graph_max_float", "Max: --"),
-                      ("graph_avg_float", "Avg: --")]:
+                         "history": deque(maxlen=1000)}
+    for tag, val in [
+        ("graph_min", "Min: --"),
+        ("graph_max", "Max: --"),
+        ("graph_avg", "Avg: --"),
+        ("graph_min_float", "Min: --"),
+        ("graph_max_float", "Max: --"),
+        ("graph_avg_float", "Avg: --"),
+    ]:
         if dpg.does_item_exist(tag):
             dpg.set_value(tag, val)
 
@@ -192,7 +234,7 @@ def update_current_values_display(app):
         if dpg.does_item_exist("current_max"):
             dpg.set_value("current_max", f"{max(h):.2f}")
         if dpg.does_item_exist("current_avg"):
-            dpg.set_value("current_avg", f"{sum(h)/len(h):.2f}")
+            dpg.set_value("current_avg", f"{sum(h) / len(h):.2f}")
 
 
 def open_graph_window(app, sender=None, app_data=None):
@@ -216,7 +258,8 @@ def open_graph_window(app, sender=None, app_data=None):
     with dpg.window(label=f"Graph: {app.selected_sensor}",
                     tag="graph_window", width=701, height=400, pos=(0, 151),
                     on_close=_on_close):
-        dpg.add_text(f"Real-time: {app.selected_sensor} — {app.selected_device}")
+        dpg.add_text(
+            f"Real-time: {app.selected_sensor} — {app.selected_device}")
         with dpg.group(horizontal=True):
             dpg.add_text("Min: --", tag="graph_min_float")
             dpg.add_text("Max: --", tag="graph_max_float")

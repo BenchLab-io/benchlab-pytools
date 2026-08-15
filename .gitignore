@@ -8,6 +8,9 @@ my_config.json
 /logs/
 benchlab/vu/generated/
 benchlab/vu/VU-Server/upload/
+benchlab/link/DEV_NOTES.md
+benchlab/link/link.config
+benchlab/link/.env
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

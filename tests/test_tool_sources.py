@@ -49,9 +49,9 @@ from benchlab.sources import cleanup_all_services as _cleanup_all_services
 # Constants
 # ---------------------------------------------------------------------------
 
-TOOL_TIMEOUT    = 8    # seconds to let a tool run before considering it passing
-SOURCE_TIMEOUT  = 40   # seconds to wait for fastapi/mqtt source to be ready
-SOURCES         = ["direct", "fastapi", "mqtt"]
+TOOL_TIMEOUT = 8    # seconds to let a tool run before considering it passing
+SOURCE_TIMEOUT = 40   # seconds to wait for fastapi/mqtt source to be ready
+SOURCES = ["direct", "fastapi", "mqtt"]
 
 SEP = "-" * 60
 
@@ -113,7 +113,9 @@ def _setup_source(source: str, device: dict) -> None:
             try:
                 import urllib.request
                 urllib.request.urlopen(
-                    urllib.request.Request(f"http://127.0.0.1:{port}/scan", method="POST"),
+                    urllib.request.Request(
+                        f"http://127.0.0.1:{port}/scan",
+                        method="POST"),
                     timeout=3,
                 )
                 _info("Triggered FastAPI /scan — waiting for device...")
@@ -125,14 +127,16 @@ def _setup_source(source: str, device: dict) -> None:
         mqtt_port = int(os.environ.get("MQTT_PORT", "1883"))
         os.environ["MQTT_BROKER"] = broker
         os.environ["MQTT_PORT"] = str(mqtt_port)
-        ready = check_and_setup_source("mqtt", broker=broker, mqtt_port=mqtt_port)
+        ready = check_and_setup_source(
+            "mqtt", broker=broker, mqtt_port=mqtt_port)
     else:
         pytest.fail(f"Unknown source: {source}")
 
     if not ready:
         pytest.fail(
-            f"Could not set up '{source}' data source within {SOURCE_TIMEOUT}s. "
-            "Check that the device is connected and no other process holds the port."
+            f"Could not set up '{source}' data source within "
+            f"{SOURCE_TIMEOUT}s. Check that the device is connected "
+            "and no other process holds the port."
         )
 
     _ok(f"Source '{source}' ready")
@@ -158,19 +162,23 @@ def _run_tool_in_thread(
 
     # Intercept logging.error/critical to catch swallowed failures
     # (e.g. "could not open port COM4: PermissionError")
-    _orig_error    = logging.error
+    _orig_error = logging.error
     _orig_critical = logging.critical
 
     def _capture(msg, *a, **kw):
         logged_errors.append(str(msg) % a if a else str(msg))
 
-    logging.error    = lambda msg, *a, **kw: (_capture(msg, *a), _orig_error(msg, *a, **kw))
-    logging.critical = lambda msg, *a, **kw: (_capture(msg, *a), _orig_critical(msg, *a, **kw))
+    logging.error = lambda msg, * \
+        a, **kw: (_capture(msg, *a), _orig_error(msg, *a, **kw))
+    logging.critical = lambda msg, * \
+        a, **kw: (_capture(msg, *a), _orig_critical(msg, *a, **kw))
 
     def _target():
         try:
             if tool_id == "tui":
-                pytest.skip("tui requires a real terminal; cannot integration-test in pytest")
+                pytest.skip(
+                    "tui requires a real terminal; cannot "
+                    "integration-test in pytest")
             else:
                 func(args)
         except KeyboardInterrupt:
@@ -182,14 +190,17 @@ def _run_tool_in_thread(
     thread.start()
     thread.join(timeout=timeout)
 
-    logging.error    = _orig_error
+    logging.error = _orig_error
     logging.critical = _orig_critical
 
     if error:
         return error[0]
 
     # Surface fatal port/permission errors that tools log but don't raise
-    fatal_keywords = ("PermissionError", "Access is denied", "could not open port")
+    fatal_keywords = (
+        "PermissionError",
+        "Access is denied",
+        "could not open port")
     for msg in logged_errors:
         if any(kw in msg for kw in fatal_keywords):
             return PermissionError(f"Tool logged a fatal error: {msg}")
@@ -203,13 +214,21 @@ def _run_tool_in_thread(
 
 @pytest.fixture(scope="session")
 def device():
-    """Discover and return the first connected BenchLab device (session-scoped)."""
+    """Discover and return the first connected BenchLab device
+    (session-scoped)."""
     _section("Device Discovery")
     devices = discover_devices()
     if not devices:
-        pytest.skip("No BenchLab device found – skipping tool integration tests")
+        pytest.skip(
+            "No BenchLab device found – skipping tool integration tests")
     dev = devices[0]
-    _ok(f"Found device: uid={dev['uid']}  port={dev['port']}  fw={dev.get('fw', '?')}")
+    _ok(
+        f"Found device: uid={
+            dev['uid']}  port={
+            dev['port']}  fw={
+                dev.get(
+                    'fw',
+                    '?')}")
     return dev
 
 
@@ -234,7 +253,9 @@ def _tool_source_id(val):
 
 @pytest.mark.integration
 @pytest.mark.parametrize("source", SOURCES, ids=_tool_source_id)
-@pytest.mark.parametrize("tool_id", list(CONSUMER_TOOLS.keys()), ids=_tool_source_id)
+@pytest.mark.parametrize("tool_id",
+                         list(CONSUMER_TOOLS.keys()),
+                         ids=_tool_source_id)
 def test_tool_with_source(tool_id: str, source: str, device: dict) -> None:
     """<tool_id> starts and runs for TOOL_TIMEOUT seconds using <source>."""
     tool_name = CONSUMER_TOOLS[tool_id]["name"]
@@ -263,7 +284,8 @@ def test_tool_with_source(tool_id: str, source: str, device: dict) -> None:
     if exc is not None:
         traceback.print_exception(type(exc), exc, exc.__traceback__)
         pytest.fail(
-            f"{tool_name} raised {type(exc).__name__} with source '{source}': {exc}"
-        )
+            f"{tool_name} raised {type(exc).__name__} "
+            f"with source '{source}': {exc}")
 
-    _ok(f"{tool_name} ran for {TOOL_TIMEOUT}s with source '{source}' without error")
+    _ok(f"{tool_name} ran for {TOOL_TIMEOUT}s with source '{source}' "
+        "without error")

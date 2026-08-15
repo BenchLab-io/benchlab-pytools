@@ -47,7 +47,8 @@ jobs:
           benchlab.wigidash.benchlab_telemetry, benchlab.wigidash.benchlab_fleet,
           benchlab.wigidash.benchlab_overview, benchlab.wigidash.benchlab_graph,
           benchlab.vu.vu_server_manager, benchlab.vu.vu_server_config,
-          benchlab.vu.devices, benchlab.vu.vu_tui, benchlab.vu.vu_updater"
+          benchlab.vu.devices, benchlab.vu.vu_tui, benchlab.vu.vu_updater,
+          benchlab.link.link_main"
 
       - name: Test - core data sources
         run: pytest tests/test_data_sources.py -v -k "not mqtt"
@@ -105,6 +106,9 @@ jobs:
 
       - name: Test - interactive menu
         run: pytest tests/test_menu.py -v
+
+      - name: Test - link
+        run: pytest benchlab/link/test_link_main.py -v
 
   latest:
     name: Import + test against latest pycore (PyPI)
@@ -142,7 +146,8 @@ jobs:
           benchlab.wigidash.benchlab_telemetry, benchlab.wigidash.benchlab_fleet,
           benchlab.wigidash.benchlab_overview, benchlab.wigidash.benchlab_graph,
           benchlab.vu.vu_server_manager, benchlab.vu.vu_server_config,
-          benchlab.vu.devices, benchlab.vu.vu_tui, benchlab.vu.vu_updater"
+          benchlab.vu.devices, benchlab.vu.vu_tui, benchlab.vu.vu_updater,
+          benchlab.link.link_main"
 
       - name: Test - core data sources
         run: pytest tests/test_data_sources.py -v -k "not mqtt"
@@ -200,3 +205,6 @@ jobs:
 
       - name: Test - interactive menu
         run: pytest tests/test_menu.py -v
+
+      - name: Test - link
+        run: pytest benchlab/link/test_link_main.py -v

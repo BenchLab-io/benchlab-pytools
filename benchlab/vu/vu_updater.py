@@ -4,7 +4,6 @@ import json
 import logging
 import os
 import signal
-import sys
 import threading
 import time
 import types
@@ -23,17 +22,19 @@ from benchlab.vu.vu_server_manager import (
 BASE_DIR = Path(__file__).parent
 
 VU_SERVER_CONFIG = BASE_DIR / "vu_server.config"
-VU_DIAL_CONFIG   = BASE_DIR / "vu_dial.config"
-STANDARD_LOGO    = BASE_DIR / "assets" / "bl_logo_144x200.png"
+VU_DIAL_CONFIG = BASE_DIR / "vu_dial.config"
+STANDARD_LOGO = BASE_DIR / "assets" / "bl_logo_144x200.png"
 
 VU_DIAL_LAST_MTIME = 0
-previous_dial_cfg  = {}
-shutdown_event     = threading.Event()
+previous_dial_cfg = {}
+shutdown_event = threading.Event()
 
 # --- Logger ---
 logger = logging.getLogger("vu_updater")
 logger.setLevel(logging.DEBUG)
-_fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+_fmt = logging.Formatter(
+    "%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S")
 _ch = logging.StreamHandler()
 _ch.setLevel(logging.INFO)
 _ch.setFormatter(_fmt)
@@ -47,6 +48,7 @@ logger.addHandler(_fh)
 def handle_sigint(signum, frame):
     print("\nCtrl+C pressed. Initiating graceful shutdown...")
     shutdown_event.set()
+
 
 signal.signal(signal.SIGINT, handle_sigint)
 
@@ -71,7 +73,7 @@ def load_json(path, default=None):
 
 
 def reload_dial_config():
-    global VU_DIAL_LAST_MTIME, previous_dial_cfg
+    global VU_DIAL_LAST_MTIME
     if not VU_DIAL_CONFIG.exists():
         return []
     mtime = VU_DIAL_CONFIG.stat().st_mtime
@@ -137,30 +139,40 @@ class VUClient:
         try:
             url = f"{self.server_url}/api/v0/dial/{dial_uid}/image/set"
             with open(logo_path, "rb") as f:
-                r = requests.post(url, files={"imgfile": f},
-                                  params={"key": self.api_key, "force": int(force)},
-                                  timeout=10)
+                r = requests.post(
+                    url, files={
+                        "imgfile": f}, params={
+                        "key": self.api_key, "force": int(force)}, timeout=10)
             r.raise_for_status()
         except requests.RequestException as e:
             logger.error(f"Failed to upload logo {dial_uid}: {e}")
 
     def update_dial_easing(self, dial_uid, period, step):
         try:
-            self._get(f"/api/v0/dial/{dial_uid}/easing/dial", period=period, step=step)
+            self._get(
+                f"/api/v0/dial/{dial_uid}/easing/dial",
+                period=period,
+                step=step)
         except requests.RequestException as e:
             logger.error(f"Failed to set dial easing for {dial_uid}: {e}")
 
     def update_backlight_easing(self, dial_uid, period, step):
         try:
-            self._get(f"/api/v0/dial/{dial_uid}/easing/backlight", period=period, step=step)
+            self._get(
+                f"/api/v0/dial/{dial_uid}/easing/backlight",
+                period=period,
+                step=step)
         except requests.RequestException as e:
             logger.error(f"Failed to set backlight easing for {dial_uid}: {e}")
 
     def get_dial_image_crc(self, dial_uid: str) -> str:
         try:
-            headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
-            r = requests.get(f"{self.server_url}/api/v0/dial/{dial_uid}/image/crc",
-                             headers=headers, timeout=10)
+            headers = {
+                "Authorization": f"Bearer {
+                    self.api_key}"} if self.api_key else {}
+            r = requests.get(
+                f"{self.server_url}/api/v0/dial/{dial_uid}/image/crc",
+                headers=headers, timeout=10)
             r.raise_for_status()
             return r.json().get("crc", "").upper()
         except requests.RequestException as e:
@@ -179,14 +191,17 @@ class BenchlabVUUpdater:
             server_config.get("vu_server_url", "http://localhost:5340"),
             server_config.get("api_key", ""),
         )
-        self.interval  = server_config.get("update_interval_sec", 1)
-        self.mappings  = dial_config if isinstance(dial_config, list) else []
+        self.interval = server_config.get("update_interval_sec", 1)
+        self.mappings = dial_config if isinstance(dial_config, list) else []
         self.datasource = datasource
         self.uploaded_dials: set = set()
-        self.standard_logo_path = Path(__file__).parent / server_config.get("logo_file", "")
+        self.standard_logo_path = Path(
+            __file__).parent / server_config.get("logo_file", "")
 
         if not self.mappings:
-            logger.warning("No dial mappings found in vu_dial.config — run -vuconfig to configure dials. Waiting for config...")
+            logger.warning(
+                "No dial mappings found in vu_dial.config — run "
+                "-vuconfig to configure dials. Waiting for config...")
 
         # uid → latest telemetry snapshot dict
         self._snapshots: dict = {}
@@ -198,7 +213,8 @@ class BenchlabVUUpdater:
         self._poller.start()
 
     def _poll_loop(self):
-        """Background thread: keeps _snapshots up to date via DataSourceManager."""
+        """Background thread: keeps _snapshots up to date via
+        DataSourceManager."""
         # Discover all UIDs we care about from the mappings
         while not shutdown_event.is_set():
             try:
@@ -252,15 +268,18 @@ class BenchlabVUUpdater:
                 logo_uploaded = True
                 break
             except Exception as e:
-                logger.warning(f"[{attempt}] Dynamic logo failed for {dial_uid}: {e}")
+                logger.warning(
+                    f"[{attempt}] Dynamic logo failed for {dial_uid}: {e}")
                 time.sleep(0.2)
 
         if not logo_uploaded and self.standard_logo_path.exists():
             try:
-                self.client.upload_logo(dial_uid, self.standard_logo_path, force=True)
+                self.client.upload_logo(
+                    dial_uid, self.standard_logo_path, force=True)
                 logo_uploaded = True
             except Exception as e:
-                logger.error(f"Standard logo upload failed for {dial_uid}: {e}")
+                logger.error(
+                    f"Standard logo upload failed for {dial_uid}: {e}")
 
         backlight = mapping.get("backlight", [0, 0, 0])
         for attempt in range(1, max_attempts + 1):
@@ -268,16 +287,20 @@ class BenchlabVUUpdater:
                 self.client.update_backlight(dial_uid, backlight)
                 break
             except Exception as e:
-                logger.warning(f"[{attempt}] Failed to set backlight for {dial_uid}: {e}")
+                logger.warning(
+                    f"[{attempt}] Failed to set backlight for {dial_uid}: {e}")
                 time.sleep(0.2)
 
         for attempt in range(1, max_attempts + 1):
             try:
-                self.client.update_dial_easing(dial_uid, *mapping.get("easing_dial", [50, 5]))
-                self.client.update_backlight_easing(dial_uid, *mapping.get("easing_backlight", [50, 5]))
+                self.client.update_dial_easing(
+                    dial_uid, *mapping.get("easing_dial", [50, 5]))
+                self.client.update_backlight_easing(
+                    dial_uid, *mapping.get("easing_backlight", [50, 5]))
                 break
             except Exception as e:
-                logger.warning(f"[{attempt}] Failed to set easing for {dial_uid}: {e}")
+                logger.warning(
+                    f"[{attempt}] Failed to set easing for {dial_uid}: {e}")
                 time.sleep(0.2)
 
         name = mapping.get("dial_name")
@@ -287,7 +310,8 @@ class BenchlabVUUpdater:
                     self.client.update_name(dial_uid, name)
                     break
                 except Exception as e:
-                    logger.warning(f"[{attempt}] Failed to set name for {dial_uid}: {e}")
+                    logger.warning(
+                        f"[{attempt}] Failed to set name for {dial_uid}: {e}")
                     time.sleep(0.2)
 
         self.uploaded_dials.add(dial_uid)
@@ -300,7 +324,8 @@ class BenchlabVUUpdater:
                 continue
             logger.info(f"Applying changes for {dial_uid}")
             try:
-                template_path = Path(__file__).parent / "assets/bl_dial_144x200.png"
+                template_path = Path(__file__).parent / \
+                    "assets/bl_dial_144x200.png"
                 logo_file = generate_sensor_logo(
                     template_path, mapping["sensor"],
                     mapping.get("min", 0), mapping.get("max", 100),
@@ -310,22 +335,28 @@ class BenchlabVUUpdater:
             except Exception as e:
                 logger.warning(f"Failed to update logo for {dial_uid}: {e}")
                 if self.standard_logo_path.exists():
-                    self.client.upload_logo(dial_uid, self.standard_logo_path, force=True)
+                    self.client.upload_logo(
+                        dial_uid, self.standard_logo_path, force=True)
 
             if mapping.get("dial_name"):
                 try:
                     self.client.update_name(dial_uid, mapping["dial_name"])
                 except Exception as e:
-                    logger.warning(f"Failed to update name for {dial_uid}: {e}")
+                    logger.warning(
+                        f"Failed to update name for {dial_uid}: {e}")
 
             try:
-                self.client.update_backlight(dial_uid, mapping.get("backlight", [0, 0, 0]))
+                self.client.update_backlight(
+                    dial_uid, mapping.get("backlight", [0, 0, 0]))
             except Exception as e:
-                logger.warning(f"Failed to update backlight for {dial_uid}: {e}")
+                logger.warning(
+                    f"Failed to update backlight for {dial_uid}: {e}")
 
             try:
-                self.client.update_dial_easing(dial_uid, *mapping.get("easing_dial", [50, 5]))
-                self.client.update_backlight_easing(dial_uid, *mapping.get("easing_backlight", [50, 5]))
+                self.client.update_dial_easing(
+                    dial_uid, *mapping.get("easing_dial", [50, 5]))
+                self.client.update_backlight_easing(
+                    dial_uid, *mapping.get("easing_backlight", [50, 5]))
             except Exception as e:
                 logger.warning(f"Failed to update easing for {dial_uid}: {e}")
 
@@ -335,7 +366,9 @@ class BenchlabVUUpdater:
         try:
             raw = self.datasource.list_devices()
             if isinstance(raw, dict):
-                port_to_uid = {info.get("port"): uid for uid, info in raw.items()}
+                port_to_uid = {
+                    info.get("port"): uid for uid,
+                    info in raw.items()}
             else:
                 port_to_uid = {d.get("port"): d.get("uid") for d in raw}
         except Exception as e:
@@ -358,12 +391,15 @@ class BenchlabVUUpdater:
             self.setup_dial(mapping)
 
             sensor_key = mapping.get("sensor")
-            dial_uid   = mapping.get("dial_uid")
+            dial_uid = mapping.get("dial_uid")
             if not sensor_key or not dial_uid:
                 continue
 
             value = get_sensor_value(telemetry, sensor_key)
-            value = self.normalize_value(value, mapping.get("min", 0), mapping.get("max", 100))
+            value = self.normalize_value(
+                value, mapping.get(
+                    "min", 0), mapping.get(
+                    "max", 100))
             logger.info(f"{port} -> {sensor_key} = {value:.1f} -> {dial_uid}")
             self.client.update_dial(dial_uid, value)
 
@@ -382,10 +418,19 @@ def run_updater(args=None):
     """
     if args is None:
         args = types.SimpleNamespace(
-            source=os.environ.get("BENCHLAB_DATA_SOURCE", "direct"),
-            api_url=os.environ.get("BENCHLAB_API_URL", "http://127.0.0.1:8000"),
-            mqtt_broker=os.environ.get("MQTT_BROKER", "localhost"),
-            mqtt_port=int(os.environ.get("MQTT_PORT", "1883")),
+            source=os.environ.get(
+                "BENCHLAB_DATA_SOURCE",
+                "direct"),
+            api_url=os.environ.get(
+                "BENCHLAB_API_URL",
+                "http://127.0.0.1:8000"),
+            mqtt_broker=os.environ.get(
+                "MQTT_BROKER",
+                "localhost"),
+            mqtt_port=int(
+                os.environ.get(
+                    "MQTT_PORT",
+                    "1883")),
             interval=1.0,
         )
 
@@ -396,9 +441,9 @@ def run_updater(args=None):
     logger.info("Checking for VU server...")
 
     server_cfg = load_json(VU_SERVER_CONFIG, default={})
-    dial_cfg   = load_json(VU_DIAL_CONFIG, default=[])
+    dial_cfg = load_json(VU_DIAL_CONFIG, default=[])
     server_url = server_cfg.get("vu_server_url", "http://localhost:5340")
-    api_key    = server_cfg.get("api_key", "")
+    api_key = server_cfg.get("api_key", "")
 
     server_proc = None
     if check_vu_server(server_url, api_key):
@@ -407,9 +452,13 @@ def run_updater(args=None):
         server_proc = start_vu_server()
         if server_proc:
             logger.info(f"Started local VU server at {server_url}")
-            threading.Thread(target=forward_logs, args=(server_proc,), daemon=True).start()
+            threading.Thread(
+                target=forward_logs, args=(
+                    server_proc,), daemon=True).start()
         else:
-            logger.error("Failed to start local VU server — dial updates will not work.")
+            logger.error(
+                "Failed to start local VU server — dial updates "
+                "will not work.")
 
     time.sleep(1)
 
@@ -418,8 +467,8 @@ def run_updater(args=None):
     if args.source in ("fastapi", "fastapi_custom"):
         ds_kwargs["base_url"] = args.api_url
     elif args.source == "mqtt":
-        ds_kwargs["broker"]   = args.mqtt_broker
-        ds_kwargs["port"]     = args.mqtt_port
+        ds_kwargs["broker"] = args.mqtt_broker
+        ds_kwargs["port"] = args.mqtt_port
 
     datasource = DataSourceManager(source_type=args.source, **ds_kwargs)
     if not datasource.connect():
@@ -455,16 +504,21 @@ def run_updater(args=None):
                 dial_uid = m.get("dial_uid")
                 if not dial_uid:
                     continue
-                logger.info(f"[{idx}/{len(updater.mappings)}] Restoring logo on {dial_uid}")
+                logger.info(
+                    f"[{idx}/{len(updater.mappings)}] Restoring logo "
+                    f"on {dial_uid}")
                 try:
-                    updater.client.upload_logo(dial_uid, standard_logo, force=True)
+                    updater.client.upload_logo(
+                        dial_uid, standard_logo, force=True)
                 except Exception as e:
-                    logger.warning(f"Failed to restore logo for {dial_uid}: {e}")
+                    logger.warning(
+                        f"Failed to restore logo for {dial_uid}: {e}")
                     continue
                 start = time.time()
                 while time.time() - start < 1:
                     try:
-                        if updater.client.get_dial_image_crc(dial_uid) == standard_crc:
+                        if updater.client.get_dial_image_crc(
+                                dial_uid) == standard_crc:
                             logger.info(f"Logo CRC verified for {dial_uid}")
                             break
                     except Exception:

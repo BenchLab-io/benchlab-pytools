@@ -36,11 +36,23 @@ class FanConfig(BaseModel):
         max_length=2,
         description="Duty cycle at each temp point (0-100%)"
     )
-    RampStep: int = Field(ge=0, le=255, default=5, description="Rate of change")
-    FixedDuty: int = Field(ge=0, le=100, default=50, description="Fixed duty cycle")
+    RampStep: int = Field(
+        ge=0,
+        le=255,
+        default=5,
+        description="Rate of change")
+    FixedDuty: int = Field(
+        ge=0,
+        le=100,
+        default=50,
+        description="Fixed duty cycle")
     MinDuty: int = Field(ge=0, le=100, default=20, description="Minimum duty")
     MaxDuty: int = Field(ge=0, le=100, default=100, description="Maximum duty")
-    FanStop: int = Field(ge=0, le=1, default=0, description="0=disabled, 1=enabled")
+    FanStop: int = Field(
+        ge=0,
+        le=1,
+        default=0,
+        description="0=disabled, 1=enabled")
 
     @field_validator('Duty')
     @classmethod
@@ -113,13 +125,13 @@ class ConfigFile(BaseModel):
 
 def validate_config_file(config_dict: dict) -> ConfigFile:
     """Validate a configuration dictionary against the schema.
-    
+
     Args:
         config_dict: Dictionary loaded from JSON
-        
+
     Returns:
         Validated ConfigFile object
-        
+
     Raises:
         ValidationError: If validation fails
     """

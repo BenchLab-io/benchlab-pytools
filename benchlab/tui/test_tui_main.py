@@ -29,7 +29,8 @@ def test_scan_local_fleet_includes_currently_connected_device():
     actively connected to one.
     """
     app = _make_app()
-    app.datasource_manager.discover_devices.return_value = []  # the busy port yields nothing
+    # the busy port yields nothing
+    app.datasource_manager.discover_devices.return_value = []
     app.datasource_manager.is_connected.return_value = True
     app.datasource_manager.get_selected_uid.return_value = "CONNECTED-UID"
     app.datasource_manager.snapshot.return_value = {
@@ -46,10 +47,12 @@ def test_scan_local_fleet_includes_currently_connected_device():
 
 
 def test_scan_local_fleet_does_not_duplicate_connected_device():
-    """If discover_devices() already found the connected device, don't add it twice."""
+    """If discover_devices() already found the connected device, don't add
+    it twice."""
     app = _make_app()
     app.datasource_manager.discover_devices.return_value = [
-        {"uid": "CONNECTED-UID", "port": "COM5", "fw": "0x01020304", "variant": "ORIGINAL"},
+        {"uid": "CONNECTED-UID", "port": "COM5", "fw": "0x01020304",
+         "variant": "ORIGINAL"},
     ]
     app.datasource_manager.is_connected.return_value = True
     app.datasource_manager.get_selected_uid.return_value = "CONNECTED-UID"

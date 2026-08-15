@@ -18,7 +18,11 @@ import pytest
 import paho.mqtt.client as mqtt
 
 from benchlab.mqtt import mqtt_publisher
-from benchlab.mqtt.mqtt_publisher import reason_code_lookup, MQTTV5_REASON_CODES, resolve_mqtt_protocol
+from benchlab.mqtt.mqtt_publisher import (
+    reason_code_lookup,
+    MQTTV5_REASON_CODES,
+    resolve_mqtt_protocol,
+)
 
 try:
     from paho.mqtt.reasoncodes import ReasonCode
@@ -40,7 +44,8 @@ def test_reason_code_lookup_plain_int_unknown():
     assert reason_code_lookup(999) == "Unknown reason code 999"
 
 
-@pytest.mark.skipif(not HAS_REASONCODES, reason="paho.mqtt.reasoncodes not available")
+@pytest.mark.skipif(not HAS_REASONCODES,
+                    reason="paho.mqtt.reasoncodes not available")
 def test_reason_code_lookup_handles_unhashable_reasoncode_object():
     """Regression test for issue #24: paho-mqtt v2's ReasonCode object is
     unhashable, so a plain dict.get(rc, ...) raises TypeError on any real
@@ -108,12 +113,23 @@ def test_cli_mqtt_flag_sets_broker_env_var(monkeypatch):
 # ----------------------------------------------------------------------
 
 @pytest.mark.parametrize("value,expected", [
-    ("MQTTv31", mqtt.MQTTv31), ("v3.1", mqtt.MQTTv31), ("3.1", mqtt.MQTTv31), ("3", mqtt.MQTTv31),
+    ("MQTTv31", mqtt.MQTTv31),
+    ("v3.1", mqtt.MQTTv31),
+    ("3.1", mqtt.MQTTv31),
+    ("3", mqtt.MQTTv31),
     ("mqttv31", mqtt.MQTTv31),
-    ("MQTTv311", mqtt.MQTTv311), ("v3.1.1", mqtt.MQTTv311), ("3.1.1", mqtt.MQTTv311), ("4", mqtt.MQTTv311),
+    ("MQTTv311", mqtt.MQTTv311),
+    ("v3.1.1", mqtt.MQTTv311),
+    ("3.1.1", mqtt.MQTTv311),
+    ("4", mqtt.MQTTv311),
     ("mqttv3.1.1", mqtt.MQTTv311),
-    ("MQTTv5", mqtt.MQTTv5), ("v5", mqtt.MQTTv5), ("5", mqtt.MQTTv5), ("mqttv5", mqtt.MQTTv5),
-    (mqtt.MQTTv31, mqtt.MQTTv31), (mqtt.MQTTv311, mqtt.MQTTv311), (mqtt.MQTTv5, mqtt.MQTTv5),
+    ("MQTTv5", mqtt.MQTTv5),
+    ("v5", mqtt.MQTTv5),
+    ("5", mqtt.MQTTv5),
+    ("mqttv5", mqtt.MQTTv5),
+    (mqtt.MQTTv31, mqtt.MQTTv31),
+    (mqtt.MQTTv311, mqtt.MQTTv311),
+    (mqtt.MQTTv5, mqtt.MQTTv5),
 ])
 def test_resolve_mqtt_protocol_accepts_documented_variants(value, expected):
     assert resolve_mqtt_protocol(value) == expected
@@ -141,7 +157,8 @@ def test_load_mqtt_config_protocol_defaults_to_v311(monkeypatch):
     assert cfg["protocol"] == mqtt.MQTTv311
 
 
-def test_resolved_protocol_does_not_crash_paho_client_construction(monkeypatch):
+def test_resolved_protocol_does_not_crash_paho_client_construction(
+        monkeypatch):
     """End-to-end regression test for the original bug: constructing a real
     paho Client with the resolved protocol value must not raise when paho
     internally does int(self._protocol) (previously crashed with

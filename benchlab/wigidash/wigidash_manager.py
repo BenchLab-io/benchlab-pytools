@@ -1,15 +1,14 @@
-from PIL import Image, ImageDraw, ImageFont
-
 import os
-import sys
 import threading
 import time
 import types
 
 from benchlab.core.datasource_manager import DataSourceManager
-from benchlab.wigidash.benchlab_telemetry import TelemetryHistory, telemetry_step, TelemetryContext
-from benchlab.wigidash.benchlab_utils import get_logger, display_image
-from benchlab.wigidash.wigidash_usb import scan_wigidash, USBDevice
+from benchlab.wigidash.benchlab_telemetry import (
+    TelemetryHistory, telemetry_step, TelemetryContext
+)
+from benchlab.wigidash.benchlab_utils import get_logger
+from benchlab.wigidash.wigidash_usb import scan_wigidash
 from benchlab.wigidash.wigidash_session import BenchlabWigiSession
 
 logger = get_logger("WigidashManager")
@@ -55,7 +54,8 @@ class WigidashManager:
             uid = d["uid"]
             fw = d.get("firmware", "?")
             if port not in self.benchlab_devices:
-                self.benchlab_devices[port] = {"uid": uid, "firmware": fw, "in_use": False}
+                self.benchlab_devices[port] = {
+                    "uid": uid, "firmware": fw, "in_use": False}
             else:
                 self.benchlab_devices[port]["uid"] = uid
                 self.benchlab_devices[port]["firmware"] = fw
@@ -76,7 +76,9 @@ class WigidashManager:
         if log_info:
             count = len(all_devices)
             if count:
-                logger.info(f"{count} available Benchlab device{'s' if count > 1 else ''}:")
+                logger.info(
+                    f"{count} available Benchlab device{
+                        's' if count > 1 else ''}:")
                 for dev in all_devices:
                     logger.info(f"  {dev['port']}: UID {dev['uid']}")
             else:
@@ -102,8 +104,8 @@ class WigidashManager:
                 ctx = self.telemetry_contexts[port]
 
                 logger.info(
-                    f"Selected device {port} is already in use. Using existing telemetry."
-                )
+                    f"Selected device {port} is already in use. "
+                    "Using existing telemetry.")
 
                 session.ser = ctx.ser
                 session.device_info = ctx.device_info
@@ -121,14 +123,16 @@ class WigidashManager:
             # ------------------------------------------------
             self.benchlab_devices[port]["in_use"] = True
             uid = self.benchlab_devices[port]["uid"]
-            history = self.telemetry_histories.setdefault(uid, TelemetryHistory())
+            history = self.telemetry_histories.setdefault(
+                uid, TelemetryHistory())
 
             # Get device info from datasource
             device_info = {}
             try:
                 self.datasource.select_device(uid)
                 snap = self.datasource.snapshot()
-                device_info = snap.get("device_info") or snap.get("all_devices", {}).get(uid, {})
+                device_info = snap.get("device_info") or snap.get(
+                    "all_devices", {}).get(uid, {})
             except Exception as e:
                 logger.warning(f"Could not get device info for {uid}: {e}")
 
@@ -158,15 +162,17 @@ class WigidashManager:
                                 or snap.get("all_telemetry", {}).get(uid)
                                 or {})
                         if data:
-                            telemetry_step(ctx, device_info=device_info, sensor_struct=data)
+                            telemetry_step(
+                                ctx, device_info=device_info,
+                                sensor_struct=data)
                     except Exception as e:
                         logger.warning(f"Telemetry error on {port}: {e}")
                     time.sleep(0.1)
 
             threading.Thread(target=telemetry_loop, daemon=True).start()
 
-
     # ----------------- SESSION MANAGEMENT ----------------- #
+
     def detect_and_start_sessions(self):
         logger.info("Looking for WigiDash devices ...")
         time.sleep(1)
@@ -176,13 +182,15 @@ class WigidashManager:
             logger.warning("No WigiDash devices detected.")
             return
 
-        used_serials = {s.usb_device.serial for s in self.sessions if s.usb_device.serial}
+        used_serials = {
+            s.usb_device.serial for s in self.sessions if s.usb_device.serial}
 
         new_devices = []
         for usb in usb_devices:
             if not usb.serial:
                 try:
-                    usb.serial = usb.util.get_string(usb.dev, usb.dev.iSerialNumber)
+                    usb.serial = usb.util.get_string(
+                        usb.dev, usb.dev.iSerialNumber)
                 except Exception as e:
                     logger.warning(f"Failed to read USB serial: {e}")
                     continue
@@ -224,7 +232,6 @@ class WigidashManager:
         self.sessions.clear()
         logger.info("Manager shutdown completed")
 
-
     def graceful_shutdown(self):
         """Graceful shutdown: synchronize splash, then cleanup."""
         if getattr(self, "shutting_down", False):
@@ -251,7 +258,9 @@ class WigidashManager:
 
         # Trigger shutdown in all sessions
         for session in active_sessions:
-            threading.Thread(target=session.shutdown_session, daemon=True).start()
+            threading.Thread(
+                target=session.shutdown_session,
+                daemon=True).start()
 
         # If barrier exists, wait for synchronized splash
         if self.shutdown_barrier:
@@ -263,7 +272,8 @@ class WigidashManager:
 
         # Wait for all sessions to signal cleanup_done
         for session in active_sessions:
-            session.cleanup_done.wait()  # blocks until each session finishes cleanup
+            # blocks until each session finishes cleanup
+            session.cleanup_done.wait()
 
         # Clean up manager
         self.shutdown_manager()
@@ -274,10 +284,19 @@ def main(args=None):
     """Entry point. Accepts standard benchlab args namespace."""
     if args is None:
         args = types.SimpleNamespace(
-            source=os.environ.get("BENCHLAB_DATA_SOURCE", "direct"),
-            api_url=os.environ.get("BENCHLAB_API_URL", "http://127.0.0.1:8000"),
-            mqtt_broker=os.environ.get("MQTT_BROKER", "localhost"),
-            mqtt_port=int(os.environ.get("MQTT_PORT", "1883")),
+            source=os.environ.get(
+                "BENCHLAB_DATA_SOURCE",
+                "direct"),
+            api_url=os.environ.get(
+                "BENCHLAB_API_URL",
+                "http://127.0.0.1:8000"),
+            mqtt_broker=os.environ.get(
+                "MQTT_BROKER",
+                "localhost"),
+            mqtt_port=int(
+                os.environ.get(
+                    "MQTT_PORT",
+                    "1883")),
             interval=1.0,
         )
 
@@ -289,7 +308,10 @@ def main(args=None):
     elif source == "mqtt":
         ds_kwargs["broker"] = args.mqtt_broker
         ds_kwargs["port"] = args.mqtt_port
-        logger.info(f"Using MQTT datasource: {args.mqtt_broker}:{args.mqtt_port}")
+        logger.info(
+            f"Using MQTT datasource: {
+                args.mqtt_broker}:{
+                args.mqtt_port}")
     else:
         logger.info("Using direct datasource")
 
@@ -305,7 +327,8 @@ def main(args=None):
         while True:
             if manager.shutting_down:
                 break
-            if manager.sessions and all(s.cleanup_done.is_set() for s in manager.sessions):
+            if manager.sessions and all(
+                    s.cleanup_done.is_set() for s in manager.sessions):
                 break
             time.sleep(1)
     except KeyboardInterrupt:

@@ -102,7 +102,7 @@ Configuration is resolved with this priority (highest first):
 | `REMOTE_MQTT_TLS` | `true` | Enable TLS. Set to `false`/`0`/`no` to disable |
 | `CLIENT_UUID` | *(none)* | Device UUID, used to build the default MQTT client ID |
 | `MQTT_POLL_RATE` | `2` | Poll/publish interval in seconds |
-| `LINK_TOPIC_PATTERN` | `benchlab/{uid}/telemetry` | Topic pattern; `{uid}` is replaced with the device's UID for each publish |
+| `LINK_TOPIC_PATTERN` | `benchlab/{uid}/telemetry` | Topic pattern; `{uid}` (device UID) and `{client_uuid}` (from `CLIENT_UUID`) are replaced for each publish |
 | `LINK_CLIENT_ID` | `benchlab-link-<uuid-or-hostname>` | MQTT client ID sent to the broker |
 | `LINK_CONFIG_PATH` | `benchlab/link/link.config` | Override path to the JSON config file |
 
@@ -142,11 +142,11 @@ MQTT_POLL_RATE=2
 }
 ```
 
-This file is loaded only as a fallback below env vars/`.env`/CLI args — the checked-in `link.config` in this repo ships with example/placeholder credentials and is meant to be edited locally, not used as-is in production.
+This file is loaded only as a fallback below env vars/`.env`/CLI args, and is `.gitignore`d — create it locally with real credentials, it is never checked in.
 
 ### Topic pattern
 
-`topic_pattern` (default `benchlab/{uid}/telemetry`) is formatted per-device with `.format(uid=uid)`, so `{uid}` is the only supported token. Published payloads are `{"uid": <uid>, ...telemetry fields...}`.
+`topic_pattern` (default `benchlab/{uid}/telemetry`) is formatted per-device with `.format(uid=uid, client_uuid=client_uuid)`, so both `{uid}` (the device's UID) and `{client_uuid}` (from `CLIENT_UUID`/`client_uuid`, empty string if unset) are supported tokens. For example, a deployment can use `clients/{client_uuid}/devices/{uid}/telemetry` to key topics by tenant/client instead of by device alone. Published payloads are `{"uid": <uid>, ...telemetry fields...}`.
 
 ## Troubleshooting
 

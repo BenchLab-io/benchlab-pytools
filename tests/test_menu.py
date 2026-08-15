@@ -10,7 +10,6 @@ Covers:
 """
 
 import importlib
-import json
 import sys
 from pathlib import Path
 
@@ -30,7 +29,10 @@ def prefs_module(tmp_path, monkeypatch):
 
 def test_load_prefs_defaults_when_file_missing(prefs_module):
     prefs = prefs_module.load_prefs()
-    assert prefs == {"last_tool_ids": [], "last_source": None, "source_params": {}}
+    assert prefs == {
+        "last_tool_ids": [],
+        "last_source": None,
+        "source_params": {}}
 
 
 def test_load_prefs_tolerates_corrupt_json(prefs_module):
@@ -59,9 +61,15 @@ def test_record_launch_without_params_does_not_clear_prior_ones(prefs_module):
 
 
 def test_save_prefs_survives_unwritable_path(prefs_module, monkeypatch):
-    """A failed save must not raise -- prefs are a convenience, not critical."""
-    monkeypatch.setattr(prefs_module, "PREFS_FILE", Path("/nonexistent_dir_xyz/prefs.json"))
-    prefs_module.save_prefs({"last_tool_ids": [], "last_source": None, "source_params": {}})  # must not raise
+    """A failed save must not raise -- prefs are a convenience, not
+    critical."""
+    monkeypatch.setattr(
+        prefs_module,
+        "PREFS_FILE",
+        Path("/nonexistent_dir_xyz/prefs.json"))
+    prefs_module.save_prefs({"last_tool_ids": [],
+                             "last_source": None,
+                             "source_params": {}})  # must not raise
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +90,9 @@ def test_available_sources_includes_direct_for_single_tool():
 
 def test_available_sources_filters_by_supported_sources():
     from benchlab.menu import _available_sources
-    sources = _available_sources(is_multi=False, supported_sources=["direct", "named_pipe"])
+    sources = _available_sources(
+        is_multi=False, supported_sources=[
+            "direct", "named_pipe"])
     keys = [s for s, _ in sources]
     assert set(keys) <= {"direct", "named_pipe"}
     assert "fastapi" not in keys
@@ -121,7 +131,7 @@ def test_combined_supported_sources_is_intersection_across_tools():
     the Data Source column must only offer sources ALL selected tools
     support -- not the union (which could offer a source one of the tools
     can't actually use)."""
-    from benchlab.menu import _combined_supported_sources, CONSUMER_TOOLS
+    from benchlab.menu import _combined_supported_sources
 
     # config only supports direct/named_pipe; tui supports everything.
     # The intersection with an unrestricted tool is still config's set.
@@ -350,7 +360,8 @@ def test_picker_screen_source_list_filters_when_tool_selected():
             assert len(app._source_ids) == 7  # unrestricted
 
             tools = app.query_one("#tools", SelectionList)
-            config_option = next(o for o in tools._options if o.value == "config")
+            config_option = next(
+                o for o in tools._options if o.value == "config")
             tools.select(config_option)
             await pilot.pause()
 
@@ -368,7 +379,8 @@ def test_picker_screen_deselecting_tool_restores_full_source_list():
         async with app.run_test() as pilot:
             await pilot.pause()
             tools = app.query_one("#tools", SelectionList)
-            config_option = next(o for o in tools._options if o.value == "config")
+            config_option = next(
+                o for o in tools._options if o.value == "config")
             tools.select(config_option)
             await pilot.pause()
             tools.deselect(config_option)
@@ -511,7 +523,10 @@ def test_run_picker_screen_falls_back_when_textual_app_fails():
         mock_app.run.side_effect = RuntimeError("no terminal")
         mock_build.return_value = mock_app
 
-        with mock.patch("benchlab.menu._sequential_pick", return_value=("tools", ["vu"], "direct")) as mock_seq:
+        with mock.patch(
+            "benchlab.menu._sequential_pick",
+            return_value=("tools", ["vu"], "direct"),
+        ) as mock_seq:
             result = _run_picker_screen([], None)
 
         mock_seq.assert_called_once()
@@ -557,7 +572,10 @@ def test_menu_module_has_no_non_ascii_runtime_output():
 def test_main_falls_back_to_classic_menu_when_menu_import_fails(monkeypatch):
     for mod in ("benchlab.main", "benchlab.menu"):
         sys.modules.pop(mod, None)
-    monkeypatch.setitem(sys.modules, "benchlab.menu", None)  # forces ImportError
+    monkeypatch.setitem(
+        sys.modules,
+        "benchlab.menu",
+        None)  # forces ImportError
 
     import benchlab.main as m
     assert m.interactive_loop.__module__ == "benchlab.menu_classic"

@@ -10,6 +10,8 @@ Requires dearpygui, which creates a real (offscreen) viewport/context even
 in CI — this works headlessly on windows-latest runners.
 """
 
+from benchlab.graph.app import GraphApp
+from benchlab.graph import ui
 import threading
 import time
 
@@ -22,10 +24,9 @@ except ImportError:
     dpg = None
     HAS_DPG = False
 
-pytestmark = pytest.mark.skipif(not HAS_DPG, reason="dearpygui not available in this environment")
-
-from benchlab.graph import ui
-from benchlab.graph.app import GraphApp
+pytestmark = pytest.mark.skipif(
+    not HAS_DPG,
+    reason="dearpygui not available in this environment")
 
 
 class FakeDataSource:
@@ -104,7 +105,9 @@ def test_update_graph_loop_survives_deleted_items(dpg_context):
     dpg.delete_item("graph_window")
     time.sleep(0.15)
 
-    assert t.is_alive(), "updater thread died instead of surviving the deleted item"
+    assert t.is_alive(), (
+        "updater thread died instead of surviving the deleted item"
+    )
 
     app.connected = False
     t.join(timeout=2)
@@ -130,8 +133,8 @@ def test_datasource_loop_populates_sensor_struct_then_clears_on_exit():
 
     class SnapshotDataSource(FakeDataSource):
         def snapshot(self):
-            # Capture mid-loop state (sensor_struct populated, connected) before
-            # the loop's finally block resets everything on exit.
+            # Capture mid-loop state (sensor_struct populated, connected)
+            # before the loop's finally block resets everything on exit.
             captured["sensor_struct"] = app.sensor_struct
             captured["connected"] = app.connected
             app.stop_event.set()

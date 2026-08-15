@@ -34,6 +34,8 @@ logger = logging.getLogger("vu_server_manager")
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------
+
+
 def check_vu_server(server_url: str, api_key: str = "") -> bool:
     """Return True if the VU server responds successfully.
 
@@ -52,12 +54,16 @@ def check_vu_server(server_url: str, api_key: str = "") -> bool:
         # is actually honored; leave any other configured hostname alone.
         probe_url = server_url.replace("://localhost", "://127.0.0.1", 1)
         params = {"key": api_key} if api_key else {}
-        r = requests.get(f"{probe_url}/api/v0/dial/list", params=params, timeout=1)
+        r = requests.get(
+            f"{probe_url}/api/v0/dial/list",
+            params=params,
+            timeout=1)
         # 403 (missing/invalid key) still means a real VU server answered —
         # that's enough to know we shouldn't auto-start a second one.
         return r.status_code in (200, 403)
     except requests.RequestException:
         return False
+
 
 def forward_logs(proc: subprocess.Popen):
     """Forward VU server stdout to the main logger."""
@@ -71,10 +77,13 @@ def forward_logs(proc: subprocess.Popen):
 # -----------------------------------------------------------------------------
 # Server startup
 # -----------------------------------------------------------------------------
+
+
 def start_vu_server() -> subprocess.Popen | None:
     """
     Ensure a VU server is running.
-    Returns a subprocess.Popen handle if a new server was started, or None if already running.
+    Returns a subprocess.Popen handle if a new server was started, or
+    None if already running.
     """
     logger.info("Checking for existing VU server...")
 
@@ -109,8 +118,10 @@ def start_vu_server() -> subprocess.Popen | None:
     new_cfg = {
         "vu_server_url": f"http://{host}:{port}",
         "api_key": master_key,
-        "logo_file": str(server_cfg.get("logo_file", "assets/bl_logo_144x200.png"))
-    }
+        "logo_file": str(
+            server_cfg.get(
+                "logo_file",
+                "assets/bl_logo_144x200.png"))}
 
     # Ensure VU-Server directory exists
     if not VU_SERVER_DIR.exists():
@@ -135,7 +146,9 @@ def start_vu_server() -> subprocess.Popen | None:
     for _ in range(10):
         time.sleep(1)
         if check_vu_server(new_cfg["vu_server_url"], new_cfg["api_key"]):
-            logger.info(f"VU server is now running at {new_cfg['vu_server_url']}")
+            logger.info(
+                f"VU server is now running at {
+                    new_cfg['vu_server_url']}")
             break
     else:
         logger.error("Failed to verify VU server after startup.")
@@ -145,7 +158,9 @@ def start_vu_server() -> subprocess.Popen | None:
     # failed launch doesn't leave vu_server.config pointing at nothing.
     try:
         VU_SERVER_CONFIG.write_text(json.dumps(new_cfg, indent=2))
-        logger.info(f"Updated {VU_SERVER_CONFIG} with {new_cfg['vu_server_url']}")
+        logger.info(
+            f"Updated {VU_SERVER_CONFIG} with {
+                new_cfg['vu_server_url']}")
     except Exception as e:
         logger.warning(f"Failed to write {VU_SERVER_CONFIG}: {e}")
 
@@ -154,6 +169,8 @@ def start_vu_server() -> subprocess.Popen | None:
 # -----------------------------------------------------------------------------
 # Shutdown
 # -----------------------------------------------------------------------------
+
+
 def terminate_vu_server(proc: subprocess.Popen | None):
     if not proc or proc.poll() is not None:
         return

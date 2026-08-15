@@ -1,0 +1,2 @@
+[flake8]
+exclude = benchlab/vu/VU-Server,__pycache__,.git,.pytest_cache

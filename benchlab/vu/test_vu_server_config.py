@@ -10,13 +10,15 @@ import json
 from benchlab.vu import vu_server_config
 
 
-def test_update_vu_config_tolerates_mapping_without_dial_uid(tmp_path, monkeypatch):
+def test_update_vu_config_tolerates_mapping_without_dial_uid(
+        tmp_path, monkeypatch):
     config_path = tmp_path / "vu_server.config"
     config_path.write_text(json.dumps({
         "vu_server_url": "http://localhost:5340",
         "api_key": "",
         "mappings": [
-            {"benchlab_uid": "legacy-entry-missing-dial-uid"},  # malformed/partial entry
+            # malformed/partial entry
+            {"benchlab_uid": "legacy-entry-missing-dial-uid"},
             {"dial_uid": "DIAL-1", "dial_name": "Old"},
         ],
         "update_interval_sec": 1,
@@ -36,4 +38,6 @@ def test_update_vu_config_tolerates_mapping_without_dial_uid(tmp_path, monkeypat
     assert "DIAL-1" in dial_uids
     # The malformed entry (no dial_uid) survives untouched rather than
     # crashing the whole save.
-    assert any("benchlab_uid" in m and "dial_uid" not in m for m in result["mappings"])
+    assert any(
+        "benchlab_uid" in m and "dial_uid" not in m
+        for m in result["mappings"])

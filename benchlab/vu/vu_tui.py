@@ -10,7 +10,8 @@ import threading
 from pathlib import Path
 
 from benchlab.vu import devices
-from benchlab.vu.vu_server_manager import start_vu_server, check_vu_server, terminate_vu_server, forward_logs
+from benchlab.vu.vu_server_manager import (
+    start_vu_server, check_vu_server, terminate_vu_server, forward_logs)
 
 # --- Logger setup ---
 logger = logging.getLogger(__name__)
@@ -26,15 +27,18 @@ logger.addHandler(ch)
 VU_SERVER_CONFIG = Path(__file__).parent / "vu_server.config"
 VU_DIAL_CONFIG = Path(__file__).parent / "vu_dial.config"
 
+
 def load_json(path, default=None):
     if path.exists():
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     return default if default is not None else {}
 
+
 def save_json(path, data):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
+
 
 def _parse_float_or(value, fallback):
     """Parse *value* as a float, returning *fallback* on empty/invalid input
@@ -46,6 +50,7 @@ def _parse_float_or(value, fallback):
         return float(value)
     except ValueError:
         return fallback
+
 
 def get_available_sensors(datasource=None) -> list:
     """Return sensor keys from a live datasource snapshot.
@@ -63,7 +68,8 @@ def get_available_sensors(datasource=None) -> list:
             return []
         datasource.select_device(uids[0])
         snap = datasource.snapshot()
-        data = snap.get("sensor_data") or snap.get("all_telemetry", {}).get(uids[0], {})
+        data = snap.get("sensor_data") or snap.get(
+            "all_telemetry", {}).get(uids[0], {})
         return [k for k in data if k.lower() != "timestamp"]
     except Exception as e:
         logger.warning(f"Could not get sensor list from datasource: {e}")
@@ -79,7 +85,7 @@ class VUTUI:
 
         try:
             curses.curs_set(0)
-        except:
+        except BaseException:
             pass
         self.stdscr.nodelay(False)
 
@@ -92,12 +98,22 @@ class VUTUI:
         # Colors
         curses.start_color()
         curses.use_default_colors()
-        curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_YELLOW)  # Active tab
-        curses.init_pair(2, curses.COLOR_GREEN, -1)                   # Status OK
-        curses.init_pair(3, curses.COLOR_RED, -1)                     # Warnings/errors
-        curses.init_pair(4, curses.COLOR_MAGENTA, -1)                 # Temperature
-        curses.init_pair(6, curses.COLOR_WHITE, -1)                   # Inactive tab
-        curses.init_pair(7, curses.COLOR_BLACK, curses.COLOR_CYAN)    # Title bar
+        curses.init_pair(
+            1,
+            curses.COLOR_WHITE,
+            curses.COLOR_YELLOW)  # Active tab
+        curses.init_pair(2, curses.COLOR_GREEN, -
+                         1)                   # Status OK
+        curses.init_pair(3, curses.COLOR_RED, -
+                         1)                     # Warnings/errors
+        curses.init_pair(4, curses.COLOR_MAGENTA, -
+                         1)                 # Temperature
+        # Inactive tab
+        curses.init_pair(6, curses.COLOR_WHITE, -1)
+        curses.init_pair(
+            7,
+            curses.COLOR_BLACK,
+            curses.COLOR_CYAN)    # Title bar
 
         # Load configs & devices
         self.reload_configs()
@@ -116,30 +132,47 @@ class VUTUI:
             try:
                 if hasattr(b, "close") and callable(b.close):
                     b.close()
-                    logger.info(f"Closed serial port for benchlab {b.get('port','?')}")
+                    logger.info(
+                        f"Closed serial port for benchlab {
+                            b.get(
+                                'port', '?')}")
             except Exception as e:
-                logger.warning(f"Failed to close port {b.get('port','?')}: {e}")
+                logger.warning(
+                    f"Failed to close port {
+                        b.get(
+                            'port',
+                            '?')}: {e}")
 
         logger.info("Cleanup complete.")
 
     # -------------------- CONFIG / DIALS --------------------
     def reload_configs(self):
         template_server = VU_SERVER_CONFIG.parent / "vu_server.config_template"
-        template_dial   = VU_DIAL_CONFIG.parent   / "vu_dial.config_template"
+        template_dial = VU_DIAL_CONFIG.parent / "vu_dial.config_template"
 
         if not VU_SERVER_CONFIG.exists():
             src = template_server if template_server.exists() else None
-            cfg = load_json(src, {"vu_server_url": "http://localhost:5340", "api_key": "", "logo_file": ""}) if src else {"vu_server_url": "http://localhost:5340", "api_key": "", "logo_file": ""}
+            cfg = load_json(
+                src,
+                {
+                    "vu_server_url": "http://localhost:5340",
+                    "api_key": "",
+                    "logo_file": ""}) if src else {
+                "vu_server_url": "http://localhost:5340",
+                "api_key": "",
+                "logo_file": ""}
             save_json(VU_SERVER_CONFIG, cfg)
-            logger.info("Created VU server config from template" if src else "Created default VU server config")
+            logger.info(
+                "Created VU server config from template"
+                if src else "Created default VU server config")
 
         if not VU_DIAL_CONFIG.exists():
             if template_dial.exists():
                 entries = load_json(template_dial, [])
                 for e in entries:
                     e["benchlab_port"] = ""
-                    e["benchlab_uid"]  = ""
-                    e["sensor"]        = ""
+                    e["benchlab_uid"] = ""
+                    e["sensor"] = ""
                 save_json(VU_DIAL_CONFIG, entries)
                 logger.info("Created VU dial config from template")
             else:
@@ -147,7 +180,7 @@ class VUTUI:
                 logger.info("Created empty VU dial config")
 
         self.server_cfg = load_json(VU_SERVER_CONFIG, {})
-        self.dial_cfg   = load_json(VU_DIAL_CONFIG, [])
+        self.dial_cfg = load_json(VU_DIAL_CONFIG, [])
         self.benchlabs = devices.get_benchlab_devices(self.datasource)
 
         self.vu_server_running = devices.vu_server_check(
@@ -180,7 +213,10 @@ class VUTUI:
                 })
 
     def update_dial_name_on_server(self, dial_uid, new_name):
-        url = f"{self.server_cfg.get('vu_server_url','http://localhost:5340')}/api/v0/dial/{dial_uid}/name"
+        url = f"{
+            self.server_cfg.get(
+                'vu_server_url',
+                'http://localhost:5340')}/api/v0/dial/{dial_uid}/name"
         params = {
             "key": self.server_cfg.get("api_key", ""),
             "name": new_name
@@ -190,14 +226,19 @@ class VUTUI:
             if resp.status_code in (200, 201):
                 return True
             else:
-                logger.warning(f"Failed to update dial {dial_uid} name on server: {resp.status_code} {resp.text}")
+                logger.warning(
+                    f"Failed to update dial {dial_uid} name on server: {
+                        resp.status_code} {
+                        resp.text}")
         except Exception as e:
-            logger.warning(f"Exception updating dial {dial_uid} name on server: {e}")
+            logger.warning(
+                f"Exception updating dial {dial_uid} name on server: {e}")
         return False
 
     # -------------------- HELPERS --------------------
     def get_or_create_cfg_entry(self, dial):
-        cfg_entry = next((d for d in self.dial_cfg if d['dial_uid'] == dial['uid']), None)
+        cfg_entry = next(
+            (d for d in self.dial_cfg if d['dial_uid'] == dial['uid']), None)
         if cfg_entry:
             return cfg_entry
         cfg_entry = {
@@ -238,7 +279,6 @@ class VUTUI:
         self.stdscr.clear()
         self.h, self.w = self.stdscr.getmaxyx()
         y_start = 4
-        footer_height = 1
         y = y_start
 
         # --- Header ---
@@ -263,7 +303,11 @@ class VUTUI:
         y += 1
 
         # --- Benchlab devices ---
-        self.stdscr.addstr(y, 2, "Available Benchlab Devices:", curses.A_UNDERLINE)
+        self.stdscr.addstr(
+            y,
+            2,
+            "Available Benchlab Devices:",
+            curses.A_UNDERLINE)
         y += 1
         for b in self.benchlabs:
             try:
@@ -285,7 +329,11 @@ class VUTUI:
                 y += 1
         else:
             try:
-                self.stdscr.addstr(y, 4, "N/A: VU server is not running!", curses.color_pair(3))
+                self.stdscr.addstr(
+                    y,
+                    4,
+                    "N/A: VU server is not running!",
+                    curses.color_pair(3))
             except curses.error:
                 pass
             y += 1
@@ -297,14 +345,23 @@ class VUTUI:
 
         if not self.dial_cfg:
             try:
-                self.stdscr.addstr(y, 4, "No VU dials configured", curses.color_pair(3))
+                self.stdscr.addstr(
+                    y, 4, "No VU dials configured", curses.color_pair(3))
             except curses.error:
                 pass
             y += 1
         else:
             # Table headers
-            headers = ["UID", "Name", "Sensor", "Min/Max", "Benchlab", "Backlight", "Easing"]
-            col_widths = [24, 10, 10, 11, 12, 15, 10]  # widths for alignment only
+            headers = [
+                "UID",
+                "Name",
+                "Sensor",
+                "Min/Max",
+                "Benchlab",
+                "Backlight",
+                "Easing"]
+            # widths for alignment only
+            col_widths = [24, 10, 10, 11, 12, 15, 10]
             x = 4
             for i, h in enumerate(headers):
                 try:
@@ -335,14 +392,21 @@ class VUTUI:
                 y += 1
 
         # --- Footer with Provisioning ---
-        self.stdscr.addstr(self.h-1, 0, "TAB: Switch tabs | r: Reload | p: Provision new devices | q: Quit")
-
+        self.stdscr.addstr(
+            self.h - 1,
+            0,
+            "TAB: Switch tabs | r: Reload | p: Provision new devices | "
+            "q: Quit")
 
     def handle_tab1_input(self, key):
         if key in (ord('r'), ord('R')):
             self.reload_configs()
         elif key in (ord('p'), ord('P')):
-            self.stdscr.addstr(self.h-3, 0, "Scanning and provisioning new devices...".ljust(self.w))
+            self.stdscr.addstr(
+                self.h - 3,
+                0,
+                "Scanning and provisioning new devices...".ljust(
+                    self.w))
             self.stdscr.refresh()
             success = devices.provision_vu_dials(
                 self.server_cfg.get("vu_server_url", "http://localhost:5340"),
@@ -352,8 +416,10 @@ class VUTUI:
                 self.server_cfg.get("vu_server_url", "http://localhost:5340"),
                 self.server_cfg.get("api_key", "")
             )
-            msg = "Provisioning successful." if success else "Provisioning failed or no new devices found."
-            self.stdscr.addstr(self.h-3, 0, msg.ljust(self.w))
+            msg = (
+                "Provisioning successful." if success
+                else "Provisioning failed or no new devices found.")
+            self.stdscr.addstr(self.h - 3, 0, msg.ljust(self.w))
             self.stdscr.refresh()
             curses.napms(1000)
 
@@ -380,17 +446,23 @@ class VUTUI:
         elif self.tab2_cursor >= self.tab2_start_line + visible_lines:
             self.tab2_start_line = self.tab2_cursor - visible_lines + 1
 
-        for idx, key in enumerate(keys[self.tab2_start_line:self.tab2_start_line + visible_lines]):
+        for idx, key in enumerate(
+                keys[self.tab2_start_line:
+                     self.tab2_start_line + visible_lines]):
             val = str(self.server_cfg[key])
             line_y = y + idx
             key_text = f"{key}:".ljust(key_col_width)
             self.stdscr.addstr(line_y, 4, key_text)
             if idx + self.tab2_start_line == self.tab2_cursor:
-                self.stdscr.addstr(line_y, 4 + key_col_width, val, curses.color_pair(1))
+                self.stdscr.addstr(line_y, 4 +
+                                   key_col_width, val, curses.color_pair(1))
             else:
                 self.stdscr.addstr(line_y, 4 + key_col_width, val)
 
-        self.stdscr.addstr(self.h-1, 0, "↑/↓: Navigate | Enter: Edit | s: Save | TAB: Switch tabs")
+        self.stdscr.addstr(
+            self.h - 1,
+            0,
+            "↑/↓: Navigate | Enter: Edit | s: Save | TAB: Switch tabs")
 
     def handle_tab2_input(self, key):
         keys = list(self.server_cfg.keys())
@@ -405,9 +477,9 @@ class VUTUI:
             old_val = str(self.server_cfg[key_name])
             curses.echo()
             prompt = f"Enter new value for {key_name}: "
-            self.stdscr.addstr(self.h-2, 0, " " * (self.w-1))
-            self.stdscr.addstr(self.h-2, 0, prompt)
-            new_val = self.stdscr.getstr(self.h-2, len(prompt), 60).decode()
+            self.stdscr.addstr(self.h - 2, 0, " " * (self.w - 1))
+            self.stdscr.addstr(self.h - 2, 0, prompt)
+            new_val = self.stdscr.getstr(self.h - 2, len(prompt), 60).decode()
             curses.noecho()
             if new_val:
                 if old_val.isdigit():
@@ -418,7 +490,12 @@ class VUTUI:
                 self.server_cfg[key_name] = new_val
         elif key in (ord('s'), ord('S')):
             save_json(VU_SERVER_CONFIG, self.server_cfg)
-            self.stdscr.addstr(self.h-2, 0, "Config saved!".ljust(self.w), curses.color_pair(2))
+            self.stdscr.addstr(
+                self.h - 2,
+                0,
+                "Config saved!".ljust(
+                    self.w),
+                curses.color_pair(2))
             self.stdscr.refresh()
             time.sleep(1)
 
@@ -437,7 +514,11 @@ class VUTUI:
 
         y = 4
         # Benchlab devices
-        self.stdscr.addstr(y, 2, "Available Benchlab Devices:", curses.A_UNDERLINE)
+        self.stdscr.addstr(
+            y,
+            2,
+            "Available Benchlab Devices:",
+            curses.A_UNDERLINE)
         y += 1
         for b in self.benchlabs:
             self.stdscr.addstr(y, 2, f"{b['port']} - {b['uid']}")
@@ -447,11 +528,14 @@ class VUTUI:
         # Build combined dial list
         self.all_dials = []
         for uid, name in self.vu_dials:
-            cfg_entry = next((d for d in self.dial_cfg if d.get("dial_uid") == uid), None)
-            benchlab_port = cfg_entry.get("benchlab_port","Unknown") if cfg_entry else "Unknown"
-            sensor = cfg_entry.get("sensor","Not configured") if cfg_entry else "Not configured"
-            min_val = cfg_entry.get("min",0) if cfg_entry else 0
-            max_val = cfg_entry.get("max",100) if cfg_entry else 100
+            cfg_entry = next(
+                (d for d in self.dial_cfg if d.get("dial_uid") == uid), None)
+            benchlab_port = cfg_entry.get(
+                "benchlab_port", "Unknown") if cfg_entry else "Unknown"
+            sensor = cfg_entry.get(
+                "sensor", "Not configured") if cfg_entry else "Not configured"
+            min_val = cfg_entry.get("min", 0) if cfg_entry else 0
+            max_val = cfg_entry.get("max", 100) if cfg_entry else 100
             self.all_dials.append({
                 "uid": uid,
                 "name": name,
@@ -462,24 +546,45 @@ class VUTUI:
             })
 
         # Column widths
-        col_uid_width = max((len(d["uid"]) for d in self.all_dials), default=0) + 2
-        col_name_width = max((len(d["name"]) for d in self.all_dials), default=0) + 2
-        col_port_width = max((len(d["benchlab_port"]) for d in self.all_dials), default=0) + 2
+        col_uid_width = max((len(d["uid"])
+                            for d in self.all_dials), default=0) + 2
+        col_name_width = max((len(d["name"])
+                             for d in self.all_dials), default=0) + 2
+        col_port_width = max((len(d["benchlab_port"])
+                             for d in self.all_dials), default=0) + 2
         col_min_width = 5
         col_max_width = 5
 
-        self.stdscr.addstr(y, 2, f"{'Dial UID':<{col_uid_width}} {'Dial Name':<{col_name_width}} "
-                                   f"{'Benchlab':<{col_port_width}} {'Min':<{col_min_width}} "
-                                   f"{'Max':<{col_max_width}} Sensor", curses.A_UNDERLINE)
+        self.stdscr.addstr(
+            y, 2, f"{
+                'Dial UID':<{col_uid_width}} {
+                'Dial Name':<{col_name_width}} " f"{
+                'Benchlab':<{col_port_width}} {
+                    'Min':<{col_min_width}} " f"{
+                        'Max':<{col_max_width}} Sensor", curses.A_UNDERLINE)
         y += 1
 
         for idx, dial in enumerate(self.all_dials):
-            line = f"{dial['uid']:<{col_uid_width}} {dial['name']:<{col_name_width}} " \
-                   f"{dial['benchlab_port']:<{col_port_width}} {dial['min']:<{col_min_width}} " \
-                   f"{dial['max']:<{col_max_width}} {dial['sensor']}"
-            self.stdscr.addstr(y + idx, 2, line[:self.w-3], curses.color_pair(1) if idx == self.tab3_cursor else 0)
+            line = f"{
+                dial['uid']:<{col_uid_width}} {
+                dial['name']:<{col_name_width}} " f"{
+                dial['benchlab_port']:<{col_port_width}} {
+                dial['min']:<{col_min_width}} " f"{
+                    dial['max']:<{col_max_width}} {
+                        dial['sensor']}"
+            self.stdscr.addstr(
+                y + idx,
+                2,
+                line[:self.w - 3],
+                curses.color_pair(1) if idx == self.tab3_cursor else 0)
 
-        self.stdscr.addstr(self.h-1, 0, "Enter: Configure Dial | ↑/↓: Navigate | TAB: Switch tabs | r: Reload | q: Quit"[:self.w-1])
+        footer_text = (
+            "Enter: Configure Dial | ↑/↓: Navigate | TAB: Switch tabs | "
+            "r: Reload | q: Quit")
+        self.stdscr.addstr(
+            self.h - 1,
+            0,
+            footer_text[:self.w - 1])
 
     def handle_tab3_input(self, key):
         if not self.all_dials:
@@ -487,7 +592,8 @@ class VUTUI:
         if key == curses.KEY_UP:
             self.tab3_cursor = max(0, self.tab3_cursor - 1)
         elif key == curses.KEY_DOWN:
-            self.tab3_cursor = min(len(self.all_dials)-1, self.tab3_cursor + 1)
+            self.tab3_cursor = min(
+                len(self.all_dials) - 1, self.tab3_cursor + 1)
         elif key in (ord('\n'), curses.KEY_ENTER):
             self.dial_mapping()
         elif key == ord('r'):
@@ -497,7 +603,11 @@ class VUTUI:
     def dial_mapping(self):
         if not self.all_dials:
             h, w = self.stdscr.getmaxyx()
-            self.stdscr.addstr(h-2, 0, "No VU dials available!", curses.color_pair(3))
+            self.stdscr.addstr(
+                h - 2,
+                0,
+                "No VU dials available!",
+                curses.color_pair(3))
             self.stdscr.refresh()
             curses.napms(1000)
             return
@@ -508,17 +618,18 @@ class VUTUI:
         # --- Step 1: Dial Name ---
         current_name = dial.get("name", "")
         prompt = f"Set Dial Name [{current_name}]: "
-        self.stdscr.move(h-3, 0)
+        self.stdscr.move(h - 3, 0)
         self.stdscr.clrtoeol()
-        self.stdscr.addstr(h-3, 0, prompt[:w-1])
+        self.stdscr.addstr(h - 3, 0, prompt[:w - 1])
         curses.echo()
-        inp = self.stdscr.getstr(h-3, len(prompt), 60).decode().strip()
+        inp = self.stdscr.getstr(h - 3, len(prompt), 60).decode().strip()
         curses.noecho()
         if inp:
             dial["name"] = inp
 
         # Ensure cfg_entry exists or update
-        cfg_entry = next((d for d in self.dial_cfg if d['dial_uid'] == dial['uid']), None)
+        cfg_entry = next(
+            (d for d in self.dial_cfg if d['dial_uid'] == dial['uid']), None)
         if not cfg_entry:
             cfg_entry = {
                 "dial_uid": dial['uid'],
@@ -539,9 +650,17 @@ class VUTUI:
 
         success = self.update_dial_name_on_server(dial['uid'], dial["name"])
         if success:
-            self.stdscr.addstr(h-2, 0, "Dial name updated on server!".ljust(w), curses.color_pair(2))
+            self.stdscr.addstr(
+                h - 2,
+                0,
+                "Dial name updated on server!".ljust(w),
+                curses.color_pair(2))
         else:
-            self.stdscr.addstr(h-2, 0, "Failed to update dial name on server!".ljust(w), curses.color_pair(3))
+            self.stdscr.addstr(
+                h - 2,
+                0,
+                "Failed to update dial name on server!".ljust(w),
+                curses.color_pair(3))
         self.stdscr.refresh()
         curses.napms(1000)
 
@@ -549,15 +668,16 @@ class VUTUI:
         current_port = dial.get("benchlab_port", "")
         ports = [b["port"] for b in self.benchlabs]
         prompt = f"Select Benchlab Port [{current_port}]: "
-        self.stdscr.move(h-3, 0)
+        self.stdscr.move(h - 3, 0)
         self.stdscr.clrtoeol()
-        self.stdscr.addstr(h-3, 0, prompt[:w-1])
+        self.stdscr.addstr(h - 3, 0, prompt[:w - 1])
         curses.echo()
-        choice = self.stdscr.getstr(h-3, len(prompt), 20).decode().strip()
+        choice = self.stdscr.getstr(h - 3, len(prompt), 20).decode().strip()
         curses.noecho()
         if choice and choice in ports:
             dial["benchlab_port"] = choice
-            dial["benchlab_uid"] = next((b["uid"] for b in self.benchlabs if b["port"] == choice), "")
+            dial["benchlab_uid"] = next(
+                (b["uid"] for b in self.benchlabs if b["port"] == choice), "")
             cfg_entry["benchlab_port"] = choice
             cfg_entry["benchlab_uid"] = dial["benchlab_uid"]
 
@@ -567,14 +687,16 @@ class VUTUI:
             self.SENSORS = get_available_sensors(self.datasource)
 
         if not self.SENSORS:
-            self.stdscr.addstr(h-2, 0,
-                "No sensors available yet — ensure device is connected.".ljust(w),
+            self.stdscr.addstr(
+                h - 2,
+                0,
+                "No sensors available yet — ensure device is connected."
+                .ljust(w),
                 curses.color_pair(3))
             self.stdscr.refresh()
             curses.napms(2000)
             return
 
-        max_display_rows = h - 6
         num_sensors = len(self.SENSORS)
         col_width = max(len(s) for s in self.SENSORS) + 4
         num_cols = max(1, w // col_width)
@@ -592,14 +714,16 @@ class VUTUI:
                 col = idx // num_rows
                 x = col * col_width
                 s_str = f"{idx + 1}. {sensor}"
-                self.stdscr.addstr(h - num_rows - 3 + row, x, s_str[:col_width-1])
+                self.stdscr.addstr(h - num_rows - 3 + row,
+                                   x, s_str[:col_width - 1])
 
-            prompt = f"Select sensor number for {dial['name']} or 'q' to skip: "
-            self.stdscr.move(h-4, 0)
+            prompt = f"Select sensor number for {
+                dial['name']} or 'q' to skip: "
+            self.stdscr.move(h - 4, 0)
             self.stdscr.clrtoeol()
-            self.stdscr.addstr(h-3, 0, prompt[:w-1])
+            self.stdscr.addstr(h - 3, 0, prompt[:w - 1])
             curses.echo()
-            inp = self.stdscr.getstr(h-3, len(prompt), 5).decode().strip()
+            inp = self.stdscr.getstr(h - 3, len(prompt), 5).decode().strip()
             curses.noecho()
 
             if inp.lower() == 'q':
@@ -620,33 +744,41 @@ class VUTUI:
 
         # MIN
         prompt = f"Set MIN [{current_min}]: "
-        self.stdscr.move(h-3, 0)
+        self.stdscr.move(h - 3, 0)
         self.stdscr.clrtoeol()
-        self.stdscr.addstr(h-3, 0, prompt[:w-1])
+        self.stdscr.addstr(h - 3, 0, prompt[:w - 1])
         curses.echo()
-        inp = self.stdscr.getstr(h-3, len(prompt), 10).decode().strip()
+        inp = self.stdscr.getstr(h - 3, len(prompt), 10).decode().strip()
         curses.noecho()
         val_min = _parse_float_or(inp, current_min)
 
         # MAX
         prompt = f"Set MAX [{current_max}]: "
-        self.stdscr.move(h-3, 0)
+        self.stdscr.move(h - 3, 0)
         self.stdscr.clrtoeol()
-        self.stdscr.addstr(h-3, 0, prompt[:w-1])
+        self.stdscr.addstr(h - 3, 0, prompt[:w - 1])
         curses.echo()
-        inp = self.stdscr.getstr(h-3, len(prompt), 10).decode().strip()
+        inp = self.stdscr.getstr(h - 3, len(prompt), 10).decode().strip()
         curses.noecho()
         val_max = _parse_float_or(inp, current_max)
 
         if val_max <= val_min:
-            self.stdscr.addstr(h-2, 0, "MAX must be greater than MIN!", curses.color_pair(3))
+            self.stdscr.addstr(
+                h - 2,
+                0,
+                "MAX must be greater than MIN!",
+                curses.color_pair(3))
             self.stdscr.refresh()
             curses.napms(1500)
         else:
             cfg_entry["min"] = val_min
             cfg_entry["max"] = val_max
             save_json(VU_DIAL_CONFIG, self.dial_cfg)
-            self.stdscr.addstr(h-2, 0, "Dial mapping saved!".ljust(w), curses.color_pair(2))
+            self.stdscr.addstr(
+                h - 2,
+                0,
+                "Dial mapping saved!".ljust(w),
+                curses.color_pair(2))
             self.stdscr.refresh()
             curses.napms(1000)
 
@@ -676,6 +808,8 @@ class VUTUI:
                     self.handle_tab3_input(key)
 
 # -------------------- RUN TUI --------------------
+
+
 def run_vu_tui(stdscr, server_proc=None, datasource=None):
     tui = VUTUI(stdscr, server_proc=server_proc, datasource=datasource)
 
@@ -696,6 +830,8 @@ def run_vu_tui(stdscr, server_proc=None, datasource=None):
             logger.info("VU server terminated.")
 
 # -------------------- LAUNCH FUNCTION --------------------
+
+
 def launch_vu_config(args=None):
     """Launch the VU configuration TUI.
 
@@ -704,15 +840,25 @@ def launch_vu_config(args=None):
     args:
         Standard benchlab args namespace. If None, reads from env vars.
     """
-    import os, types as _types
+    import os
+    import types as _types
     from benchlab.core.datasource_manager import DataSourceManager
 
     if args is None:
         args = _types.SimpleNamespace(
-            source=os.environ.get("BENCHLAB_DATA_SOURCE", "direct"),
-            api_url=os.environ.get("BENCHLAB_API_URL", "http://127.0.0.1:8000"),
-            mqtt_broker=os.environ.get("MQTT_BROKER", "localhost"),
-            mqtt_port=int(os.environ.get("MQTT_PORT", "1883")),
+            source=os.environ.get(
+                "BENCHLAB_DATA_SOURCE",
+                "direct"),
+            api_url=os.environ.get(
+                "BENCHLAB_API_URL",
+                "http://127.0.0.1:8000"),
+            mqtt_broker=os.environ.get(
+                "MQTT_BROKER",
+                "localhost"),
+            mqtt_port=int(
+                os.environ.get(
+                    "MQTT_PORT",
+                    "1883")),
             interval=1.0,
         )
 
@@ -725,7 +871,7 @@ def launch_vu_config(args=None):
 
     server_cfg = load_json(VU_SERVER_CONFIG, {})
     server_url = server_cfg.get("vu_server_url", "http://localhost:5340")
-    api_key    = server_cfg.get("api_key", "")
+    api_key = server_cfg.get("api_key", "")
 
     server_proc = None
     if not check_vu_server(server_url, api_key):
@@ -733,7 +879,9 @@ def launch_vu_config(args=None):
         server_proc = start_vu_server()
         if server_proc:
             logger.info(f"Local VU server started at {server_url}")
-            threading.Thread(target=forward_logs, args=(server_proc,), daemon=True).start()
+            threading.Thread(
+                target=forward_logs, args=(
+                    server_proc,), daemon=True).start()
         else:
             logger.warning("Failed to start local VU server.")
     else:
@@ -745,13 +893,15 @@ def launch_vu_config(args=None):
     if args.source in ("fastapi", "fastapi_custom"):
         ds_kwargs["base_url"] = args.api_url
     elif args.source == "mqtt":
-        ds_kwargs["broker"]   = args.mqtt_broker
-        ds_kwargs["port"]     = args.mqtt_port
+        ds_kwargs["broker"] = args.mqtt_broker
+        ds_kwargs["port"] = args.mqtt_port
 
     try:
         datasource = DataSourceManager(source_type=args.source, **ds_kwargs)
         if not datasource.connect():
-            logger.warning(f"Could not connect to {args.source} datasource — sensor list may be empty")
+            logger.warning(
+                f"Could not connect to {
+                    args.source} datasource — sensor list may be empty")
     except Exception:
         # run_vu_tui's own cleanup (which terminates server_proc) never runs
         # if we fail before reaching curses.wrapper below, so terminate it
@@ -763,6 +913,7 @@ def launch_vu_config(args=None):
         curses.wrapper(run_vu_tui, server_proc, datasource)
     finally:
         datasource.disconnect()
+
 
 if __name__ == "__main__":
     launch_vu_config()
