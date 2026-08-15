@@ -27,48 +27,49 @@ A lightweight, cross-platform REST API server for BenchLab telemetry data collec
 
 ### 1. Installation
 ```bash
-cd benchlab/fastapi
 pip install -r requirements.txt
 ```
 
 ### 2. Configuration
-Copy the example configuration and customize as needed:
-```bash
-cp .env.example .env
-```
-
-Edit `.env` to configure:
-- Server host and port
-- Polling intervals
-- History buffer size
-- Log levels
+Optionally create a `.env` file in `benchlab/restapi/` to override defaults (see Configuration Options below). All settings also work as plain environment variables.
 
 ### 3. Run the Server
+```bash
+python -m benchlab -fastapi
+```
+
+You can also run the module directly:
 ```bash
 python -m benchlab.restapi.telemetry_api
 ```
 
-The server will start on `http://localhost:8000` by default.
+The server will start on `http://0.0.0.0:8000` by default (configurable via `API_HOST`/`API_PORT`).
 
 ## API Endpoints
 
 ### Device Management
-- `GET /devices` - List all connected devices
-- `GET /device/{uid}/info` - Get device information
-- `GET /device/{uid}/status` - Get detailed device status
+- `GET /devices` - List all connected devices (uid, port, firmware, variant, VendorId, ProductId, connected)
+- `GET /device/{uid}/info` - Get device information (returns mock info with 404-style defaults if the uid isn't known, for test convenience)
+- `GET /device/{uid}/status` - Get detailed status for a specific device (port, connected, last_update, client_count, history_count, latest_telemetry, info)
+- `POST /scan` - Trigger an immediate device scan (discovers new devices, marks disconnected ones) without restarting the server
 
 ### Telemetry Data
-- `GET /device/{uid}/telemetry` - Get latest telemetry
-- `GET /device/{uid}/telemetry/{sensor}` - Get specific sensor data
-- `GET /device/{uid}/history` - Get telemetry history (with pagination)
-- `GET /device/{uid}/sensors` - List available sensors
+- `GET /device/{uid}/telemetry` - Get latest telemetry snapshot for a device
+- `GET /device/{uid}/telemetry/{sensor}` - Get a single sensor's latest value
+- `GET /device/{uid}/history?limit=100` - Get telemetry history (most recent `limit` entries, capped by `MAX_HISTORY_LIMIT`); response includes `device_id`, `data`, `count`, `total_available`
+- `GET /device/{uid}/sensors` - List available sensor keys for a device
 
 ### Real-time Streaming
-- `WebSocket /device/{uid}/stream` - Real-time telemetry updates
+- `WebSocket /device/{uid}/stream` - Real-time telemetry updates, pushed as each device's reader thread reads new sensor data
 
 ### Monitoring
-- `GET /health` - Basic health check
-- `GET /status` - Detailed server status
+- `GET /health` - Basic health check (status, platform, timestamp, connected_devices, total_clients)
+- `GET /status` - Detailed server status for all devices
+- `GET /favicon.ico` - Server favicon
+
+All endpoints for an unknown `{uid}` return `404` (except `/device/{uid}/info`, which returns mock placeholder data instead).
+
+A background scanner thread re-scans for new/disconnected devices every `SCAN_INTERVAL` seconds automatically, in addition to the manual `POST /scan` endpoint.
 
 ## Configuration Options
 
@@ -81,6 +82,7 @@ The server will start on `http://localhost:8000` by default.
 | `HISTORY_LENGTH` | `10` | Number of history entries per device |
 | `MAX_HISTORY_LIMIT` | `1000` | Max history limit for API requests |
 | `SCAN_INTERVAL` | `30` | Device discovery scan interval in seconds |
+| `CORS_ORIGINS` | `*` | Comma-separated allowed CORS origins. Credentialed requests are only allowed when explicit origins are set (wildcard + credentials is rejected by browsers) |
 
 ## Cross-Platform Support
 
@@ -94,7 +96,7 @@ The server automatically detects and works with BenchLab devices across differen
 
 Run the test suite to verify the server functionality:
 ```bash
-python test_server.py
+python -m pytest benchlab/restapi/test_server.py
 ```
 
 This tests:
@@ -179,7 +181,7 @@ WantedBy=multi-user.target
 ### Logging
 Enable debug logging for troubleshooting:
 ```bash
-LOG_LEVEL=DEBUG python -m benchlab.restapi.telemetry_api
+LOG_LEVEL=DEBUG python -m benchlab -fastapi
 ```
 
 ## Development

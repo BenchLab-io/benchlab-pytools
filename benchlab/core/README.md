@@ -1,36 +1,44 @@
-# BENCHLAB Core - Data Source Abstraction Layer
+# BENCHLAB Core - Shared Internals
 
-This module provides a unified architecture for BENCHLAB tools to consume telemetry data from multiple sources, enabling multiple tools to run simultaneously without serial port conflicts.
+`benchlab/core/` is the internal library used by every BENCHLAB PyTools tool (TUI, FastAPI server, MQTT publisher, Link, HWiNFO export, VU dials, WigiDash, config tool). It provides the data-source abstraction that lets multiple tools consume telemetry without fighting over a serial port, plus supporting infrastructure: device lifecycle tracking, subprocess management, retry helpers, and statistics.
+
+This is a developer-facing internals doc. For CLI usage of individual tools, see their own READMEs (`benchlab/restapi/readme.md`, `benchlab/mqtt/README.md`, `benchlab/config/README.md`, `benchlab/link/README.md`).
 
 ## Architecture Overview
 
 ### The Problem
 
-The original architecture had each tool directly connecting to the serial port via `benchlab_pycore`. Since only one process can claim a serial port at a time, this prevented running multiple tools simultaneously.
+Only one process can own a serial port at a time. If every tool connected directly via `benchlab_pycore`, only one tool could ever run at once.
 
 ### The Solution
 
-A **Data Source Abstraction Layer** that allows tools to consume data from:
-
-1. **Direct** - Direct serial connection via pycore (for single tool)
-2. **FastAPI** - HTTP REST API server (recommended for multiple tools)
-3. **MQTT** - MQTT broker subscription
+A **DataSource abstraction layer** (`datasource.py`) with multiple implementations, all exposing the same interface. Tools pick a source type via `--source` and don't need to know how the data actually gets to them.
 
 ## Components
 
-### 1. DataSource Classes (`datasource.py`)
+### 1. DataSource classes (`datasource.py`)
 
-Abstract base class and implementations:
+`DataSource` is an abstract base class (`connect`, `disconnect`, `is_connected`, `list_devices`, `get_telemetry(uid)`, `get_device_info(uid)`, `source_type`). Concrete implementations:
+
+| Class | `source_type` | Description |
+|---|---|---|
+| `DirectDataSource` | `direct` | Connects directly to the serial port via `benchlab_pycore`. Runs its own background polling thread. Exclusive port access — only one tool. |
+| `FastAPIDataSource` | `fastapi` / `fastapi_custom` | HTTP client for the `benchlab.restapi` server. Polls `/health`, `/devices`, `/device/{uid}/telemetry`, `/device/{uid}/info` via `requests`. |
+| `MQTTDataSource` | `mqtt` / `mqtt_custom` | Subscribes to `<topic_prefix>/+/telemetry` and `<topic_prefix>/+/info` on an MQTT broker via `paho-mqtt`. Resolves `MQTT_PROTOCOL` (v3.1 / v3.1.1 / v5) via the module-level `resolve_mqtt_protocol()` helper. |
+| `NamedPipeDataSource` | `named_pipe` | Windows-only. Talks to the C# BENCHLAB Windows service over named pipes (`BenchlabDiscovery` for device listing, per-device `BenchlabSensorPipe_XX_YYY` pipes for telemetry). Normalizes the C# service's `ShortName`-keyed sensor payloads into the same flat key names Python tools expect, via the module-level `_normalise_cs_telemetry()` helper. |
+| `ServiceHttpDataSource` | `service_http` | REST client for the C# BENCHLAB service's HTTP API (default `http://localhost:8585`). Thin client only — does not start/manage the service. Same telemetry normalization as `NamedPipeDataSource`. |
+
+Each implementation validates its constructor kwargs through a Pydantic model in `config.py` (`SerialConfig`, `FastAPIConfig`, `MQTTConfig`, `NamedPipeConfig`, `ServiceHttpConfig`).
+
+The `create_datasource(source_type, **kwargs)` factory function builds the right class:
 
 ```python
 from benchlab.core import create_datasource
 
-# Factory function - creates appropriate DataSource
 datasource = create_datasource('fastapi', base_url='http://127.0.0.1:8000')
 datasource = create_datasource('direct', port='COM3')
 datasource = create_datasource('mqtt', broker='localhost', port=1883)
 
-# Common API
 datasource.connect()
 devices = datasource.list_devices()
 telemetry = datasource.get_telemetry(uid)
@@ -38,218 +46,109 @@ device_info = datasource.get_device_info(uid)
 datasource.disconnect()
 ```
 
-### 2. Infrastructure Manager (`infrastructure.py`)
+### 2. DataSourceManager (`datasource_manager.py`)
 
-Manages starting/stopping FastAPI server and MQTT publisher:
-
-```python
-from benchlab.core import InfrastructureManager
-
-infra = InfrastructureManager(fastapi_port=8000)
-
-# Start infrastructure based on tool requirements
-tools = [{'source': 'fastapi'}, {'source': 'mqtt'}]
-infra.start_all(tools)
-
-# ... run tools ...
-
-infra.stop_all()
-```
-
-### 3. Launcher Utilities (`launcher.py`)
-
-Interactive multi-tool selection and launching:
+Wraps any `DataSource` with a consistent, higher-level API used by tools (TUI, Link, etc.): connection management, a background polling thread, device selection, and a single `snapshot()` call for UI/consumer code.
 
 ```python
-from benchlab.core.launcher import run_interactive_launcher
+from benchlab.core.datasource_manager import DataSourceManager
 
-# Run interactive menu
-run_interactive_launcher()
+mgr = DataSourceManager(source_type='fastapi', base_url='http://127.0.0.1:8000')
+mgr.connect()
+mgr.select_device(uid)
+snap = mgr.snapshot()
+# snap: connected, source_type, source_desc, port, uid, device_info,
+#       sensor_data, connection_time, last_error, all_devices, all_telemetry
 ```
 
-## Usage
+Also accepts an optional `stats_callback(uid, channel, value)` invoked on every changed numeric telemetry value, typically wired to a `ChannelStats` instance (see below).
 
-### Single Tool Mode (Backward Compatible)
+### 3. DeviceRegistry (`device_registry.py`)
 
-Existing single-tool commands still work:
+Thread-safe singleton (`DeviceRegistry.get_instance()`) that is the single source of truth for "which devices exist right now." Exactly one component per process should own registration — e.g. the FastAPI server registers/unregisters devices as its reader threads start and stop. Other tools only observe via `get_devices()`, `get_device(uid)`, `has_device(uid)`, or subscribe to `on_connect(callback)` / `on_disconnect(callback)` events. `update_telemetry(uid)` stamps a device's `last_telemetry` time.
 
-```bash
-python benchlab.py -tui
-python benchlab.py -hwinfo
-python benchlab.py -fastapi
-```
+### 4. ProcessManager (`process_manager.py`)
 
-### Multi-Tool Mode - Interactive
-
-```bash
-python benchlab.py -multi
-```
-
-This launches an interactive menu where you can:
-1. Select multiple tools to run
-2. Choose data source (FastAPI recommended)
-3. Launcher automatically starts infrastructure
-4. Tools run simultaneously
-
-### Multi-Tool Mode - Command Line
-
-```bash
-# Launch specific tools with automatic data source selection
-python benchlab.py -tools tui hwinfo graph
-
-# Specify data source explicitly
-python benchlab.py -tools tui hwinfo -source fastapi
-
-# Custom FastAPI port
-python benchlab.py -tools tui hwinfo -source fastapi -fastapi-port 9000
-```
-
-## Data Source Details
-
-### Direct Source
-- **Use case**: Single tool that needs low-latency access
-- **Pros**: Lowest latency, no overhead
-- **Cons**: Exclusive serial port access, only one tool
-- **Implementation**: `DirectDataSource` uses pycore directly
-
-### FastAPI Source
-- **Use case**: Multiple tools, web dashboards, remote access
-- **Pros**: HTTP-based (firewall-friendly), supports multiple clients, REST API
-- **Cons**: Small latency overhead (~10-50ms)
-- **Implementation**: `FastAPIDataSource` makes HTTP requests to FastAPI server
-- **Server**: Automatically started by `InfrastructureManager` on port 8000 (default)
-
-### MQTT Source
-- **Use case**: Distributed systems, IoT integration
-- **Pros**: Pub/sub model, works with existing MQTT infrastructure
-- **Cons**: Requires MQTT broker, more complex setup
-- **Implementation**: `MQTTDataSource` subscribes to telemetry topics
-- **Publisher**: Automatically started by `InfrastructureManager`
-
-## Tool Refactoring Status
-
-Tools need to be refactored to use the DataSource abstraction:
-
-- [x] **Core infrastructure** - DataSource classes, InfrastructureManager
-- [x] **Launcher** - Multi-tool selection and orchestration
-- [ ] **TUI** - In progress (DataSourceWorker created)
-- [ ] **HWiNFO** - Needs refactoring
-- [ ] **CSV Logger** - Needs refactoring
-- [ ] **Graph** - Needs refactoring
-- [ ] **VU Dials** - Needs refactoring
-- [ ] **WigiDash** - Needs refactoring
-
-### Refactoring Pattern
-
-Each tool should:
-
-1. Accept a `datasource` parameter (or create one based on config)
-2. Replace direct serial calls with DataSource API
-3. Handle cases where `sensor_struct` is None (only available in direct mode)
-
-Example:
+Thread-safe singleton (`ProcessManager.get_instance()`) for starting/stopping infrastructure subprocesses (e.g. a spawned FastAPI server or MQTT publisher process) with health checks:
 
 ```python
-# Before
-from benchlab_pycore.core import read_sensors, open_serial_connection
-ser = open_serial_connection(port)
-sensors = read_sensors(ser)
-
-# After
-from benchlab.core import create_datasource
-datasource = create_datasource('fastapi')
-datasource.connect()
-telemetry = datasource.get_telemetry(uid)
+pm = ProcessManager.get_instance()
+pm.start_service(
+    name="fastapi",
+    cmd=["python", "-m", "benchlab", "-fastapi"],
+    health_check=lambda: ping_http("http://127.0.0.1:8000/health"),
+    timeout=20,
+)
+pm.stop_service("fastapi")
+pm.shutdown_all()
 ```
 
-## Configuration
+Redirects each service's stdout/stderr to `logs/svc_<name>_stdout.log` / `_stderr.log`. Stopping tries graceful termination (SIGTERM / `taskkill`) first, then force-kills after a timeout.
 
-### Environment Variables
+### 5. InfrastructureManager (`infrastructure.py`)
 
-FastAPI server:
-- `LOG_LEVEL` - Logging level (default: INFO)
-- `POLL_INTERVAL` - Sensor poll interval (default: 1.0)
-- `HISTORY_LENGTH` - Number of historical records (default: 10)
-- `API_HOST` - Server host (default: 0.0.0.0)
-- `API_PORT` - Server port (default: 8000)
+Higher-level, non-singleton orchestrator used by the multi-tool launcher path: starts a FastAPI server as a `uvicorn` subprocess (`start_fastapi`) or an MQTT publisher as a background thread (`start_mqtt_publisher`), detecting if a compatible service is already listening on the target port before starting a new one. `start_all(tools)` / `stop_all()` take a list of tool configs and start only what's needed. Usable as a context manager.
 
-MQTT publisher:
-- `MQTT_BROKER` - Broker hostname (default: localhost)
-- `MQTT_PORT` - Broker port (default: 1883)
-- `MQTT_USERNAME` - Optional username
-- `MQTT_PASSWORD` - Optional password
-- `MQTT_QOS` - QoS level (default: 0)
-- `MQTT_POLL_RATE` - Publish interval (default: 1.0)
+### 6. Discovery (`discovery.py`)
 
-### Command-Line Arguments
+`discover_devices()` — the canonical way to enumerate connected BENCHLAB devices over direct serial. Uses `benchlab_pycore.core.get_benchlab_ports()` to find candidate ports, opens each, reads UID/firmware/product ID, and returns `{"uid", "port", "fw", "variant"}` dicts (`variant` is `"ORIGINAL"` or `"BL2"`). Wrapped in the `retry` decorator (3 attempts, exponential backoff).
 
-Multi-tool mode:
-- `-multi` - Interactive multi-tool selector
-- `-tools <tool1> <tool2> ...` - Launch specific tools
-- `-source <direct|fastapi|mqtt>` - Data source type
-- `-fastapi-port <port>` - Custom FastAPI port (default: 8000)
+### 7. Retry (`retry.py`)
 
-## Migration Guide
+`RetryPolicy` (dataclass: `max_retries`, `backoff_factor`, `base_delay`, `allowed_exceptions`) plus a `retry(policy)` decorator that retries a wrapped callable with exponential backoff, logging each attempt. Used throughout `datasource.py` and `discovery.py` for connection attempts.
 
-### For Tool Developers
+### 8. Shared serial (`shared_serial.py`)
 
-1. **Import the core module**:
-   ```python
-   from benchlab.core import create_datasource, InfrastructureManager
-   ```
+`open_serial_connection(port)` — the one place that actually calls `serial.Serial(port, 115200, timeout=1)`; returns `None` instead of raising on failure. All direct-serial code paths (`DirectDataSource`, `discovery.py`, `telemetry_api.py`) use this instead of talking to `pyserial` directly, so the "None on failure" contract is consistent everywhere.
 
-2. **Replace serial connection**:
-   ```python
-   # Old way
-   ser = open_serial_connection(port)
-   sensors = read_sensors(ser)
-   
-   # New way
-   datasource = create_datasource(source_type, **kwargs)
-   datasource.connect()
-   telemetry = datasource.get_telemetry(uid)
-   ```
+Also provides `SharedSerialManager`, a singleton connection pool keyed by port with reference counting (`acquire_connection` / `release_connection`), so multiple in-process consumers can share one open port instead of each opening their own handle. `SharedConnection` is the context-manager wrapper returned by `acquire_connection`.
 
-3. **Handle missing sensor_struct**:
-   ```python
-   # sensor_struct is only available in direct mode
-   if datasource.source_type == 'direct':
-       # Use sensor_struct for detailed info
-       pass
-   else:
-       # Use telemetry dict only
-       pass
-   ```
+### 9. Statistics (`statistics.py`)
 
-4. **Update argument parsing**:
-   ```python
-   parser.add_argument('-source', choices=['direct', 'fastapi', 'mqtt'],
-                       default='direct', help='Data source type')
-   ```
+`ChannelStats` — thread-safe per-device, per-channel running min/max/average tracker (`update`, `get`, `get_all`, `reset`, `get_devices`, `get_channels`, `has_data`). `StatsFormatter` provides display helpers (`format_stat_string`, `format_compact_range`). `create_stats_callback(stats)` builds a `(uid, channel, value) -> None` callback suitable for `DataSourceManager(stats_callback=...)`.
 
-### For Users
+### 10. Config models (`config.py`)
 
-**Existing workflows continue to work** - no changes needed for single-tool usage.
+Pydantic models validating each DataSource's constructor kwargs: `SerialConfig`, `FastAPIConfig` (normalizes `base_url` to include a scheme and strips trailing slash), `MQTTConfig`, `NamedPipeConfig`, `ServiceHttpConfig`.
 
-To use multiple tools:
-1. Run `python benchlab.py -multi`
-2. Select tools from the menu
-3. Choose FastAPI as data source (recommended)
-4. Tools will run simultaneously
+## Package exports (`benchlab/core/__init__.py`)
 
-## Benefits
+```python
+from benchlab.core import (
+    DataSource, DirectDataSource, FastAPIDataSource, MQTTDataSource, create_datasource,
+    DataSourceManager,
+    ChannelStats, StatsFormatter, create_stats_callback,
+    DeviceRegistry, DeviceInfo,
+    ProcessManager, ManagedProcess,
+    BENCHLAB_ORIGINAL_PRODUCT_ID, BENCHLAB_BL2_PRODUCT_ID,
+)
+```
 
-1. **No serial port conflicts** - Multiple tools can run simultaneously
-2. **Flexible deployment** - Tools can run on different machines (via network)
-3. **Extensible** - Easy to add new data sources
-4. **Backward compatible** - Existing single-tool commands still work
-5. **Clean separation** - Tools don't need to know about data source details
+`NamedPipeDataSource` and `ServiceHttpDataSource` live in `datasource.py` but aren't re-exported from `__init__.py`; import them directly from `benchlab.core.datasource` if needed. `BENCHLAB_ORIGINAL_PRODUCT_ID` / `BENCHLAB_BL2_PRODUCT_ID` are re-exported from `benchlab_pycore` (with a fallback to hardcoded `0x10`/`0x11` if pycore isn't installed) so tools can detect device variant without importing pycore directly.
 
-## Future Enhancements
+## How tools use this
 
-- [ ] Hot-reload configuration changes
-- [ ] WebSocket support for real-time streaming
-- [ ] Data source failover (auto-switch if one fails)
-- [ ] Remote data source (tools on different machines)
-- [ ] Data source health monitoring
-- [ ] Automatic tool restart on failure
+- **`benchlab/main.py`** resolves `--source` into environment variables via `_setup_source_from_args()` and calls `check_and_setup_source()` (in `benchlab/sources.py`) to start/verify the chosen source before launching a tool.
+- **`benchlab/restapi/telemetry_api.py`** is a *producer*: it owns the serial port directly, registers devices in `DeviceRegistry`, and serves `DirectDataSource`-equivalent data to `FastAPIDataSource` clients.
+- **`benchlab/mqtt/mqtt_publisher.py`** is also a producer: reads sensors directly and publishes to an MQTT broker for `MQTTDataSource` clients.
+- **`benchlab/link/link_main.py`** is a consumer: uses `DataSourceManager` against any local source (direct/fastapi/mqtt) and republishes telemetry to a remote/cloud MQTT broker.
+- **`benchlab/tui/`**, **VU dials**, **WigiDash**, **HWiNFO export**, **CSV logger** are consumers via `DataSourceManager` or `create_datasource` directly.
+- The **config tool** (`benchlab/config/`) does not use the DataSource abstraction — it has its own direct/named-pipe client layer (`config_client.py`) for read/write configuration operations, since DataSource is read-only telemetry.
+
+## Data Source Comparison
+
+| Source | Use case | Pros | Cons |
+|---|---|---|---|
+| `direct` | Single tool, lowest latency | No overhead, no extra process | Exclusive port access, only one tool |
+| `fastapi` / `fastapi_custom` | Multiple tools, remote access | HTTP-based, firewall-friendly, multi-client | Small latency overhead, requires a running server |
+| `mqtt` / `mqtt_custom` | Distributed/IoT integration | Pub/sub, works with existing MQTT infra | Requires a broker, more moving parts |
+| `named_pipe` | Windows, alongside the C# BENCHLAB service | Multiple tools, no direct serial management | Windows only, requires the service + pywin32 |
+| `service_http` | Windows, alongside the C# BENCHLAB service | HTTP-based, multi-client | Windows-oriented, requires the service running |
+
+## See Also
+
+- [BENCHLAB PyTools Documentation](../../README.md) - Main PyTools documentation
+- [FastAPI Telemetry Server README](../restapi/readme.md)
+- [MQTT Publisher README](../mqtt/README.md)
+- [Config Tool README](../config/README.md)
+- [Link README](../link/README.md)

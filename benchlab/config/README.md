@@ -36,7 +36,7 @@ pip install pywin32
 Simply run the tool without arguments to enter interactive mode:
 
 ```bash
-python benchlab.py -config
+python -m benchlab -config
 ```
 
 This will:
@@ -51,23 +51,23 @@ This will:
 
 ```bash
 # List devices via direct serial
-python benchlab.py -config --list
+python -m benchlab -config --list
 
 # List devices via named pipe (Windows only)
-python benchlab.py -config --list --source named_pipe
+python -m benchlab -config --list --source named_pipe
 ```
 
 #### Export Configuration
 
 ```bash
 # Export from first available device
-python benchlab.py -config --export my_config.json
+python -m benchlab -config --export my_config.json
 
 # Export from specific device
-python benchlab.py -config --export my_config.json --device COM4
+python -m benchlab -config --export my_config.json --device COM4
 
 # Export via named pipe
-python benchlab.py -config --export my_config.json --source named_pipe
+python -m benchlab -config --export my_config.json --source named_pipe
 ```
 
 #### Import Configuration
@@ -76,18 +76,18 @@ python benchlab.py -config --export my_config.json --source named_pipe
 # Import configuration - shows a diff of what would actually change on the
 # device (current value -> new value, only changed fields), then asks for
 # confirmation before applying
-python benchlab.py -config --import my_config.json
+python -m benchlab -config --import my_config.json
 
 # Preview changes without applying anything (still connects to the device
 # and reads its current config to compute the diff)
-python benchlab.py -config --import my_config.json --dry-run
+python -m benchlab -config --import my_config.json --dry-run
 
 # Apply without the confirmation prompt (diff is still printed) - for
 # scripts/automation
-python benchlab.py -config --import my_config.json --yes
+python -m benchlab -config --import my_config.json --yes
 
 # Import via named pipe
-python benchlab.py -config --import my_config.json --source named_pipe
+python -m benchlab -config --import my_config.json --source named_pipe
 ```
 
 ## JSON Configuration Format
@@ -187,7 +187,7 @@ Example configurations are provided in `benchlab/config/examples/`:
 Set all fans to 50% fixed speed:
 
 ```bash
-python benchlab.py -config --import benchlab/config/examples/simple_fan.json
+python -m benchlab -config --import benchlab/config/examples/simple_fan.json
 ```
 
 ### RGB Lighting
@@ -195,7 +195,7 @@ python benchlab.py -config --import benchlab/config/examples/simple_fan.json
 Set RGB to solid blue:
 
 ```bash
-python benchlab.py -config --import benchlab/config/examples/rgb_lighting.json
+python -m benchlab -config --import benchlab/config/examples/rgb_lighting.json
 ```
 
 ### Complete Configuration
@@ -203,7 +203,7 @@ python benchlab.py -config --import benchlab/config/examples/rgb_lighting.json
 Full device setup with fan curves, RGB, and device name:
 
 ```bash
-python benchlab.py -config --import benchlab/config/examples/complete_config.json
+python -m benchlab -config --import benchlab/config/examples/complete_config.json
 ```
 
 ## Data Sources
