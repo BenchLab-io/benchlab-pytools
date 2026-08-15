@@ -36,7 +36,7 @@ Designed for integration with dashboards, monitoring platforms, or other MQTT co
 Install the required dependencies for the MQTT module:
 
 ```
-pip install -r requirements_mqtt.txt
+pip install -r requirements.txt
 ```
 
 Dependencies include:
@@ -78,6 +78,19 @@ export MQTT_PATH=/mqtt
 | `MQTT_PROTOCOL` | `MQTTv311` | MQTT protocol version |
 | `MQTT_QOS` | `0` | Quality of Service (0, 1, or 2) |
 | `MQTT_PATH` | None | WebSocket path (if transport is `websockets`) |
+| `MQTT_TOPIC_PREFIX` | `benchlab` | Prefix for published topics, e.g. `<prefix>/<device_uid>/telemetry` |
+| `MQTT_POLL_RATE` | `1` (or `mqtt.config`'s `poll_rate`) | Seconds between telemetry publishes per device |
+
+### Poll Rate via Config File
+
+The poll rate can also be set via a local `mqtt.config` file instead of `MQTT_POLL_RATE`. Copy `mqtt.config_template` to `mqtt.config` in this directory and edit the `poll_rate` value:
+
+```ini
+[settings]
+poll_rate = 0.5
+```
+
+`MQTT_POLL_RATE`, if set, takes precedence over the config file.
 
 ---
 
@@ -97,11 +110,15 @@ Behavior:
 
 ### MQTT Topics
 
+Topics are published under a configurable prefix (`MQTT_TOPIC_PREFIX`, default `benchlab`):
+
 #### Device Info
 
 ```
-clients/client_uuid/links/balena_uuid/benchlabs/<device_uid>/info
+<topic_prefix>/<device_uid>/info
 ```
+
+Published with `retain=True` so late subscribers can discover the device without waiting for the next info publish.
 
 Payload:
 
@@ -116,7 +133,7 @@ Payload:
 #### Telemetry
 
 ```
-clients/client_uuid/links/balena_uuid/benchlabs/<device_uid>/telemetry
+<topic_prefix>/<device_uid>/telemetry
 ```
 
 Payload:

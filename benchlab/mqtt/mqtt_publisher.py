@@ -112,6 +112,17 @@ def map_sensors_to_payload(sensor_struct, timestamp):
         logger.error("Failed to translate sensor_struct: %s", e)
         return None
 
+def reason_code_lookup(rc):
+    """Resolve an MQTTV5 reason string for *rc*.
+
+    paho-mqtt's v2 callback API passes a ReasonCode object (unhashable, but
+    comparable to int) rather than a plain int, so dict lookups must key off
+    its .value instead of the object itself.
+    """
+    rc_value = getattr(rc, "value", rc)
+    return MQTTV5_REASON_CODES.get(rc_value, f"Unknown reason code {rc_value}")
+
+
 def mqtt_publish(client, topic, payload, qos=0, retain=False):
     """
     Publish payload to MQTT topic if payload is not empty.
@@ -187,7 +198,7 @@ def device_thread(device, cfg, publish_interval=1):
                 logger.info("MQTT client %s connected", local_client_id)
                 c.connected_flag = True
             else:
-                reason = MQTTV5_REASON_CODES.get(rc, f"Unknown reason code {rc}")
+                reason = reason_code_lookup(rc)
                 logger.error(
                     "MQTT client %s failed to connect: rc=%s (%s)",
                     local_client_id,
@@ -200,7 +211,7 @@ def device_thread(device, cfg, publish_interval=1):
             if rc == 0:
                 logger.info("MQTT client %s disconnected cleanly", local_client_id)
             else:
-                reason = MQTTV5_REASON_CODES.get(rc, f"Unknown reason code {rc}")
+                reason = reason_code_lookup(rc)
                 logger.warning(
                     "MQTT client %s disconnected unexpectedly: rc=%s (%s)",
                     local_client_id,
@@ -214,7 +225,7 @@ def device_thread(device, cfg, publish_interval=1):
                 logger.info("MQTT client %s connected", local_client_id)
                 c.connected_flag = True
             else:
-                reason = MQTTV5_REASON_CODES.get(rc, f"Unknown reason code {rc}")
+                reason = reason_code_lookup(rc)
                 logger.error(
                     "MQTT client %s failed to connect: rc=%s (%s)",
                     local_client_id,
@@ -226,7 +237,7 @@ def device_thread(device, cfg, publish_interval=1):
             if rc == 0:
                 logger.info("MQTT client %s disconnected cleanly", local_client_id)
             else:
-                reason = MQTTV5_REASON_CODES.get(rc, f"Unknown reason code {rc}")
+                reason = reason_code_lookup(rc)
                 logger.warning(
                     "MQTT client %s disconnected unexpectedly: rc=%s (%s)",
                     local_client_id,
@@ -354,6 +365,10 @@ def device_thread(device, cfg, publish_interval=1):
         # Unregister device from the DeviceRegistry
         registry = DeviceRegistry.get_instance()
         registry.unregister(uid)
+
+        # Remove this device's stop event so device_stop_events doesn't grow
+        # unbounded across reconnects/hot-plug cycles.
+        device_stop_events.pop(uid, None)
 
         logger.info("Stopping MQTT client for %s (%s)", uid, port)
         if ser:

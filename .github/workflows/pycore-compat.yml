@@ -67,6 +67,9 @@ jobs:
       - name: Test - wigidash
         run: pytest benchlab/wigidash/test_wigidash.py -v -k "not mqtt"
 
+      - name: Test - mqtt publisher
+        run: pytest benchlab/mqtt/test_mqtt_publisher.py -v
+
   latest:
     name: Import + test against latest pycore (PyPI)
     runs-on: windows-latest
@@ -122,3 +125,6 @@ jobs:
 
       - name: Test - wigidash
         run: pytest benchlab/wigidash/test_wigidash.py -v -k "not mqtt"
+
+      - name: Test - mqtt publisher
+        run: pytest benchlab/mqtt/test_mqtt_publisher.py -v
