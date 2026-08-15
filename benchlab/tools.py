@@ -9,9 +9,6 @@ import importlib.util
 import logging
 from pathlib import Path
 
-import sys as _sys
-import os as _os
-_sys.path.insert(0, _os.path.dirname(_os.path.dirname(__file__)))
 from bootstrap import install_requirements_file
 
 logger = logging.getLogger("benchlab.launcher")

@@ -159,6 +159,31 @@ def _setup_source_from_args(args) -> bool:
     return ready
 
 
+def _export_link_env(args) -> None:
+    """Mirror --remote-*/--no-tls/--topic-pattern CLI flags into env vars.
+
+    link_main.py's _resolve_config already falls back to these env vars
+    (REMOTE_MQTT_HOST etc.) when no args object provides a value, so
+    exporting here is what lets a spawned/multi-tool `link` process
+    (launched via launcher.py's _spawn_tool_in_terminal, which parses
+    fresh argv with none of these flags) still pick up the config the
+    user passed on the parent process's command line.
+    """
+    mapping = {
+        "remote_host": "REMOTE_MQTT_HOST",
+        "remote_port": "REMOTE_MQTT_PORT",
+        "remote_user": "REMOTE_MQTT_USER",
+        "remote_pass": "REMOTE_MQTT_PASS",
+        "topic_pattern": "LINK_TOPIC_PATTERN",
+    }
+    for attr, env_key in mapping.items():
+        val = getattr(args, attr, None)
+        if val is not None:
+            os.environ[env_key] = str(val)
+    if getattr(args, "no_tls", False):
+        os.environ["REMOTE_MQTT_TLS"] = "false"
+
+
 # ──────────────────────────────────────────────────────────────
 # Per-tool CLI Dispatch Helpers
 # ──────────────────────────────────────────────────────────────
@@ -263,6 +288,7 @@ def launch_mode() -> None:
             print("MQTT module not available in this build.")
 
     elif args.link:
+        _export_link_env(args)
         _run_with_source(args,
                          "benchlab.link.link_main", "run_link",
                          lambda fn: fn(args), "Link")

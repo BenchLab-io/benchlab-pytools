@@ -42,11 +42,8 @@ except ImportError:
 import pytest
 
 from benchlab.core.discovery import discover_devices
-from benchlab.main import (
-    CONSUMER_TOOLS,
-    check_and_setup_source,
-    _cleanup_all_services,
-)
+from benchlab.main import CONSUMER_TOOLS, check_and_setup_source
+from benchlab.sources import cleanup_all_services as _cleanup_all_services
 
 # ---------------------------------------------------------------------------
 # Constants
