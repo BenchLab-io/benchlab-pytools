@@ -193,11 +193,10 @@ class DirectDataSource(DataSource):
                     product_id = info.get(
                         'ProductId',
                         self._pycore['BENCHLAB_ORIGINAL_PRODUCT_ID'])
-                    variant = (
-                        "BL2"
-                        if product_id
-                        == self._pycore['BENCHLAB_BL2_PRODUCT_ID']
-                        else "ORIGINAL")
+                    is_bl2 = (
+                        product_id
+                        == self._pycore['BENCHLAB_BL2_PRODUCT_ID'])
+                    variant = "BL2" if is_bl2 else "ORIGINAL"
                     self._device_info[uid] = {
                         **info, 'uid': uid, 'port': port, 'variant': variant}
                     self._ser_handles[uid] = ser
@@ -272,12 +271,10 @@ class DirectDataSource(DataSource):
                                 'ProductId',
                                 self._pycore[
                                     'BENCHLAB_ORIGINAL_PRODUCT_ID'])
-                            variant = (
-                                "BL2"
-                                if product_id
-                                == self._pycore[
-                                    'BENCHLAB_BL2_PRODUCT_ID']
-                                else "ORIGINAL")
+                            is_bl2 = (
+                                product_id
+                                == self._pycore['BENCHLAB_BL2_PRODUCT_ID'])
+                            variant = "BL2" if is_bl2 else "ORIGINAL"
                             devices.append({
                                 'uid': uid,
                                 'port': port,
