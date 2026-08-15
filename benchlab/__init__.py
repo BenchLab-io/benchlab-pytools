@@ -11,4 +11,4 @@ _repo_root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
 if _repo_root not in _sys.path:
     _sys.path.insert(0, _repo_root)
 
-__version__ = "0.8.2"
+__version__ = "3.0.0"
