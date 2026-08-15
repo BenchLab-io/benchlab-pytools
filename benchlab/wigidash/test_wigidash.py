@@ -8,13 +8,16 @@ BenchLab hardware is required:
   contexts/threads when called concurrently for the same port
 - telemetry_step not mutating the caller's input dict in place
 - The touch debounce threshold in benchlab_overview/benchlab_graph/benchlab_fleet
+- The Linux USB-permissions preflight check and udev rule detection
 """
 
+import os
 import threading
 import time
 
 from benchlab.wigidash.wigidash_manager import WigidashManager
 from benchlab.wigidash.benchlab_telemetry import telemetry_step, TelemetryContext, TelemetryHistory
+from benchlab.wigidash import wigidash_usb
 
 
 class FakeDataSource:
@@ -163,4 +166,96 @@ def test_overview_debounce_rejects_rapid_touch_and_accepts_later_one():
     overview.last_touch_time = int(time.monotonic() * 1000) - 200
     overview.check_touch(FakeTouch(hit_x, hit_y))
     assert overview.requested_graph_metrics is not None
+
+
+# ----------------------------------------------------------------------
+# Linux USB permissions preflight (issue: no plugdev/udev check on Linux)
+# ----------------------------------------------------------------------
+
+def test_udev_rule_exists_matches_vid_pid(tmp_path):
+    rules_dir = tmp_path / "rules.d"
+    rules_dir.mkdir()
+    (rules_dir / "99-wigidash.rules").write_text(
+        'SUBSYSTEM=="usb", ATTR{idVendor}=="28da", ATTR{idProduct}=="ef01", TAG+="uaccess"\n'
+    )
+
+    assert wigidash_usb._udev_rule_exists(0x28DA, 0xEF01, rules_dirs=(str(rules_dir),)) is True
+
+
+def test_udev_rule_exists_false_when_no_matching_rule(tmp_path):
+    rules_dir = tmp_path / "rules.d"
+    rules_dir.mkdir()
+    (rules_dir / "50-other-device.rules").write_text(
+        'SUBSYSTEM=="usb", ATTR{idVendor}=="1234", ATTR{idProduct}=="5678", TAG+="uaccess"\n'
+    )
+
+    assert wigidash_usb._udev_rule_exists(0x28DA, 0xEF01, rules_dirs=(str(rules_dir),)) is False
+
+
+def test_udev_rule_exists_false_when_dir_missing(tmp_path):
+    missing_dir = tmp_path / "does_not_exist"
+    assert wigidash_usb._udev_rule_exists(0x28DA, 0xEF01, rules_dirs=(str(missing_dir),)) is False
+
+
+def test_check_linux_usb_permissions_skipped_on_non_linux(monkeypatch):
+    monkeypatch.setattr(wigidash_usb, "is_linux", False)
+    ok, hint = wigidash_usb.check_linux_usb_permissions()
+    assert ok is True
+    assert hint is None
+
+
+def test_check_linux_usb_permissions_ok_as_root(monkeypatch):
+    monkeypatch.setattr(wigidash_usb, "is_linux", True)
+    monkeypatch.setattr(os, "geteuid", lambda: 0, raising=False)
+    ok, hint = wigidash_usb.check_linux_usb_permissions()
+    assert ok is True
+    assert hint is None
+
+
+def test_check_linux_usb_permissions_ok_with_matching_rule(monkeypatch):
+    monkeypatch.setattr(wigidash_usb, "is_linux", True)
+    monkeypatch.setattr(os, "geteuid", lambda: 1000, raising=False)
+    monkeypatch.setattr(wigidash_usb, "_udev_rule_exists", lambda *a, **kw: True)
+    ok, hint = wigidash_usb.check_linux_usb_permissions()
+    assert ok is True
+    assert hint is None
+
+
+def test_check_linux_usb_permissions_fails_with_actionable_message(monkeypatch):
+    monkeypatch.setattr(wigidash_usb, "is_linux", True)
+    monkeypatch.setattr(os, "geteuid", lambda: 1000, raising=False)
+    monkeypatch.setattr(wigidash_usb, "_udev_rule_exists", lambda *a, **kw: False)
+    monkeypatch.setattr(wigidash_usb.usb.core, "find", lambda **kw: [])
+
+    ok, hint = wigidash_usb.check_linux_usb_permissions(0x28DA, 0xEF01)
+    assert ok is False
+    assert "udev" in hint.lower()
+    assert "28da" in hint.lower()
+    assert "ef01" in hint.lower()
+
+
+def test_check_linux_usb_permissions_ok_when_device_node_accessible(monkeypatch):
+    """No udev rule found, but the device node is already accessible (e.g.
+    user granted access some other way) — should not report a failure."""
+    monkeypatch.setattr(wigidash_usb, "is_linux", True)
+    monkeypatch.setattr(os, "geteuid", lambda: 1000, raising=False)
+    monkeypatch.setattr(wigidash_usb, "_udev_rule_exists", lambda *a, **kw: False)
+
+    class FakeDev:
+        bus = 1
+        address = 5
+
+    monkeypatch.setattr(wigidash_usb.usb.core, "find", lambda **kw: [FakeDev()])
+    monkeypatch.setattr(os.path, "exists", lambda p: True)
+    monkeypatch.setattr(os, "access", lambda p, m: True)
+
+    ok, hint = wigidash_usb.check_linux_usb_permissions(0x28DA, 0xEF01)
+    assert ok is True
+    assert hint is None
+
+
+def test_is_permission_error_detects_known_signals():
+    assert wigidash_usb._is_permission_error(Exception("[Errno 13] Access denied")) is True
+    assert wigidash_usb._is_permission_error(Exception("Operation not permitted")) is True
+    assert wigidash_usb._is_permission_error(Exception("Resource busy")) is False
 

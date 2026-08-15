@@ -51,6 +51,30 @@ Dependencies include:
 - pyusb
 - benchlab core modules
 
+### Linux Setup
+
+`pyusb` needs a working `libusb-1.0` backend and permission to access the WigiDash's USB device node as a non-root user.
+
+1. Install libusb (relevant on minimal/ARM images, e.g. Raspberry Pi OS Lite, which may not ship it by default):
+
+   ```
+   sudo apt install libusb-1.0-0
+   ```
+
+2. Grant non-root USB access by creating `/etc/udev/rules.d/99-wigidash.rules`:
+
+   ```
+   SUBSYSTEM=="usb", ATTR{idVendor}=="28da", ATTR{idProduct}=="ef01", TAG+="uaccess"
+   ```
+
+   Then reload udev rules:
+
+   ```
+   sudo udevadm control --reload-rules && sudo udevadm trigger
+   ```
+
+   Without this rule, `pyusb` calls typically fail with an `Access denied (insufficient permissions)` USB error unless run as root. On startup, `scan_wigidash()` runs a best-effort check for this and logs an actionable warning (with the same rule text above) if it looks like access isn't set up — this is a diagnostic only, not a hard requirement check, since udev setups vary across distros.
+
 
 ---
 
