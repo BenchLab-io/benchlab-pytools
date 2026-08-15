@@ -147,7 +147,8 @@ class EnhancedCSVLogger:
                     dev.firmware}")
 
         selection = input(
-            "\nEnter device numbers (comma-separated), 'all', or Enter for all: "
+            "\nEnter device numbers (comma-separated), 'all', "
+            "or Enter for all: "
         ).strip().lower()
 
         if not selection or selection == "all":

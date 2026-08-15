@@ -1,6 +1,7 @@
 """
 Smart Retry Logic for BENCHLAB CSV Logger
-Provides intelligent retry strategies with exponential backoff, jitter, and circuit breaker patterns
+Provides intelligent retry strategies with exponential backoff, jitter,
+and circuit breaker patterns
 """
 
 import time
@@ -68,7 +69,8 @@ class CircuitBreaker:
         """Execute function with circuit breaker protection"""
         with self.lock:
             if self.state == CircuitState.OPEN:
-                if time.time() - self.last_failure_time > self.config.circuit_recovery_timeout:
+                since_failure = time.time() - self.last_failure_time
+                if since_failure > self.config.circuit_recovery_timeout:
                     self.logger.info(
                         "Circuit breaker: transitioning to half-open")
                     self.state = CircuitState.HALF_OPEN
@@ -151,7 +153,8 @@ class SmartRetryManager:
                 delay = self._calculate_delay(attempt)
 
                 self.logger.warning(
-                    f"Attempt {attempt + 1}/{self.config.max_retries + 1} failed for {func.__name__}: {e}. "
+                    f"Attempt {attempt + 1}/{self.config.max_retries + 1} "
+                    f"failed for {func.__name__}: {e}. "
                     f"Retrying in {delay:.2f}s"
                 )
 
@@ -178,10 +181,13 @@ class SmartRetryManager:
         elif self.config.strategy == RetryStrategy.LINEAR_BACKOFF:
             delay = self.config.base_delay * (attempt + 1)
 
-        elif self.config.strategy in [RetryStrategy.EXPONENTIAL_BACKOFF, RetryStrategy.JITTERED_EXPONENTIAL]:
+        elif self.config.strategy in [
+                RetryStrategy.EXPONENTIAL_BACKOFF,
+                RetryStrategy.JITTERED_EXPONENTIAL]:
             delay = self.config.base_delay * (2 ** attempt)
 
-            if self.config.jitter and self.config.strategy == RetryStrategy.JITTERED_EXPONENTIAL:
+            if (self.config.jitter and self.config.strategy ==
+                    RetryStrategy.JITTERED_EXPONENTIAL):
                 # Add jitter
                 jitter_amount = delay * self.config.jitter_factor
                 delay += random.uniform(-jitter_amount, jitter_amount)
@@ -245,7 +251,8 @@ class AdaptiveRetryManager:
                 delay = self._calculate_adaptive_delay(attempt)
 
                 self.logger.warning(
-                    f"Attempt {attempt + 1}/{self.config.max_retries + 1} failed for {func.__name__}: {e}. "
+                    f"Attempt {attempt + 1}/{self.config.max_retries + 1} "
+                    f"failed for {func.__name__}: {e}. "
                     f"Using adaptive delay: {delay:.2f}s"
                 )
 

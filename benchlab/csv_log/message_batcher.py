@@ -19,7 +19,8 @@ class BatchConfig:
     """Configuration for message batching"""
     batch_size: int = 100
     flush_interval: float = 30.0      # seconds between automatic flushes
-    max_buffer_size: int = 10000      # maximum messages in buffer before dropping
+    # maximum messages in buffer before dropping
+    max_buffer_size: int = 10000
     flush_on_shutdown: bool = True
     enable_metrics: bool = True
 
@@ -89,8 +90,10 @@ class MessageBatcher:
             self.metrics.total_flushes += 1
             self.metrics.last_flush_time = elapsed
             if self.metrics.total_flushes > 0:
-                self.metrics.avg_flush_time = ((self.metrics.avg_flush_time * (
-                    self.metrics.total_flushes - 1) + elapsed) / self.metrics.total_flushes)
+                n = self.metrics.total_flushes
+                self.metrics.avg_flush_time = (
+                    (self.metrics.avg_flush_time * (n - 1) + elapsed) / n
+                )
             self.logger.debug(
                 f"Flushed {
                     len(messages_to_flush)} messages in {
@@ -269,7 +272,8 @@ class CSVBatchWriter:
 
 
 class BatchingLogger:
-    """High-level batching logger combining MessageBatcher and CSVBatchWriter."""
+    """High-level batching logger combining MessageBatcher and
+    CSVBatchWriter."""
 
     def __init__(
             self,
@@ -295,8 +299,9 @@ class BatchingLogger:
 
     def flush(self) -> bool:
         """Flush all buffered messages to disk."""
-        self.batcher.flush()        # flushes batcher buffer → writer.write_batch()
-        self.writer.flush_all()     # flushes writer device buffers → disk
+        # flushes batcher buffer -> writer.write_batch()
+        self.batcher.flush()
+        self.writer.flush_all()     # flushes writer device buffers -> disk
         return True
 
     def set_flush_callback(self, callback: Callable):
