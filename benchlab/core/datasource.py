@@ -410,11 +410,53 @@ class FastAPIDataSource(DataSource):
         return "fastapi"
 
 
+def resolve_mqtt_protocol(value, mqtt_module):
+    """Resolve *value* to one of paho's MQTTv31/MQTTv311/MQTTv5 int constants.
+
+    Accepts the int constants themselves, or common name/version strings
+    (case-insensitive, e.g. "MQTTv5", "v3.1.1", "5"). Raises ValueError
+    immediately on anything unrecognized, so a bad MQTT_PROTOCOL value is
+    caught at startup instead of crashing silently inside paho's background
+    network thread once a broker actually accepts the connection.
+
+    *mqtt_module* is the imported ``paho.mqtt.client`` module, passed in
+    rather than imported at module scope here since paho-mqtt is an
+    optional/lazy dependency of this module (see MQTTDataSource.__init__).
+    """
+    aliases = {
+        "3": mqtt_module.MQTTv31,
+        "3.1": mqtt_module.MQTTv31,
+        "v3.1": mqtt_module.MQTTv31,
+        "mqttv31": mqtt_module.MQTTv31,
+        "4": mqtt_module.MQTTv311,
+        "3.1.1": mqtt_module.MQTTv311,
+        "v3.1.1": mqtt_module.MQTTv311,
+        "mqttv311": mqtt_module.MQTTv311,
+        "mqttv3.1.1": mqtt_module.MQTTv311,
+        "5": mqtt_module.MQTTv5,
+        "v5": mqtt_module.MQTTv5,
+        "mqttv5": mqtt_module.MQTTv5,
+    }
+
+    if value in (mqtt_module.MQTTv31, mqtt_module.MQTTv311, mqtt_module.MQTTv5):
+        return value
+
+    key = str(value).strip().lower()
+    if key in aliases:
+        return aliases[key]
+
+    raise ValueError(
+        f"Unrecognized MQTT_PROTOCOL value: {value!r}. "
+        f"Expected one of: MQTTv31 (3.1), MQTTv311 (3.1.1, default), MQTTv5."
+    )
+
+
 class MQTTDataSource(DataSource):
     """Data source that subscribes to an MQTT broker."""
 
-    def __init__(self, *, config: Optional["MQTTConfig"] = None, broker: str = "localhost", port: int = 1883, topic_prefix: str = "benchlab", timeout: float = 5.0):
+    def __init__(self, *, config: Optional["MQTTConfig"] = None, broker: str = "localhost", port: int = 1883, topic_prefix: str = "benchlab", timeout: float = 5.0, protocol: Optional[str] = None):
         from .config import MQTTConfig
+        import os
 
         if config is None:
             config = MQTTConfig(broker=broker, port=port, topic_prefix=topic_prefix, timeout=timeout)
@@ -422,37 +464,42 @@ class MQTTDataSource(DataSource):
         self.port = config.port
         self.topic_prefix = config.topic_prefix
         self.timeout = config.timeout
+        # Falls back to MQTT_PROTOCOL env var (same variable the publisher
+        # side reads) so both producer and consumer resolve consistently,
+        # then to MQTTv311 if neither is set.
+        self._protocol_setting = protocol if protocol is not None else os.getenv("MQTT_PROTOCOL", "MQTTv311")
         self._connected = False
         self._client = None
         self._lock = threading.Lock()
         self._latest_data: Dict[str, Dict[str, Any]] = {}
         self._device_info: Dict[str, Dict[str, Any]] = {}
         self._stop_event = threading.Event()
-        
+
         try:
             import paho.mqtt.client as mqtt
             self._mqtt = mqtt
         except ImportError:
             logger.error("paho-mqtt library not available")
             self._mqtt = None
-    
+
     @retry(RetryPolicy(max_retries=3, backoff_factor=2.0, base_delay=0.5, allowed_exceptions=(Exception,)))
     def connect(self) -> bool:
         if self._mqtt is None:
             return False
-        
+
         try:
+            resolved_protocol = resolve_mqtt_protocol(self._protocol_setting, self._mqtt)
             try:
                 from paho.mqtt.enums import CallbackAPIVersion
                 self._client = self._mqtt.Client(
                     callback_api_version=CallbackAPIVersion.VERSION2,
                     client_id=f"benchlab_datasource_{int(time.time())}",
-                    protocol=self._mqtt.MQTTv5 if hasattr(self._mqtt, 'MQTTv5') else self._mqtt.MQTTv311
+                    protocol=resolved_protocol
                 )
             except (ImportError, TypeError):
                 self._client = self._mqtt.Client(
                     client_id=f"benchlab_datasource_{int(time.time())}",
-                    protocol=self._mqtt.MQTTv311
+                    protocol=resolved_protocol
                 )
             self._client.on_connect = self._on_connect
             self._client.on_message = self._on_message
@@ -526,7 +573,7 @@ class MQTTDataSource(DataSource):
         try:
             payload = json.loads(msg.payload.decode('utf-8'))
             parts = msg.topic.split('/')
-            if len(parts) >= 3 and parts[0] == 'benchlab':
+            if len(parts) >= 3 and parts[0] == self.topic_prefix:
                 uid = parts[1]
                 msg_type = parts[2] if len(parts) > 2 else None
                 
