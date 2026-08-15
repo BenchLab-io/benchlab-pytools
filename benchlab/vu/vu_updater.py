@@ -405,9 +405,11 @@ def run_updater(args=None):
         logger.info(f"VU server already running at {server_url}")
     else:
         server_proc = start_vu_server()
-        logger.info(f"Started local VU server at {server_url}")
         if server_proc:
+            logger.info(f"Started local VU server at {server_url}")
             threading.Thread(target=forward_logs, args=(server_proc,), daemon=True).start()
+        else:
+            logger.error("Failed to start local VU server — dial updates will not work.")
 
     time.sleep(1)
 

@@ -28,6 +28,7 @@ jobs:
           pip install -r benchlab/csv_log/requirements.txt
           pip install -r benchlab/graph/requirements.txt
           pip install -r benchlab/wigidash/requirements.txt
+          pip install -r benchlab/vu/requirements.txt
           pip install pytest
 
       - name: Import smoke test
@@ -41,7 +42,9 @@ jobs:
           benchlab.wigidash.wigidash_manager, benchlab.wigidash.wigidash_usb,
           benchlab.wigidash.wigidash_device, benchlab.wigidash.wigidash_session,
           benchlab.wigidash.benchlab_telemetry, benchlab.wigidash.benchlab_fleet,
-          benchlab.wigidash.benchlab_overview, benchlab.wigidash.benchlab_graph"
+          benchlab.wigidash.benchlab_overview, benchlab.wigidash.benchlab_graph,
+          benchlab.vu.vu_server_manager, benchlab.vu.vu_server_config,
+          benchlab.vu.devices, benchlab.vu.vu_tui, benchlab.vu.vu_updater"
 
       - name: Test - core data sources
         run: pytest tests/test_data_sources.py -v -k "not mqtt"
@@ -72,6 +75,15 @@ jobs:
 
       - name: Test - mqtt datasource
         run: pytest tests/test_mqtt_datasource.py -v
+
+      - name: Test - vu server manager
+        run: pytest benchlab/vu/test_vu_server_manager.py -v
+
+      - name: Test - vu server config
+        run: pytest benchlab/vu/test_vu_server_config.py -v
+
+      - name: Test - vu devices config loading
+        run: pytest benchlab/vu/test_devices.py -v
 
   latest:
     name: Import + test against latest pycore (PyPI)
@@ -89,6 +101,7 @@ jobs:
           pip install -r benchlab/csv_log/requirements.txt
           pip install -r benchlab/graph/requirements.txt
           pip install -r benchlab/wigidash/requirements.txt
+          pip install -r benchlab/vu/requirements.txt
           pip install pytest
           pip install --upgrade benchlab-pycore
 
@@ -103,7 +116,9 @@ jobs:
           benchlab.wigidash.wigidash_manager, benchlab.wigidash.wigidash_usb,
           benchlab.wigidash.wigidash_device, benchlab.wigidash.wigidash_session,
           benchlab.wigidash.benchlab_telemetry, benchlab.wigidash.benchlab_fleet,
-          benchlab.wigidash.benchlab_overview, benchlab.wigidash.benchlab_graph"
+          benchlab.wigidash.benchlab_overview, benchlab.wigidash.benchlab_graph,
+          benchlab.vu.vu_server_manager, benchlab.vu.vu_server_config,
+          benchlab.vu.devices, benchlab.vu.vu_tui, benchlab.vu.vu_updater"
 
       - name: Test - core data sources
         run: pytest tests/test_data_sources.py -v -k "not mqtt"
@@ -134,3 +149,12 @@ jobs:
 
       - name: Test - mqtt datasource
         run: pytest tests/test_mqtt_datasource.py -v
+
+      - name: Test - vu server manager
+        run: pytest benchlab/vu/test_vu_server_manager.py -v
+
+      - name: Test - vu server config
+        run: pytest benchlab/vu/test_vu_server_config.py -v
+
+      - name: Test - vu devices config loading
+        run: pytest benchlab/vu/test_devices.py -v

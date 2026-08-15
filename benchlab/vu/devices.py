@@ -9,31 +9,46 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), "vu_server.config")
-
 DUMMY_UID  = "0000000000000000"
 DUMMY_DIAL = (DUMMY_UID, "No Dial")
 
 CONFIG_PATH   = os.path.join(os.path.dirname(__file__), "vu_server.config")
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "vu_server.config_template")
 
+_DEFAULT_VU_CONFIG = {"vu_server_url": "http://localhost:5340", "api_key": "", "logo_file": ""}
+
+
+def load_vu_server_config(config_path=CONFIG_PATH, template_path=TEMPLATE_PATH):
+    """Load vu_server.config, creating it from the template (or a hardcoded
+    default) if missing. Never raises — any failure at any step falls back
+    to _DEFAULT_VU_CONFIG so a malformed config or template can't crash
+    import of this module.
+    """
+    try:
+        with open(config_path, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        try:
+            if os.path.exists(template_path):
+                with open(template_path, "r") as f:
+                    cfg = json.load(f)
+                logger.info("Created VU server config from template")
+            else:
+                cfg = dict(_DEFAULT_VU_CONFIG)
+                logger.info("Created default VU server config")
+            with open(config_path, "w") as f:
+                json.dump(cfg, f, indent=2)
+            return cfg
+        except Exception as e:
+            logger.error(f"Failed to load VU server config template: {e}")
+            return dict(_DEFAULT_VU_CONFIG)
+    except Exception as e:
+        logger.error(f"Failed to load VU server config: {e}")
+        return dict(_DEFAULT_VU_CONFIG)
+
+
 # --- Load VU server config ---
-try:
-    with open(CONFIG_PATH, "r") as f:
-        VU_CONFIG = json.load(f)
-except FileNotFoundError:
-    if os.path.exists(TEMPLATE_PATH):
-        with open(TEMPLATE_PATH, "r") as f:
-            VU_CONFIG = json.load(f)
-        logger.info("Created VU server config from template")
-    else:
-        VU_CONFIG = {"vu_server_url": "http://localhost:5340", "api_key": "", "logo_file": ""}
-        logger.info("Created default VU server config")
-    with open(CONFIG_PATH, "w") as f:
-        json.dump(VU_CONFIG, f, indent=2)
-except Exception as e:
-    logger.error(f"Failed to load VU server config: {e}")
-    VU_CONFIG = {"vu_server_url": "http://localhost:5340", "api_key": "", "logo_file": ""}
+VU_CONFIG = load_vu_server_config()
 
 VU_SERVER_URL = VU_CONFIG.get("vu_server_url", "http://localhost:5340")
 API_KEY       = VU_CONFIG.get("api_key", "")

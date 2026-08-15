@@ -181,11 +181,9 @@ class VUTUI:
             if resp.status_code in (200, 201):
                 return True
             else:
-                import logging
-                logging.warning(f"Failed to update dial {dial_uid} name on server: {resp.status_code} {resp.text}")
+                logger.warning(f"Failed to update dial {dial_uid} name on server: {resp.status_code} {resp.text}")
         except Exception as e:
-            import logging
-            logging.warning(f"Exception updating dial {dial_uid} name on server: {e}")
+            logger.warning(f"Exception updating dial {dial_uid} name on server: {e}")
         return False
 
     # -------------------- HELPERS --------------------
@@ -741,9 +739,16 @@ def launch_vu_config(args=None):
         ds_kwargs["broker"]   = args.mqtt_broker
         ds_kwargs["port"]     = args.mqtt_port
 
-    datasource = DataSourceManager(source_type=args.source, **ds_kwargs)
-    if not datasource.connect():
-        logger.warning(f"Could not connect to {args.source} datasource — sensor list may be empty")
+    try:
+        datasource = DataSourceManager(source_type=args.source, **ds_kwargs)
+        if not datasource.connect():
+            logger.warning(f"Could not connect to {args.source} datasource — sensor list may be empty")
+    except Exception:
+        # run_vu_tui's own cleanup (which terminates server_proc) never runs
+        # if we fail before reaching curses.wrapper below, so terminate it
+        # here instead of leaking the auto-started server process.
+        terminate_vu_server(server_proc)
+        raise
 
     try:
         curses.wrapper(run_vu_tui, server_proc, datasource)

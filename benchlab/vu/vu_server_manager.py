@@ -99,12 +99,6 @@ def start_vu_server() -> subprocess.Popen | None:
         "logo_file": str(server_cfg.get("logo_file", "assets/bl_logo_144x200.png"))
     }
 
-    try:
-        VU_SERVER_CONFIG.write_text(json.dumps(new_cfg, indent=2))
-        logger.info(f"Updated {VU_SERVER_CONFIG} with {new_cfg['vu_server_url']}")
-    except Exception as e:
-        logger.warning(f"Failed to write {VU_SERVER_CONFIG}: {e}")
-
     # Ensure VU-Server directory exists
     if not VU_SERVER_DIR.exists():
         logger.error(f"Missing server directory: {VU_SERVER_DIR}")
@@ -132,6 +126,15 @@ def start_vu_server() -> subprocess.Popen | None:
             break
     else:
         logger.error("Failed to verify VU server after startup.")
+        return None
+
+    # Only persist the new config once the server is confirmed up, so a
+    # failed launch doesn't leave vu_server.config pointing at nothing.
+    try:
+        VU_SERVER_CONFIG.write_text(json.dumps(new_cfg, indent=2))
+        logger.info(f"Updated {VU_SERVER_CONFIG} with {new_cfg['vu_server_url']}")
+    except Exception as e:
+        logger.warning(f"Failed to write {VU_SERVER_CONFIG}: {e}")
 
     return proc
 
@@ -148,5 +151,12 @@ def terminate_vu_server(proc: subprocess.Popen | None):
         else:
             os.killpg(os.getpgid(proc.pid), signal.SIGINT)
         proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        logger.warning("VU server did not exit gracefully — force killing.")
+        try:
+            proc.kill()
+            proc.wait(timeout=5)
+        except Exception as e:
+            logger.warning(f"Failed to force-kill VU server: {e}")
     except Exception as e:
         logger.warning(f"Failed to terminate VU server cleanly: {e}")
