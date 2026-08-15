@@ -14,8 +14,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pathlib import Path
 
-from benchlab_pycore.core import read_sensors, read_device, translate_sensor_struct
-from benchlab.core import BENCHLAB_ORIGINAL_PRODUCT_ID, BENCHLAB_BL2_PRODUCT_ID
+from benchlab_pycore.core import (
+    read_sensors, read_device, translate_sensor_struct)
+from benchlab.core import (
+    BENCHLAB_ORIGINAL_PRODUCT_ID, BENCHLAB_BL2_PRODUCT_ID)
 # benchlab_pycore.core.serial_io has no connection-opening helper; use the
 # local wrapper instead (see benchlab.core.shared_serial).
 from benchlab.core.shared_serial import open_serial_connection
@@ -86,14 +88,15 @@ devices_data = {}
 clients = {}           # { uid: set([WebSocket, ...]) }
 main_loop = None       # Will store main asyncio loop
 shutdown_event = threading.Event()  # Graceful shutdown flag
-device_threads = {}    # { uid: threading.Thread } - Track device reader threads
+device_threads = {}    # { uid: threading.Thread } - device reader threads
 scan_lock = threading.Lock()  # Prevent concurrent scans
 data_lock = threading.Lock()  # Protect concurrent access to devices_data
 scanner_thread = None  # Background device scanner thread
 
 
 def device_scanner_loop():
-    """Background thread that periodically scans for new/disconnected devices."""
+    """Background thread that periodically scans for new/disconnected
+    devices."""
     logger.info(
         "Device scanner started (scan interval: %ds)",
         Config.SCAN_INTERVAL)
@@ -125,18 +128,20 @@ def device_scanner_loop():
 
                     if uid not in existing_uids:
                         logger.info(
-                            "New device discovered during scan: %s on %s", uid, port)
+                            "New device discovered during scan: %s on %s",
+                            uid, port)
                         start_device_thread(port, uid)
                         existing_uids.add(uid)  # Prevent duplicate starts
 
-                # Check for disconnected devices - mark them as such immediately
-                # rather than waiting for read_device_loop to notice on its own
-                # timer
+                # Check for disconnected devices - mark them as such
+                # immediately rather than waiting for read_device_loop to
+                # notice on its own timer
                 for uid, data in devices_data.items():
                     port = data.get("port")
                     if port and port not in current_ports:
                         logger.info(
-                            "Device %s appears disconnected (port %s not found)", uid, port)
+                            "Device %s appears disconnected "
+                            "(port %s not found)", uid, port)
                         with data_lock:
                             if uid in devices_data:
                                 devices_data[uid]["connected"] = False
@@ -176,7 +181,9 @@ async def lifespan(app: FastAPI):
                     # Determine device variant from ProductId
                     product_id = device_info.get(
                         'ProductId', BENCHLAB_ORIGINAL_PRODUCT_ID)
-                    device_info['variant'] = 'BL2' if product_id == BENCHLAB_BL2_PRODUCT_ID else 'ORIGINAL'
+                    device_info['variant'] = (
+                        'BL2' if product_id == BENCHLAB_BL2_PRODUCT_ID
+                        else 'ORIGINAL')
                     ser.close()
             except Exception as e:
                 logger.debug("Could not read device info for %s: %s", uid, e)
@@ -238,7 +245,8 @@ CORS_ORIGINS = os.getenv(
     "CORS_ORIGINS",
     "*").split(",") if os.getenv("CORS_ORIGINS") else ["*"]
 # Wildcard origin + credentials is an invalid combination per the CORS spec
-# (browsers reject it) - only allow credentials when explicit origins are configured.
+# (browsers reject it) - only allow credentials when explicit origins are
+# configured.
 CORS_ALLOW_CREDENTIALS = CORS_ORIGINS != ["*"]
 app.add_middleware(
     CORSMiddleware,
@@ -307,22 +315,35 @@ def create_empty_telemetry():
         "HPWR1_Voltage": 0.0, "HPWR1_Current": 0.0, "HPWR1_Power": 0.0,
         "HPWR2_Voltage": 0.0, "HPWR2_Current": 0.0, "HPWR2_Power": 0.0,
         # BL2-specific HPWR sense lines
-        "HPWR1_W1_Voltage": 0.0, "HPWR1_W1_Current": 0.0, "HPWR1_W1_Power": 0.0,
-        "HPWR1_W2_Voltage": 0.0, "HPWR1_W2_Current": 0.0, "HPWR1_W2_Power": 0.0,
-        "HPWR1_W3_Voltage": 0.0, "HPWR1_W3_Current": 0.0, "HPWR1_W3_Power": 0.0,
-        "HPWR1_W4_Voltage": 0.0, "HPWR1_W4_Current": 0.0, "HPWR1_W4_Power": 0.0,
-        "HPWR1_W5_Voltage": 0.0, "HPWR1_W5_Current": 0.0, "HPWR1_W5_Power": 0.0,
-        "HPWR1_W6_Voltage": 0.0, "HPWR1_W6_Current": 0.0, "HPWR1_W6_Power": 0.0,
-        "HPWR2_W1_Voltage": 0.0, "HPWR2_W1_Current": 0.0, "HPWR2_W1_Power": 0.0,
-        "HPWR2_W2_Voltage": 0.0, "HPWR2_W2_Current": 0.0, "HPWR2_W2_Power": 0.0,
-        "HPWR2_W3_Voltage": 0.0, "HPWR2_W3_Current": 0.0, "HPWR2_W3_Power": 0.0,
-        "HPWR2_W4_Voltage": 0.0, "HPWR2_W4_Current": 0.0, "HPWR2_W4_Power": 0.0,
-        "HPWR2_W5_Voltage": 0.0, "HPWR2_W5_Current": 0.0, "HPWR2_W5_Power": 0.0,
-        "HPWR2_W6_Voltage": 0.0, "HPWR2_W6_Current": 0.0, "HPWR2_W6_Power": 0.0,
+        "HPWR1_W1_Voltage": 0.0, "HPWR1_W1_Current": 0.0,
+        "HPWR1_W1_Power": 0.0,
+        "HPWR1_W2_Voltage": 0.0, "HPWR1_W2_Current": 0.0,
+        "HPWR1_W2_Power": 0.0,
+        "HPWR1_W3_Voltage": 0.0, "HPWR1_W3_Current": 0.0,
+        "HPWR1_W3_Power": 0.0,
+        "HPWR1_W4_Voltage": 0.0, "HPWR1_W4_Current": 0.0,
+        "HPWR1_W4_Power": 0.0,
+        "HPWR1_W5_Voltage": 0.0, "HPWR1_W5_Current": 0.0,
+        "HPWR1_W5_Power": 0.0,
+        "HPWR1_W6_Voltage": 0.0, "HPWR1_W6_Current": 0.0,
+        "HPWR1_W6_Power": 0.0,
+        "HPWR2_W1_Voltage": 0.0, "HPWR2_W1_Current": 0.0,
+        "HPWR2_W1_Power": 0.0,
+        "HPWR2_W2_Voltage": 0.0, "HPWR2_W2_Current": 0.0,
+        "HPWR2_W2_Power": 0.0,
+        "HPWR2_W3_Voltage": 0.0, "HPWR2_W3_Current": 0.0,
+        "HPWR2_W3_Power": 0.0,
+        "HPWR2_W4_Voltage": 0.0, "HPWR2_W4_Current": 0.0,
+        "HPWR2_W4_Power": 0.0,
+        "HPWR2_W5_Voltage": 0.0, "HPWR2_W5_Current": 0.0,
+        "HPWR2_W5_Power": 0.0,
+        "HPWR2_W6_Voltage": 0.0, "HPWR2_W6_Current": 0.0,
+        "HPWR2_W6_Power": 0.0,
         # VIN measurements (all 13 channels)
         "VIN_0": 0.0, "VIN_1": 0.0, "VIN_2": 0.0, "VIN_3": 0.0,
         "VIN_4": 0.0, "VIN_5": 0.0, "VIN_6": 0.0, "VIN_7": 0.0,
-        "VIN_8": 0.0, "VIN_9": 0.0, "VIN_10": 0.0, "VIN_11": 0.0, "VIN_12": 0.0,
+        "VIN_8": 0.0, "VIN_9": 0.0, "VIN_10": 0.0, "VIN_11": 0.0,
+        "VIN_12": 0.0,
         # Board voltages
         "Vdd": 0.0, "Vref": 0.0,
         # Fans (9 fans + external duty)
@@ -344,7 +365,8 @@ def create_empty_telemetry():
 
 
 def read_device_loop(port, uid):
-    """Continuously read sensor data from a specific device with reconnection logic."""
+    """Continuously read sensor data from a specific device with
+    reconnection logic."""
     ser = None
     consecutive_errors = 0
     max_consecutive_errors = 10  # After this many errors, attempt reconnect
@@ -368,7 +390,8 @@ def read_device_loop(port, uid):
                 if new_ser is None:
                     raise OSError("open_serial_connection returned None")
                 ser = new_ser
-                consecutive_errors = 0  # Reset error counter on successful connect
+                # Reset error counter on successful connect
+                consecutive_errors = 0
 
                 # Read device info to get product_id for sensor reading
                 try:
@@ -379,7 +402,8 @@ def read_device_loop(port, uid):
                         logger.info(
                             "[%s] Device variant: %s (ProductId=0x%02X)",
                             uid,
-                            'BL2' if product_id == BENCHLAB_BL2_PRODUCT_ID else 'ORIGINAL',
+                            'BL2' if product_id ==
+                            BENCHLAB_BL2_PRODUCT_ID else 'ORIGINAL',
                             product_id)
                 except Exception:
                     pass
@@ -415,7 +439,8 @@ def read_device_loop(port, uid):
                 translated = translate_sensor_struct(sensors)
                 translated["timestamp"] = datetime.now().strftime(
                     "%Y-%m-%dT%H:%M:%S")
-                consecutive_errors = 0  # Reset error counter on successful read
+                # Reset error counter on successful read
+                consecutive_errors = 0
 
                 with data_lock:
                     if uid in devices_data:
@@ -430,9 +455,11 @@ def read_device_loop(port, uid):
             # Specific debug logging for unsupported commands
             if isinstance(
                     e,
-                    PermissionError) and "does not recognize the command" in str(e):
+                    PermissionError) and (
+                        "does not recognize the command" in str(e)):
                 logger.debug(
-                    "[%s] Sensor read skipped (unsupported command): %s", uid, e)
+                    "[%s] Sensor read skipped (unsupported command): %s",
+                    uid, e)
             else:
                 logger.warning(
                     "[%s] Error reading sensors (consecutive: %d): %s",
@@ -491,7 +518,8 @@ def find_benchlab_devices():
 
 @app.get("/devices")
 def list_devices():
-    """List all connected devices with basic info including variant and connection status."""
+    """List all connected devices with basic info including variant and
+    connection status."""
     result = []
     for uid, info in devices_data.items():
         device_info = info.get("info", {}) or {}
@@ -681,7 +709,9 @@ def start_device_thread(port, uid):
             info = read_device(ser) or {}
             # Determine device variant from ProductId
             product_id = info.get('ProductId', BENCHLAB_ORIGINAL_PRODUCT_ID)
-            info['variant'] = 'BL2' if product_id == BENCHLAB_BL2_PRODUCT_ID else 'ORIGINAL'
+            info['variant'] = (
+                'BL2' if product_id == BENCHLAB_BL2_PRODUCT_ID
+                else 'ORIGINAL')
             devices_data[uid]["info"] = info
             ser.close()
     except Exception as e:
@@ -699,10 +729,12 @@ def start_device_thread(port, uid):
 
 @app.post("/scan")
 def scan_for_devices():
-    """Scan for new BenchLab devices and start telemetry for newly discovered ones.
+    """Scan for new BenchLab devices and start telemetry for newly
+    discovered ones.
 
-    This endpoint allows runtime device discovery without restarting the server.
-    Only devices matching a known BenchLab product ID (ORIGINAL or BL2) will be opened.
+    This endpoint allows runtime device discovery without restarting the
+    server. Only devices matching a known BenchLab product ID (ORIGINAL or
+    BL2) will be opened.
     """
     with scan_lock:
         logger.info("Manual device scan triggered...")
@@ -743,7 +775,10 @@ def scan_for_devices():
             "total_devices": len(devices_data),
             "new_devices": new_devices,
             "disconnected_devices": disconnected,
-            "devices": [{"uid": uid, "port": info["port"]} for uid, info in devices_data.items()]
+            "devices": [
+                {"uid": uid, "port": info["port"]}
+                for uid, info in devices_data.items()
+            ]
         }
 
         logger.info("Scan complete: %d total devices, %d new, %d disconnected",

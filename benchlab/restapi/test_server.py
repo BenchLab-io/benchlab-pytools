@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Test script for the improved BenchLab FastAPI telemetry server.
-This script tests the basic functionality without requiring actual BenchLab devices.
+This script tests the basic functionality without requiring actual
+BenchLab devices.
 """
 
 import sys
@@ -110,15 +111,20 @@ def test_error_handling():
                 'SCAN_INTERVAL': 30,
                 'validate': lambda self: (
                     None if self.POLL_INTERVAL >= 0.1 else exec(
-                        'raise ValueError("POLL_INTERVAL must be at least 0.1 seconds")'),
+                        'raise ValueError('
+                        '"POLL_INTERVAL must be at least 0.1 seconds")'),
                     None if self.HISTORY_LENGTH >= 1 else exec(
-                        'raise ValueError("HISTORY_LENGTH must be at least 1")'),
+                        'raise ValueError('
+                        '"HISTORY_LENGTH must be at least 1")'),
                     None if 1 <= self.API_PORT <= 65535 else exec(
-                        'raise ValueError("API_PORT must be between 1 and 65535")'),
+                        'raise ValueError('
+                        '"API_PORT must be between 1 and 65535")'),
                     None if self.MAX_HISTORY_LIMIT >= 1 else exec(
-                        'raise ValueError("MAX_HISTORY_LIMIT must be at least 1")'),
+                        'raise ValueError('
+                        '"MAX_HISTORY_LIMIT must be at least 1")'),
                     None if self.SCAN_INTERVAL >= 1 else exec(
-                        'raise ValueError("SCAN_INTERVAL must be at least 1 second")')
+                        'raise ValueError('
+                        '"SCAN_INTERVAL must be at least 1 second")')
                 )[0]
             })()
 
@@ -138,15 +144,20 @@ def test_error_handling():
                 'SCAN_INTERVAL': 30,
                 'validate': lambda self: (
                     None if self.POLL_INTERVAL >= 0.1 else exec(
-                        'raise ValueError("POLL_INTERVAL must be at least 0.1 seconds")'),
+                        'raise ValueError('
+                        '"POLL_INTERVAL must be at least 0.1 seconds")'),
                     None if self.HISTORY_LENGTH >= 1 else exec(
-                        'raise ValueError("HISTORY_LENGTH must be at least 1")'),
+                        'raise ValueError('
+                        '"HISTORY_LENGTH must be at least 1")'),
                     None if 1 <= self.API_PORT <= 65535 else exec(
-                        'raise ValueError("API_PORT must be between 1 and 65535")'),
+                        'raise ValueError('
+                        '"API_PORT must be between 1 and 65535")'),
                     None if self.MAX_HISTORY_LIMIT >= 1 else exec(
-                        'raise ValueError("MAX_HISTORY_LIMIT must be at least 1")'),
+                        'raise ValueError('
+                        '"MAX_HISTORY_LIMIT must be at least 1")'),
                     None if self.SCAN_INTERVAL >= 1 else exec(
-                        'raise ValueError("SCAN_INTERVAL must be at least 1 second")')
+                        'raise ValueError('
+                        '"SCAN_INTERVAL must be at least 1 second")')
                 )[0]
             })()
 
@@ -185,7 +196,9 @@ def main():
     print(f"\nTest Results: {passed}/{total} tests passed")
 
     if passed == total:
-        print("🎉 All tests passed! The FastAPI server improvements are working correctly.")
+        print(
+            "🎉 All tests passed! The FastAPI server improvements are "
+            "working correctly.")
         return 0
     else:
         print("❌ Some tests failed. Please check the implementation.")
