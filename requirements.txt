@@ -14,7 +14,11 @@ requests>=2.33.1
 
 # MQTT Data Source
 paho-mqtt>=2.0,<3.0
-amqtt>=0.10,<1.0
+# Pinned to a narrow range: amqtt's Broker API changed between 0.10 and
+# 0.12 (config moved from Broker.start(config) to the Broker(config)
+# constructor), which broke the embedded broker in benchlab/sources.py
+# with no test coverage to catch it. Bump deliberately, not automatically.
+amqtt>=0.12.0,<0.13.0
 
 # Curses-based TUI
 windows-curses>=2.4.1; platform_system=="Windows"

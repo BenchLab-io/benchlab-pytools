@@ -75,7 +75,7 @@ export MQTT_PATH=/mqtt
 | `MQTT_TRANSPORT` | `tcp` | Transport protocol (`tcp` or `websockets`) |
 | `MQTT_USERNAME` | None | MQTT username if authentication is required |
 | `MQTT_PASSWORD` | None | MQTT password |
-| `MQTT_PROTOCOL` | `MQTTv311` | MQTT protocol version |
+| `MQTT_PROTOCOL` | `MQTTv311` | MQTT protocol version. Accepts (case-insensitive): `MQTTv31`/`v3.1`/`3.1`/`3` for v3.1, `MQTTv311`/`v3.1.1`/`3.1.1`/`4` for v3.1.1 (default), `MQTTv5`/`v5`/`5` for v5. An unrecognized value raises an error at startup rather than failing silently later. |
 | `MQTT_QOS` | `0` | Quality of Service (0, 1, or 2) |
 | `MQTT_PATH` | None | WebSocket path (if transport is `websockets`) |
 | `MQTT_TOPIC_PREFIX` | `benchlab` | Prefix for published topics, e.g. `<prefix>/<device_uid>/telemetry` |

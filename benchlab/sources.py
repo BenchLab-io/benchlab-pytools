@@ -154,8 +154,8 @@ config = {{
 }}
 
 async def main():
-    broker = Broker()
-    await broker.start(config)
+    broker = Broker(config)
+    await broker.start()
     while True:
         await asyncio.sleep(1)
 
