@@ -4,7 +4,13 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 import hashlib
 
-def generate_sensor_logo(template_path, sensor_name, min_val, max_val, benchlab_port=None):
+
+def generate_sensor_logo(
+        template_path,
+        sensor_name,
+        min_val,
+        max_val,
+        benchlab_port=None):
     """
     Generate a VU sensor logo from a template, caching based on parameters.
 
@@ -14,7 +20,7 @@ def generate_sensor_logo(template_path, sensor_name, min_val, max_val, benchlab_
         min_val (float): Minimum value.
         max_val (float): Maximum value.
         benchlab_port (str, optional): Benchlab port to display.
-    
+
     Returns:
         Path: Path to the saved generated logo.
     """
@@ -27,7 +33,7 @@ def generate_sensor_logo(template_path, sensor_name, min_val, max_val, benchlab_
     # Use a hash to avoid extremely long filenames
     hash_digest = hashlib.md5(params_str.encode("utf-8")).hexdigest()
     safe_name = sensor_name.replace(" ", "_").replace("/", "-")
-    
+
     output_dir = Path(__file__).parent / "generated"
     output_dir.mkdir(exist_ok=True)
     output_path = output_dir / f"{safe_name}_{hash_digest}_logo.png"
@@ -78,8 +84,14 @@ def generate_sensor_logo(template_path, sensor_name, min_val, max_val, benchlab_
     img.convert("1", dither=Image.NONE).save(output_path, format="PNG")
     return output_path
 
+
 # --- Quick test ---
 if __name__ == "__main__":
     template = Path(__file__).parent / "assets/bl_dial_144x200.png"
-    output = generate_sensor_logo(template, "Temp Sensor", 0, 100, benchlab_port="35001")
+    output = generate_sensor_logo(
+        template,
+        "Temp Sensor",
+        0,
+        100,
+        benchlab_port="35001")
     print(f"Generated logo at: {output}")

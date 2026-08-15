@@ -1,22 +1,22 @@
 # wigidash_device.py
 
-import logging
 import time
 import struct
-import sys
-import threading
-from ctypes import c_uint16, c_uint32, sizeof
+from ctypes import c_uint16, sizeof
 
 from benchlab.wigidash.benchlab_utils import get_logger
 
 logger = get_logger("WigidashDevice")
 
+
 class DeviceTouchInfo:
     """Touch input information"""
+
     def __init__(self):
         self.Type = 0  # DeviceTouchAction
         self.X = 0
         self.Y = 0
+
 
 class WigidashDevice:
     # Device configuration
@@ -117,14 +117,15 @@ class WigidashDevice:
         """Initialize device and verify connection"""
         logger.info("Pinging Wigidash Device...")
         data = self.usb.ctrl_transfer_in(cmd=self.CMD_PING, length=3)
-        logger.info(f"Received {len(data)} bytes: {' '.join(f'{b:02X}' for b in data)}")
+        hex_bytes = ' '.join(f'{b:02X}' for b in data)
+        logger.info(f"Received {len(data)} bytes: {hex_bytes}")
         return data
 
     def verify_device(self):
         """Verify device identity and firmware version"""
         device_id = self.get_device_id()
         fw_version = self.get_fw_version()
-        
+
         if device_id != self.EVC2_DEVICE_ID:
             return False
         if fw_version not in self.FW_VERSION_SUPPORT:
@@ -164,7 +165,10 @@ class WigidashDevice:
     def reset(self, option=0):
         """Reset device with option"""
         wValue = option & 0xFFFF
-        self.usb.ctrl_transfer_out(cmd=self.CMD_DEVICE_CMD, wValue=wValue, data=None)
+        self.usb.ctrl_transfer_out(
+            cmd=self.CMD_DEVICE_CMD,
+            wValue=wValue,
+            data=None)
 
     def get_brightness(self):
         """Get brightness level (0-100)"""
@@ -184,7 +188,9 @@ class WigidashDevice:
         """Add a widget to the device"""
         wValue = (page << 8) | widget_id
         widget_bytes = bytes(widget_config)
-        logger.debug(f"Adding widget page={page}, id={widget_id}, size={len(widget_bytes)} bytes")
+        logger.debug(
+            f"Adding widget page={page}, id={widget_id}, size={
+                len(widget_bytes)} bytes")
         self.usb.ctrl_transfer_out(
             cmd=self.CMD_SCREENCFG_WIDGET_ADD,
             wValue=wValue,
@@ -231,7 +237,13 @@ class WigidashDevice:
             timeout=2000
         )
 
-    def write_widget_color(self, color, widget_width=1016, widget_height=592, page=0, widget_id=0):
+    def write_widget_color(
+            self,
+            color,
+            widget_width=1016,
+            widget_height=592,
+            page=0,
+            widget_id=0):
         """Write a solid color to a widget"""
         # Create color buffer
         color_buffer = (c_uint16 * (widget_width * widget_height))()
@@ -259,7 +271,9 @@ class WigidashDevice:
 
     def write_to_widget(self, page, widget_id, offset, data):
         """Write arbitrary data to widget at offset"""
-        logger.debug(f"Writing to widget page={page}, id={widget_id}, offset={offset}, length={len(data)}")
+        logger.debug(
+            f"Writing to widget page={page}, id={widget_id}, "
+            f"offset={offset}, length={len(data)}")
         # Create config buffer (offset + length)
         config_buffer = bytearray(8)
         struct.pack_into('<II', config_buffer, 0, offset, len(data))
@@ -285,38 +299,42 @@ class WigidashDevice:
                 wValue=(0 << 8 | 0),
                 data=None
             )
-        
+
         return wrote
 
     def get_click_info(self):
         """Get touch input information"""
-        data = self.usb.ctrl_transfer_in(cmd=self.CMD_WIDGET_GET_TOUCH, length=8)
-        
+        data = self.usb.ctrl_transfer_in(
+            cmd=self.CMD_WIDGET_GET_TOUCH, length=8)
+
         touch_info = DeviceTouchInfo()
         if len(data) >= 8:
             touch_info.Type = data[0]
-            touch_info.X = int.from_bytes(data[2:4], byteorder='little', signed=True)
-            touch_info.Y = int.from_bytes(data[4:6], byteorder='little', signed=True)
+            touch_info.X = int.from_bytes(
+                data[2:4], byteorder='little', signed=True)
+            touch_info.Y = int.from_bytes(
+                data[4:6], byteorder='little', signed=True)
             screen_state = data[6]
             sleep_state = data[7] != 0
-            
+
             return touch_info, screen_state, sleep_state
-        
+
         return touch_info, 0, False
 
     def get_config(self):
         """Get device configuration"""
         data = self.usb.ctrl_transfer_in(cmd=self.CMD_CONFIG_GET, length=64)
-        
+
         if len(data) >= 40:
             backlight = data[1]
             screen_timeout = int.from_bytes(data[2:6], byteorder='little')
-            nickname = data[6:38].decode('utf-8', errors='ignore').rstrip('\x00')
+            nickname = data[6:38].decode(
+                'utf-8', errors='ignore').rstrip('\x00')
             vcom = int.from_bytes(data[38:40], byteorder='little')
             avdd = int.from_bytes(data[40:42], byteorder='little')
             display_offset_x = data[42] if len(data) > 42 else 0
             display_offset_y = data[43] if len(data) > 43 else 0
-            
+
             return {
                 'backlight': backlight,
                 'screen_timeout': screen_timeout,
@@ -326,16 +344,22 @@ class WigidashDevice:
                 'display_offset_x': display_offset_x,
                 'display_offset_y': display_offset_y
             }
-        
+
         return None
 
-    def set_config(self, backlight=None, screen_timeout=None, nickname=None, display_offset_x=None, display_offset_y=None):
+    def set_config(
+            self,
+            backlight=None,
+            screen_timeout=None,
+            nickname=None,
+            display_offset_x=None,
+            display_offset_y=None):
         """Set device configuration"""
         # Get current config first
         config = self.get_config()
         if config is None:
             return False
-        
+
         # Update with provided values
         if backlight is not None:
             config['backlight'] = max(0, min(100, backlight))
@@ -347,23 +371,23 @@ class WigidashDevice:
             config['display_offset_x'] = display_offset_x
         if display_offset_y is not None:
             config['display_offset_y'] = display_offset_y
-        
+
         # Pack and send config
         config_data = bytearray(64)
         config_data[0] = 1  # Version
         config_data[1] = config['backlight']
         struct.pack_into('<I', config_data, 2, config['screen_timeout'])
         nickname_bytes = config['nickname'].encode('utf-8')[:32]
-        config_data[6:6+len(nickname_bytes)] = nickname_bytes
+        config_data[6:6 + len(nickname_bytes)] = nickname_bytes
         struct.pack_into('<H', config_data, 38, config['vcom'])
         struct.pack_into('<H', config_data, 40, config['avdd'])
         config_data[42] = config['display_offset_x']
         config_data[43] = config['display_offset_y']
-        
+
         # Calculate CRC16
         crc = self.crc16_calc(config_data, 44)
         struct.pack_into('<H', config_data, 44, crc)
-        
+
         self.usb.ctrl_transfer_out(cmd=self.CMD_CONFIG_SET, data=config_data)
         return True
 
@@ -390,20 +414,23 @@ class WigidashDevice:
 
     def erase_firmware(self):
         """Erase firmware sectors"""
-        self.usb.ctrl_transfer_out(cmd=self.CMD_FLASH_ERASE_SECTOR, wValue=0, data=None)
-        
+        self.usb.ctrl_transfer_out(
+            cmd=self.CMD_FLASH_ERASE_SECTOR, wValue=0, data=None)
+
         # Wait for completion
         timeout = self.FIRMWARE_STATUS_TIMEOUT
         while timeout > 0:
             time.sleep(1)
-            data = self.usb.ctrl_transfer_in(cmd=self.CMD_FLASH_GET_RESULT, length=2)
+            data = self.usb.ctrl_transfer_in(
+                cmd=self.CMD_FLASH_GET_RESULT, length=2)
             if len(data) >= 2:
                 action = data[0]
                 status = data[1]
-                if action == self.FLASH_ACTION_NONE and status == self.FLASH_RESULT_OK:
+                if (action == self.FLASH_ACTION_NONE
+                        and status == self.FLASH_RESULT_OK):
                     return True
             timeout -= 1
-        
+
         return False
 
     def write_firmware_sector(self, sector, sector_data):
@@ -434,11 +461,13 @@ class WigidashDevice:
         timeout = self.FIRMWARE_STATUS_TIMEOUT
         while timeout > 0:
             time.sleep(0.5)
-            data = self.usb.ctrl_transfer_in(cmd=self.CMD_FLASH_GET_RESULT, length=2)
+            data = self.usb.ctrl_transfer_in(
+                cmd=self.CMD_FLASH_GET_RESULT, length=2)
             if len(data) >= 2:
                 action = data[0]
                 status = data[1]
-                if action == self.FLASH_ACTION_NONE and status == self.FLASH_RESULT_OK:
+                if (action == self.FLASH_ACTION_NONE
+                        and status == self.FLASH_RESULT_OK):
                     return True
             timeout -= 1
 
@@ -447,12 +476,13 @@ class WigidashDevice:
     def verify_firmware_sector(self, sector, sector_data):
         """Verify firmware sector by CRC32"""
         crc32 = self.crc32_calc(sector_data)
-        
-        data = self.usb.ctrl_transfer_in(cmd=self.CMD_FLASH_READ_CRC32, wValue=sector, length=4)
+
+        data = self.usb.ctrl_transfer_in(
+            cmd=self.CMD_FLASH_READ_CRC32, wValue=sector, length=4)
         if len(data) >= 4:
             flash_crc = int.from_bytes(data[:4], byteorder='little')
             return flash_crc == crc32
-        
+
         return False
 
     def write_firmware(self, firmware_data):
@@ -466,7 +496,10 @@ class WigidashDevice:
 
         # Write each sector
         for sector in range(7):
-            sector_data = firmware_data[sector * self.FLASH_SECTOR_SIZE:(sector + 1) * self.FLASH_SECTOR_SIZE]
+            sector_data = firmware_data[sector *
+                                        self.FLASH_SECTOR_SIZE:(sector +
+                                                                1) *
+                                        self.FLASH_SECTOR_SIZE]
             if not self.write_firmware_sector(sector, sector_data):
                 return False
 
@@ -475,13 +508,13 @@ class WigidashDevice:
     def check_app_mode(self):
         """Check if device is in app mode or bootloader mode"""
         data = self.usb.ctrl_transfer_in(cmd=self.CMD_PING, length=3)
-        
+
         if len(data) >= 3:
             if data[0] == ord('W') and data[1] == ord('D'):
                 return True  # App mode
             elif data[0] == ord('B') and data[1] == ord('L'):
                 return False  # Bootloader mode
-        
+
         return None
 
     @staticmethod

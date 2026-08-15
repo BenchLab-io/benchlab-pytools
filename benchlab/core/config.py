@@ -24,7 +24,10 @@ class SerialConfig(BaseModel):
     """
 
     port: Optional[str] = None
-    poll_interval: float = Field(default=1.0, gt=0, description="Polling interval in seconds")
+    poll_interval: float = Field(
+        default=1.0,
+        gt=0,
+        description="Polling interval in seconds")
 
 
 class FastAPIConfig(BaseModel):
@@ -39,7 +42,10 @@ class FastAPIConfig(BaseModel):
     """
 
     base_url: str = Field(..., description="Base URL of the FastAPI server")
-    timeout: float = Field(default=5.0, gt=0, description="Request timeout in seconds")
+    timeout: float = Field(
+        default=5.0,
+        gt=0,
+        description="Request timeout in seconds")
 
     @field_validator("base_url")
     @classmethod
@@ -66,10 +72,17 @@ class MQTTConfig(BaseModel):
         Connection timeout in seconds.
     """
 
-    broker: str = Field(default="localhost", description="MQTT broker hostname")
+    broker: str = Field(
+        default="localhost",
+        description="MQTT broker hostname")
     port: int = Field(default=1883, ge=1, le=65535, description="Broker port")
-    topic_prefix: str = Field(default="benchlab", description="Base topic prefix")
-    timeout: float = Field(default=5.0, gt=0, description="Connection timeout in seconds")
+    topic_prefix: str = Field(
+        default="benchlab",
+        description="Base topic prefix")
+    timeout: float = Field(
+        default=5.0,
+        gt=0,
+        description="Connection timeout in seconds")
 
 
 class NamedPipeConfig(BaseModel):
@@ -86,8 +99,14 @@ class NamedPipeConfig(BaseModel):
         Seconds between successive sensor reads.
     """
 
-    timeout: float = Field(default=5.0, gt=0, description="Pipe connection timeout in seconds")
-    poll_interval: float = Field(default=1.0, gt=0, description="Polling interval in seconds")
+    timeout: float = Field(
+        default=5.0,
+        gt=0,
+        description="Pipe connection timeout in seconds")
+    poll_interval: float = Field(
+        default=1.0,
+        gt=0,
+        description="Polling interval in seconds")
 
 
 class ServiceHttpConfig(BaseModel):
@@ -111,8 +130,14 @@ class ServiceHttpConfig(BaseModel):
         default="http://localhost:8585",
         description="Base URL of the C# BenchLab service HTTP API",
     )
-    timeout: float = Field(default=5.0, gt=0, description="Request timeout in seconds")
-    poll_interval: float = Field(default=1.0, gt=0, description="Polling interval in seconds")
+    timeout: float = Field(
+        default=5.0,
+        gt=0,
+        description="Request timeout in seconds")
+    poll_interval: float = Field(
+        default=1.0,
+        gt=0,
+        description="Polling interval in seconds")
 
     @field_validator("base_url")
     @classmethod

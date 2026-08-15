@@ -1,6 +1,6 @@
 # wigidash_session.py
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 
 import os
 import time
@@ -9,8 +9,10 @@ import threading
 from benchlab.wigidash.benchlab_fleet import BenchlabFleetSelect
 from benchlab.wigidash.benchlab_overview import BenchlabOverview
 from benchlab.wigidash.benchlab_graph import BenchlabGraph
-from benchlab.wigidash.benchlab_ui import load_fonts, draw_header, draw_footer, bind_button, load_logo, UIButton, UITheme, BUTTON_DEFS
-from benchlab.wigidash.benchlab_utils import display_image, get_logger, KeepAliveManager
+from benchlab.wigidash.benchlab_ui import UITheme
+from benchlab.wigidash.benchlab_utils import (
+    display_image, get_logger, KeepAliveManager
+)
 
 from benchlab.wigidash.wigidash_device import WigidashDevice
 from benchlab.wigidash.wigidash_widget import WidgetConfig
@@ -63,45 +65,46 @@ class BenchlabWigiSession:
             # --- EPS Rails ---
             "EPS1_Voltage": "V",
             "EPS1_Current": "A",
-            "EPS1_Power":   "W",
+            "EPS1_Power": "W",
             "EPS2_Voltage": "V",
             "EPS2_Current": "A",
-            "EPS2_Power":   "W",
+            "EPS2_Power": "W",
 
             # --- ATX Rails ---
             "12V_Voltage": "V",
             "12V_Current": "A",
-            "12V_Power":   "W",
-            "5V_Voltage":  "V",
-            "5V_Current":  "A",
-            "5V_Power":    "W",
+            "12V_Power": "W",
+            "5V_Voltage": "V",
+            "5V_Current": "A",
+            "5V_Power": "W",
             "5VSB_Voltage": "V",
             "5VSB_Current": "A",
-            "5VSB_Power":   "W",
+            "5VSB_Power": "W",
             "3.3V_Voltage": "V",
             "3.3V_Current": "A",
-            "3.3V_Power":   "W",
+            "3.3V_Power": "W",
 
             # --- PCIe Rails ---
             "PCIE8_1_Voltage": "V",
             "PCIE8_1_Current": "A",
-            "PCIE8_1_Power":   "W",
+            "PCIE8_1_Power": "W",
             "PCIE8_2_Voltage": "V",
             "PCIE8_2_Current": "A",
-            "PCIE8_2_Power":   "W",
+            "PCIE8_2_Power": "W",
             "PCIE8_3_Voltage": "V",
             "PCIE8_3_Current": "A",
-            "PCIE8_3_Power":   "W",
+            "PCIE8_3_Power": "W",
             "HPWR1_Voltage": "V",
             "HPWR1_Current": "A",
-            "HPWR1_Power":   "W",
+            "HPWR1_Power": "W",
             "HPWR2_Voltage": "V",
             "HPWR2_Current": "A",
-            "HPWR2_Power":   "W",
+            "HPWR2_Power": "W",
 
             # --- VIN ---
             # VIN_0 .. VIN_(SENSOR_VIN_NUM-1)
-            **{f"VIN_{i}": "V" for i in range(16)},   # safe default—adjust if SENSOR_VIN_NUM changes
+            # safe default—adjust if SENSOR_VIN_NUM changes
+            **{f"VIN_{i}": "V" for i in range(16)},
 
             # --- Other voltages ---
             "Vdd": "V",
@@ -113,12 +116,13 @@ class BenchlabWigiSession:
             "Humidity": "%",
 
             # Temp sensors
-            **{f"Temp_Sensor_{i+1}": "°C" for i in range(16)},
+            **{f"Temp_Sensor_{i + 1}": "°C" for i in range(16)},
 
             # --- Fans ---
-            **{f"Fan{i+1}_Duty": "%" for i in range(16)},
-            **{f"Fan{i+1}_RPM": "RPM" for i in range(16)},
-            **{f"Fan{i+1}_Status": "" for i in range(16)},  # logical flag, unitless
+            **{f"Fan{i + 1}_Duty": "%" for i in range(16)},
+            **{f"Fan{i + 1}_RPM": "RPM" for i in range(16)},
+            # logical flag, unitless
+            **{f"Fan{i + 1}_Status": "" for i in range(16)},
 
             "FanExtDuty": "%"
         }
@@ -126,7 +130,9 @@ class BenchlabWigiSession:
     # ----------------- INIT ----------------- #
     def connect_wigidash(self):
         """Initialize the Wigidash device and UI."""
-        logger.info(f"Initializing Wigidash device {self.usb_device.serial} ...")
+        logger.info(
+            f"Initializing Wigidash device {
+                self.usb_device.serial} ...")
         try:
             self.usb_device.connect()
             self.wigidash = WigidashDevice(self.usb_device)
@@ -137,24 +143,31 @@ class BenchlabWigiSession:
             widget = WidgetConfig.create_fullscreen()
             self.wigidash.add_widget(widget)
 
-            self.keepalive_manager = KeepAliveManager(self.wigidash, interval=self.SCREEN_KEEPALIVE_INTERVAL)
+            self.keepalive_manager = KeepAliveManager(
+                self.wigidash, interval=self.SCREEN_KEEPALIVE_INTERVAL)
             self.keepalive_manager.start()
 
-            logger.info(f"Wigidash device {self.usb_device.serial} initialized successfully.")
+            logger.info(
+                f"Wigidash device {
+                    self.usb_device.serial} initialized successfully.")
             return True
         except Exception as e:
-            logger.error(f"Failed to initialize Wigidash {self.usb_device.serial}: {e}")
+            logger.error(
+                f"Failed to initialize Wigidash {
+                    self.usb_device.serial}: {e}")
             try:
                 self.usb_device.disconnect()
             except Exception:
                 pass
             return False
 
-
     # ----------------- SPLASH ----------------- #
+
     def show_splash(self):
         """Display splash screen with logo."""
-        img = Image.new('RGB', (self.SCREEN_WIDTH, self.SCREEN_HEIGHT), color=(41, 39, 38))
+        img = Image.new(
+            'RGB', (self.SCREEN_WIDTH, self.SCREEN_HEIGHT), color=(
+                41, 39, 38))
         try:
             base_dir = os.path.dirname(os.path.abspath(__file__))
             assets_path = os.path.join(base_dir, "assets", "benchlab.png")
@@ -170,8 +183,8 @@ class BenchlabWigiSession:
         logger.info(f"Splash screen displayed on {self.usb_device.serial}.")
         time.sleep(self.SPLASH_TIME)
 
-
     # ----------------- HELPER ----------------- #
+
     def create_overview_page(self):
         ov = BenchlabOverview(
             self.wigidash,
@@ -183,11 +196,14 @@ class BenchlabWigiSession:
         ov.start()
         return ov
 
-
     # ----------------- MAIN LOOP ----------------- #
+
     def run(self):
         """Run UI loop for Wigidash pages."""
-        logger.info(f"Session {self.usb_device.serial} started with manager={self.manager}")
+        logger.info(
+            f"Session {
+                self.usb_device.serial} started with manager={
+                self.manager}")
         if not self.connect_wigidash():
             return
 
@@ -201,7 +217,7 @@ class BenchlabWigiSession:
                 touch = None
 
             if not self.app_running or self.shutdown_event.is_set():
-                break 
+                break
 
             # --- Fleet Page ---
             if self.next_page == "fleet":
@@ -212,18 +228,23 @@ class BenchlabWigiSession:
                         wigi=self
                     )
                     self.fleet_page.start()
-                    logger.info(f"Fleet page started for {self.usb_device.serial}.")
+                    logger.info(
+                        f"Fleet page started for {
+                            self.usb_device.serial}.")
 
                 self.fleet_page.check_touch(touch)
                 self.fleet_page.render_and_display()
 
-                if not self.fleet_page.running and self.fleet_page.selected_port:
+                if (not self.fleet_page.running
+                        and self.fleet_page.selected_port):
                     # Copy the selected port from fleet page into the session
                     self.selected_port = self.fleet_page.selected_port
 
                     # Fetch the telemetry context for that port
                     if self.manager:
-                        self.telemetry_context = self.manager.telemetry_contexts.get(self.selected_port)
+                        self.telemetry_context = (
+                            self.manager.telemetry_contexts.get(
+                                self.selected_port))
 
                     # Now create the overview page with a valid context
                     self.overview_page = BenchlabOverview(
@@ -236,7 +257,9 @@ class BenchlabWigiSession:
                     self.overview_page.start()
                     self.next_page = "overview"
                     self.fleet_page = None
-                    logger.info(f"Fleet selection done on {self.usb_device.serial}, opening Overview.")
+                    logger.info(
+                        f"Fleet selection done on {
+                            self.usb_device.serial}, opening Overview.")
 
             # --- Overview Page ---
             elif self.next_page == "overview":
@@ -245,13 +268,16 @@ class BenchlabWigiSession:
                     self.overview_page.render_and_display()
 
                     if not self.overview_page.running:
-                        requested_metrics = getattr(self.overview_page, "requested_graph_metrics", [])
+                        requested_metrics = getattr(
+                            self.overview_page, "requested_graph_metrics", [])
                         self.overview_page = None
 
                         if requested_metrics:
                             self.graph_metrics = requested_metrics
                             self.next_page = "graph"
-                            logger.info(f"Overview requested graph metrics: {self.graph_metrics}")
+                            logger.info(
+                                f"Overview requested graph metrics: {
+                                    self.graph_metrics}")
                         else:
                             self.next_page = "fleet"
 
@@ -260,14 +286,17 @@ class BenchlabWigiSession:
                 if self.graph_page is None:
                     self.graph_page = BenchlabGraph(
                         self.wigidash,
-                        self, 
+                        self,
                         metrics=self.graph_metrics,
                         telemetry_history=self.telemetry_history,
                         telemetry_context=self.telemetry_context,
                         manager=self.manager or self
                     )
                     self.graph_page.start()
-                    logger.info(f"Graph page started for {self.usb_device.serial} with metrics {self.graph_metrics}.")
+                    logger.info(
+                        f"Graph page started for {
+                            self.usb_device.serial} with metrics {
+                            self.graph_metrics}.")
 
                 self.graph_page.check_touch(touch)
                 self.graph_page.render_and_display()
@@ -275,12 +304,14 @@ class BenchlabWigiSession:
                 if not self.graph_page.running:
                     self.graph_page = None
                     self.next_page = "overview"
-                    logger.info(f"Graph page exited for {self.usb_device.serial}, returning to Overview.")
+                    logger.info(
+                        f"Graph page exited for {
+                            self.usb_device.serial}, returning to Overview.")
 
             time.sleep(0.05)
 
-
     # ----------------- STOP / CLEANUP ----------------- #
+
     def cleanup(self):
         """Stop all pages and keepalive manager."""
         if self.keepalive_manager:
@@ -297,7 +328,6 @@ class BenchlabWigiSession:
                 logger.warning(f"Error disconnecting USB device: {e}")
         logger.info(f"Wigidash session {self.usb_device.serial} cleaned up.")
 
-
     def shutdown_session(self):
         """Show synchronized shutdown splash, then stop pages/keepalive."""
         logger.info(f"Stopping Wigidash session {self.usb_device.serial}")
@@ -310,7 +340,9 @@ class BenchlabWigiSession:
             try:
                 barrier.wait()
             except threading.BrokenBarrierError:
-                logger.warning(f"Shutdown barrier broken for {self.usb_device.serial}")
+                logger.warning(
+                    f"Shutdown barrier broken for {
+                        self.usb_device.serial}")
 
         # Show splash
         if self.wigidash:
@@ -321,4 +353,3 @@ class BenchlabWigiSession:
 
         self.cleanup()
         self.cleanup_done.set()
-

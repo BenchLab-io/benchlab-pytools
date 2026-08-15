@@ -42,7 +42,11 @@ class GraphApp:
         self.history_length = 50
 
         # Statistics
-        self.session_stats = {"min": None, "max": None, "avg": None, "count": 0}
+        self.session_stats = {
+            "min": None,
+            "max": None,
+            "avg": None,
+            "count": 0}
 
     # ------------------------------------------------------------------
     # Device detection (called by Detect button in UI)
@@ -152,12 +156,17 @@ class GraphApp:
                 if self.active_device:
                     self.active_device["uid"] = uid
                 else:
-                    self.active_device = {"port": target.get("port", "?"), "uid": uid}
-                    all_ports = [d["port"] for d in self.devices] if self.devices else [self.active_device["port"]]
+                    self.active_device = {
+                        "port": target.get(
+                            "port", "?"), "uid": uid}
+                    all_ports = [
+                        d["port"] for d in self.devices] if self.devices else [
+                        self.active_device["port"]]
                     if dpg.does_item_exist("##device_combo"):
-                        dpg.configure_item("##device_combo",
-                                           items=all_ports,
-                                           default_value=self.active_device["port"])
+                        dpg.configure_item(
+                            "##device_combo",
+                            items=all_ports,
+                            default_value=self.active_device["port"])
 
             while not self.stop_event.is_set():
                 try:
@@ -194,13 +203,15 @@ class GraphApp:
             time.sleep(1)
             return
 
-        user_data = dpg.get_item_user_data(self.graph_line) or {"x_data": [], "y_data": []}
+        user_data = dpg.get_item_user_data(self.graph_line) or {
+            "x_data": [], "y_data": []}
         dpg.set_item_user_data(self.graph_line, user_data)
 
         current_sensor = self.selected_sensor
         current_device = self.selected_device
 
-        while dpg.does_item_exist("##main_plot") and self.connected and self.graph_line:
+        while dpg.does_item_exist(
+                "##main_plot") and self.connected and self.graph_line:
             try:
                 if (self.selected_sensor != current_sensor
                         or self.selected_device != current_device):
@@ -209,17 +220,24 @@ class GraphApp:
                     y_data.clear()
                     user_data["x_data"].clear()
                     user_data["y_data"].clear()
-                    self.session_stats = {"min": None, "max": None, "avg": None, "count": 0,
-                                           "history": deque(maxlen=1000)}
+                    self.session_stats = {
+                        "min": None,
+                        "max": None,
+                        "avg": None,
+                        "count": 0,
+                        "history": deque(
+                            maxlen=1000)}
                     current_sensor = self.selected_sensor
                     current_device = self.selected_device
 
                 value = None
                 with self.lock:
                     if self.sensor_struct:
-                        value = self.get_sensor_value(self.sensor_struct, self.selected_sensor)
+                        value = self.get_sensor_value(
+                            self.sensor_struct, self.selected_sensor)
 
-                if value is not None and self.graph_line and dpg.does_item_exist(self.graph_line):
+                if (value is not None and self.graph_line
+                        and dpg.does_item_exist(self.graph_line)):
                     t += 1
                     x_data.append(t)
                     y_data.append(value)
@@ -227,26 +245,37 @@ class GraphApp:
 
                     user_data["x_data"] = list(x_data)
                     user_data["y_data"] = list(y_data)
-                    dpg.set_value(self.graph_line, [list(x_data), list(y_data)])
+                    dpg.set_value(
+                        self.graph_line, [
+                            list(x_data), list(y_data)])
 
                     min_y = min(y_data)
                     max_y = max(y_data)
                     margin = (max_y - min_y) * 0.1 if max_y != min_y else 1
 
-                    if x_data and self.graph_x_axis is not None and dpg.does_item_exist(self.graph_x_axis):
-                        dpg.set_axis_limits(self.graph_x_axis,
-                                            float(x_data[0]), float(x_data[-1]))
-                    if self.graph_y_axis is not None and dpg.does_item_exist(self.graph_y_axis):
+                    if (x_data and self.graph_x_axis is not None
+                            and dpg.does_item_exist(self.graph_x_axis)):
+                        dpg.set_axis_limits(self.graph_x_axis, float(
+                            x_data[0]), float(x_data[-1]))
+                    if self.graph_y_axis is not None and dpg.does_item_exist(
+                            self.graph_y_axis):
                         dpg.set_axis_limits(self.graph_y_axis,
                                             min_y - margin, max_y + margin)
 
                     s = self.session_stats
-                    min_text = f"Min: {s['min']:.2f}" if s["min"] is not None else "Min: --"
-                    max_text = f"Max: {s['max']:.2f}" if s["max"] is not None else "Max: --"
-                    avg_text = f"Avg: {s['avg']:.2f}" if s["avg"] is not None else "Avg: --"
-                    for tag, text in (("graph_min", min_text), ("graph_min_float", min_text),
-                                       ("graph_max", max_text), ("graph_max_float", max_text),
-                                       ("graph_avg", avg_text), ("graph_avg_float", avg_text)):
+                    min_text = f"Min: {
+                        s['min']:.2f}" if s["min"] is not None else "Min: --"
+                    max_text = f"Max: {
+                        s['max']:.2f}" if s["max"] is not None else "Max: --"
+                    avg_text = f"Avg: {
+                        s['avg']:.2f}" if s["avg"] is not None else "Avg: --"
+                    for tag, text in (
+                            ("graph_min", min_text),
+                            ("graph_min_float", min_text),
+                            ("graph_max", max_text),
+                            ("graph_max_float", max_text),
+                            ("graph_avg", avg_text),
+                            ("graph_avg_float", avg_text)):
                         if dpg.does_item_exist(tag):
                             dpg.set_value(tag, text)
             except Exception as e:
@@ -270,7 +299,10 @@ class GraphApp:
 
     def run(self):
         dpg.create_context()
-        dpg.create_viewport(title="BENCHLAB Graph Interface", width=1000, height=700)
+        dpg.create_viewport(
+            title="BENCHLAB Graph Interface",
+            width=1000,
+            height=700)
         ui.build_unified_window(self)
         dpg.setup_dearpygui()
         dpg.show_viewport()
@@ -285,21 +317,29 @@ class GraphApp:
         try:
             while dpg.is_dearpygui_running():
                 with self.lock:
-                    status_text = "Connected" if self.connected else "Disconnected"
-                    status_color = (0, 255, 0) if self.connected else (255, 0, 0)
+                    status_text = (
+                        "Connected" if self.connected else "Disconnected")
+                    status_color = (
+                        0, 255, 0) if self.connected else (
+                        255, 0, 0)
                     if dpg.does_item_exist("device_status"):
                         dpg.set_value("device_status", status_text)
                         dpg.configure_item("device_status", color=status_color)
                     if dpg.does_item_exist("device_uid"):
-                        dpg.set_value("device_uid",
-                                      self.latest_uid if self.latest_uid != "?" else "Unknown")
+                        dpg.set_value(
+                            "device_uid",
+                            self.latest_uid
+                            if self.latest_uid != "?" else "Unknown")
 
                     # Populate sensor combo once first data arrives
                     if not _sensors_populated and self.sensor_struct:
-                        keys = [k for k in self.sensor_struct if k.lower() != "timestamp"]
+                        keys = [
+                            k for k in self.sensor_struct
+                            if k.lower() != "timestamp"]
                         if keys and dpg.does_item_exist("##sensor_combo"):
-                            dpg.configure_item("##sensor_combo",
-                                               items=keys, default_value=keys[0])
+                            dpg.configure_item(
+                                "##sensor_combo", items=keys,
+                                default_value=keys[0])
                             _sensors_populated = True
 
                     ui.update_current_values_display(self)
@@ -307,6 +347,7 @@ class GraphApp:
         finally:
             self.stop_event.set()
             self._stop_sensor_thread()
-            if self.graph_updater_thread and self.graph_updater_thread.is_alive():
+            if (self.graph_updater_thread
+                    and self.graph_updater_thread.is_alive()):
                 self.graph_updater_thread.join(timeout=2)
             dpg.destroy_context()

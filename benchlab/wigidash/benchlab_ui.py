@@ -26,6 +26,7 @@ class UIButton:
     SHUTDOWN = "shutdown"
     GRAPH_METRIC = "graph_metric"
 
+
 BUTTON_DEFS = {
     UIButton.SELECT_DEVICE: {
         "text": "Select Device",
@@ -54,17 +55,38 @@ def bind_button(button_id, callback):
         "callback": callback,
     }
 
+
 def load_fonts():
     try:
         return {
-            "header": ImageFont.truetype(os.path.join(ASSETS_DIR, "Inter-Bold.ttf"), 30),
-            "title":  ImageFont.truetype(os.path.join(ASSETS_DIR, "Inter.ttf"), 18),
-            "text":   ImageFont.truetype(os.path.join(ASSETS_DIR, "Inter.ttf"), 14),
-            "button": ImageFont.truetype(os.path.join(ASSETS_DIR, "Inter.ttf"), 14),
+            "header": ImageFont.truetype(
+                os.path.join(
+                    ASSETS_DIR,
+                    "Inter-Bold.ttf"),
+                30),
+            "title": ImageFont.truetype(
+                os.path.join(
+                    ASSETS_DIR,
+                    "Inter.ttf"),
+                18),
+            "text": ImageFont.truetype(
+                os.path.join(
+                    ASSETS_DIR,
+                    "Inter.ttf"),
+                14),
+            "button": ImageFont.truetype(
+                os.path.join(
+                    ASSETS_DIR,
+                    "Inter.ttf"),
+                14),
         }
     except Exception:
         default = ImageFont.load_default()
-        return dict(header=default, title=default, text=default, button=default)
+        return dict(
+            header=default,
+            title=default,
+            text=default,
+            button=default)
 
 
 def load_logo(max_size=(60, 60)):
@@ -73,25 +95,27 @@ def load_logo(max_size=(60, 60)):
         logo_img = Image.open(logo_path).convert("RGBA")
         logo_img.thumbnail(max_size, Image.Resampling.LANCZOS)
         return logo_img
-    except Exception as e:
+    except Exception:
         # Optionally log warning here if you have a logger
         return None
 
 
 def draw_header(draw, img, fonts, title, logo=None):
-    draw.rectangle([0, 0, UITheme.SCREEN_WIDTH, UITheme.HEADER_HEIGHT], fill=UITheme.COLOR_SECTION)
+    draw.rectangle([0,
+                    0,
+                    UITheme.SCREEN_WIDTH,
+                    UITheme.HEADER_HEIGHT],
+                   fill=UITheme.COLOR_SECTION)
 
     if logo:
         y = (UITheme.HEADER_HEIGHT - logo.height) // 2
         img.paste(logo, (10, y), mask=logo)
         img.paste(logo, (UITheme.SCREEN_WIDTH - logo.width - 10, y), mask=logo)
 
-
     bbox = draw.textbbox((0, 0), title, font=fonts["header"])
     x = (UITheme.SCREEN_WIDTH - (bbox[2] - bbox[0])) // 2
     y = (UITheme.HEADER_HEIGHT - (bbox[3] - bbox[1])) // 2
     draw.text((x, y), title, fill=(0, 0, 0), font=fonts["header"])
-
 
 
 def draw_footer(draw, fonts, info_text, buttons):

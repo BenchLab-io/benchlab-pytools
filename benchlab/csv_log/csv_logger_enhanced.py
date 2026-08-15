@@ -3,7 +3,6 @@ Enhanced CSV Fleet Logger for BENCHLAB
 Lightweight, robust, and cross-platform compatible
 """
 
-import csv
 import os
 import configparser
 import threading
@@ -25,6 +24,7 @@ from benchlab.csv_log.smart_retry import SmartRetryManager, RetryConfig
 # Configuration and Data Classes
 # ----------------------------------------------------------------------
 
+
 @dataclass
 class LoggerConfig:
     """Configuration for the CSV logger."""
@@ -38,6 +38,7 @@ class LoggerConfig:
 
 class DeviceConfig:
     """Configuration for a single device."""
+
     def __init__(
         self,
         port: str,
@@ -99,7 +100,9 @@ class EnhancedCSVLogger:
 
     def _setup_logging(self):
         level = logging.WARNING if self.config.silent_mode else logging.INFO
-        logging.basicConfig(level=level, format="%(asctime)s - %(levelname)s - %(message)s")
+        logging.basicConfig(
+            level=level,
+            format="%(asctime)s - %(levelname)s - %(message)s")
 
     # ------------------------------------------------------------------
     # Device discovery and selection
@@ -119,7 +122,9 @@ class EnhancedCSVLogger:
             for uid, info in devices_info.items()
         ]
 
-    def select_devices(self, devices: List[DeviceConfig]) -> List[DeviceConfig]:
+    def select_devices(
+            self,
+            devices: List[DeviceConfig]) -> List[DeviceConfig]:
         """Select devices to log.
 
         Auto-selects all devices when ``config.auto_select`` or
@@ -135,10 +140,15 @@ class EnhancedCSVLogger:
 
         print("\n--- Available Devices ---")
         for i, dev in enumerate(devices, 1):
-            print(f"  {i}: Port: {dev.port:<12} UID: {dev.uid}  FW: {dev.firmware}")
+            print(
+                f"  {i}: Port: {
+                    dev.port:<12} UID: {
+                    dev.uid}  FW: {
+                    dev.firmware}")
 
         selection = input(
-            "\nEnter device numbers (comma-separated), 'all', or Enter for all: "
+            "\nEnter device numbers (comma-separated), 'all', "
+            "or Enter for all: "
         ).strip().lower()
 
         if not selection or selection == "all":
@@ -306,18 +316,27 @@ def load_config(config_file: str = "csv_logger.config") -> LoggerConfig:
         parser.read(config_file)
         if "logger" in parser:
             s = parser["logger"]
-            config.interval    = float(s.get("interval",    config.interval))
-            config.output_dir  = s.get("output_dir",        config.output_dir)
-            config.buffer_size = int(s.get("buffer_size",   config.buffer_size))
-            config.format      = s.get("format",            config.format)
-            config.silent_mode = s.getboolean("silent_mode", config.silent_mode)
-            config.auto_select = s.getboolean("auto_select", config.auto_select)
+            config.interval = float(s.get("interval", config.interval))
+            config.output_dir = s.get("output_dir", config.output_dir)
+            config.buffer_size = int(s.get("buffer_size", config.buffer_size))
+            config.format = s.get("format", config.format)
+            config.silent_mode = s.getboolean(
+                "silent_mode", config.silent_mode)
+            config.auto_select = s.getboolean(
+                "auto_select", config.auto_select)
 
-    config.interval    = float(os.getenv("CSV_LOG_INTERVAL",    config.interval))
-    config.output_dir  = os.getenv("CSV_LOG_OUTPUT_DIR",        config.output_dir)
-    config.buffer_size = int(os.getenv("CSV_LOG_BUFFER_SIZE",   config.buffer_size))
-    config.silent_mode = os.getenv("CSV_LOG_SILENT",       str(config.silent_mode)).lower() == "true"
-    config.auto_select = os.getenv("CSV_LOG_AUTO_SELECT",  str(config.auto_select)).lower() == "true"
+    config.interval = float(os.getenv("CSV_LOG_INTERVAL", config.interval))
+    config.output_dir = os.getenv("CSV_LOG_OUTPUT_DIR", config.output_dir)
+    config.buffer_size = int(
+        os.getenv(
+            "CSV_LOG_BUFFER_SIZE",
+            config.buffer_size))
+    config.silent_mode = os.getenv(
+        "CSV_LOG_SILENT", str(
+            config.silent_mode)).lower() == "true"
+    config.auto_select = os.getenv(
+        "CSV_LOG_AUTO_SELECT", str(
+            config.auto_select)).lower() == "true"
 
     return config
 
@@ -364,23 +383,24 @@ def run_enhanced_csv_logger(args=None):
 if __name__ == "__main__":
     import argparse as _argparse
 
-    _parser = _argparse.ArgumentParser(description="Enhanced BENCHLAB CSV Fleet Logger")
-    _parser.add_argument("-i", "--interval",   type=float, default=1.0,
+    _parser = _argparse.ArgumentParser(
+        description="Enhanced BENCHLAB CSV Fleet Logger")
+    _parser.add_argument("-i", "--interval", type=float, default=1.0,
                          help="Logging interval in seconds")
-    _parser.add_argument("-c", "--config",     default="csv_logger.config",
+    _parser.add_argument("-c", "--config", default="csv_logger.config",
                          help="Configuration file path")
-    _parser.add_argument("--source",           default="direct",
+    _parser.add_argument("--source", default="direct",
                          choices=["direct", "fastapi", "mqtt"],
                          help="Data source")
-    _parser.add_argument("--api-url",          default="http://127.0.0.1:8000")
-    _parser.add_argument("--mqtt-broker",      default="localhost")
-    _parser.add_argument("--mqtt-port",        type=int, default=1883)
-    _parser.add_argument("--silent",           action="store_true")
-    _parser.add_argument("--auto-select",      action="store_true")
+    _parser.add_argument("--api-url", default="http://127.0.0.1:8000")
+    _parser.add_argument("--mqtt-broker", default="localhost")
+    _parser.add_argument("--mqtt-port", type=int, default=1883)
+    _parser.add_argument("--silent", action="store_true")
+    _parser.add_argument("--auto-select", action="store_true")
     _cli_args = _parser.parse_args()
 
     _config = load_config(_cli_args.config)
-    _config.interval    = _cli_args.interval
+    _config.interval = _cli_args.interval
     _config.silent_mode = _cli_args.silent
     _config.auto_select = _cli_args.auto_select
 

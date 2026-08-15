@@ -7,7 +7,8 @@ BenchLab hardware is required:
 - WigidashManager.start_telemetry's lock preventing duplicate telemetry
   contexts/threads when called concurrently for the same port
 - telemetry_step not mutating the caller's input dict in place
-- The touch debounce threshold in benchlab_overview/benchlab_graph/benchlab_fleet
+- The touch debounce threshold in
+  benchlab_overview/benchlab_graph/benchlab_fleet
 - The Linux USB-permissions preflight check and udev rule detection
 """
 
@@ -16,7 +17,9 @@ import threading
 import time
 
 from benchlab.wigidash.wigidash_manager import WigidashManager
-from benchlab.wigidash.benchlab_telemetry import telemetry_step, TelemetryContext, TelemetryHistory
+from benchlab.wigidash.benchlab_telemetry import (
+    telemetry_step, TelemetryContext, TelemetryHistory
+)
 from benchlab.wigidash import wigidash_usb
 
 
@@ -90,7 +93,8 @@ def test_start_telemetry_lock_prevents_duplicate_contexts():
     ds = FakeDataSource([[device]])
     mgr = WigidashManager(datasource=ds)
     mgr.get_available_benchlabs(log_info=False)
-    mgr.shutdown_event.set()  # stop telemetry_loop threads immediately after they start
+    # stop telemetry_loop threads immediately after they start
+    mgr.shutdown_event.set()
 
     barrier = threading.Barrier(2)
 
@@ -99,7 +103,12 @@ def test_start_telemetry_lock_prevents_duplicate_contexts():
         mgr.start_telemetry("COM3", session)
 
     sessions = [FakeSession(), FakeSession()]
-    threads = [threading.Thread(target=call_start_telemetry, args=(s,)) for s in sessions]
+    threads = [
+        threading.Thread(
+            target=call_start_telemetry,
+            args=(
+                s,
+            )) for s in sessions]
     for t in threads:
         t.start()
     for t in threads:
@@ -111,7 +120,12 @@ def test_start_telemetry_lock_prevents_duplicate_contexts():
 
 
 def test_telemetry_step_does_not_mutate_caller_dict():
-    ctx = TelemetryContext(port="COM3", ser=None, device_info={}, uid="UID-1", history=TelemetryHistory())
+    ctx = TelemetryContext(
+        port="COM3",
+        ser=None,
+        device_info={},
+        uid="UID-1",
+        history=TelemetryHistory())
     original = {"Fans": [{"RPM": 1200}], "Vin": [None, 3.3]}
     original_fans_list = original["Fans"]
     original_fan_dict = original["Fans"][0]
@@ -142,12 +156,14 @@ def test_overview_debounce_rejects_rapid_touch_and_accepts_later_one():
     overview.running = True
     overview.footer_btn_config = []
 
-    # Coordinates inside the bottom-left "power" card (x0=PADDING, y0=bottom_y).
+    # Coordinates inside the bottom-left "power" card (x0=PADDING,
+    # y0=bottom_y).
     padding = overview.PADDING
     bottom_y = overview.HEADER_HEIGHT + padding + 160 + padding
     hit_x, hit_y = padding + 5, bottom_y + 5
 
-    # First touch (well past any startup guard) hits the card and starts debounce.
+    # First touch (well past any startup guard) hits the card and starts
+    # debounce.
     overview.last_touch_time = 0
     overview.check_touch(FakeTouch(hit_x, hit_y))
     assert overview.requested_graph_metrics is not None
@@ -176,25 +192,33 @@ def test_udev_rule_exists_matches_vid_pid(tmp_path):
     rules_dir = tmp_path / "rules.d"
     rules_dir.mkdir()
     (rules_dir / "99-wigidash.rules").write_text(
-        'SUBSYSTEM=="usb", ATTR{idVendor}=="28da", ATTR{idProduct}=="ef01", TAG+="uaccess"\n'
+        'SUBSYSTEM=="usb", ATTR{idVendor}=="28da", '
+        'ATTR{idProduct}=="ef01", TAG+="uaccess"\n'
     )
 
-    assert wigidash_usb._udev_rule_exists(0x28DA, 0xEF01, rules_dirs=(str(rules_dir),)) is True
+    assert wigidash_usb._udev_rule_exists(
+        0x28DA, 0xEF01, rules_dirs=(
+            str(rules_dir),)) is True
 
 
 def test_udev_rule_exists_false_when_no_matching_rule(tmp_path):
     rules_dir = tmp_path / "rules.d"
     rules_dir.mkdir()
     (rules_dir / "50-other-device.rules").write_text(
-        'SUBSYSTEM=="usb", ATTR{idVendor}=="1234", ATTR{idProduct}=="5678", TAG+="uaccess"\n'
+        'SUBSYSTEM=="usb", ATTR{idVendor}=="1234", '
+        'ATTR{idProduct}=="5678", TAG+="uaccess"\n'
     )
 
-    assert wigidash_usb._udev_rule_exists(0x28DA, 0xEF01, rules_dirs=(str(rules_dir),)) is False
+    assert wigidash_usb._udev_rule_exists(
+        0x28DA, 0xEF01, rules_dirs=(
+            str(rules_dir),)) is False
 
 
 def test_udev_rule_exists_false_when_dir_missing(tmp_path):
     missing_dir = tmp_path / "does_not_exist"
-    assert wigidash_usb._udev_rule_exists(0x28DA, 0xEF01, rules_dirs=(str(missing_dir),)) is False
+    assert wigidash_usb._udev_rule_exists(
+        0x28DA, 0xEF01, rules_dirs=(
+            str(missing_dir),)) is False
 
 
 def test_check_linux_usb_permissions_skipped_on_non_linux(monkeypatch):
@@ -215,16 +239,25 @@ def test_check_linux_usb_permissions_ok_as_root(monkeypatch):
 def test_check_linux_usb_permissions_ok_with_matching_rule(monkeypatch):
     monkeypatch.setattr(wigidash_usb, "is_linux", True)
     monkeypatch.setattr(os, "geteuid", lambda: 1000, raising=False)
-    monkeypatch.setattr(wigidash_usb, "_udev_rule_exists", lambda *a, **kw: True)
+    monkeypatch.setattr(
+        wigidash_usb,
+        "_udev_rule_exists",
+        lambda *a,
+        **kw: True)
     ok, hint = wigidash_usb.check_linux_usb_permissions()
     assert ok is True
     assert hint is None
 
 
-def test_check_linux_usb_permissions_fails_with_actionable_message(monkeypatch):
+def test_check_linux_usb_permissions_fails_with_actionable_message(
+        monkeypatch):
     monkeypatch.setattr(wigidash_usb, "is_linux", True)
     monkeypatch.setattr(os, "geteuid", lambda: 1000, raising=False)
-    monkeypatch.setattr(wigidash_usb, "_udev_rule_exists", lambda *a, **kw: False)
+    monkeypatch.setattr(
+        wigidash_usb,
+        "_udev_rule_exists",
+        lambda *a,
+        **kw: False)
     monkeypatch.setattr(wigidash_usb.usb.core, "find", lambda **kw: [])
 
     ok, hint = wigidash_usb.check_linux_usb_permissions(0x28DA, 0xEF01)
@@ -234,18 +267,24 @@ def test_check_linux_usb_permissions_fails_with_actionable_message(monkeypatch):
     assert "ef01" in hint.lower()
 
 
-def test_check_linux_usb_permissions_ok_when_device_node_accessible(monkeypatch):
+def test_check_linux_usb_permissions_ok_when_device_node_accessible(
+        monkeypatch):
     """No udev rule found, but the device node is already accessible (e.g.
     user granted access some other way) — should not report a failure."""
     monkeypatch.setattr(wigidash_usb, "is_linux", True)
     monkeypatch.setattr(os, "geteuid", lambda: 1000, raising=False)
-    monkeypatch.setattr(wigidash_usb, "_udev_rule_exists", lambda *a, **kw: False)
+    monkeypatch.setattr(
+        wigidash_usb,
+        "_udev_rule_exists",
+        lambda *a,
+        **kw: False)
 
     class FakeDev:
         bus = 1
         address = 5
 
-    monkeypatch.setattr(wigidash_usb.usb.core, "find", lambda **kw: [FakeDev()])
+    monkeypatch.setattr(wigidash_usb.usb.core, "find",
+                        lambda **kw: [FakeDev()])
     monkeypatch.setattr(os.path, "exists", lambda p: True)
     monkeypatch.setattr(os, "access", lambda p, m: True)
 
@@ -255,9 +294,12 @@ def test_check_linux_usb_permissions_ok_when_device_node_accessible(monkeypatch)
 
 
 def test_is_permission_error_detects_known_signals():
-    assert wigidash_usb._is_permission_error(Exception("[Errno 13] Access denied")) is True
-    assert wigidash_usb._is_permission_error(Exception("Operation not permitted")) is True
-    assert wigidash_usb._is_permission_error(Exception("Resource busy")) is False
+    assert wigidash_usb._is_permission_error(
+        Exception("[Errno 13] Access denied")) is True
+    assert wigidash_usb._is_permission_error(
+        Exception("Operation not permitted")) is True
+    assert wigidash_usb._is_permission_error(
+        Exception("Resource busy")) is False
 
 
 def test_scan_wigidash_passes_explicit_backend_when_available(monkeypatch):
@@ -297,4 +339,3 @@ def test_scan_wigidash_omits_backend_kwarg_when_unavailable(monkeypatch):
     wigidash_usb.scan_wigidash(0x28DA, 0xEF01)
 
     assert "backend" not in captured_kwargs
-

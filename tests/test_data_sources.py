@@ -53,7 +53,8 @@ from starlette.testclient import TestClient
 # ---------------------------------------------------------------------------
 
 TELEMETRY_TIMEOUT = 15  # seconds to wait for first telemetry reading
-HISTORY_MIN = 2         # minimum history entries to consider accumulation proven
+# minimum history entries to consider accumulation proven
+HISTORY_MIN = 2
 
 SEP = "-" * 60
 
@@ -91,7 +92,8 @@ def _extract_telemetry(snap, uid):
 
 
 def _wait_for_telemetry(get_fn, timeout=TELEMETRY_TIMEOUT):
-    """Poll *get_fn* until it returns a non-empty, non-error dict or timeout."""
+    """Poll *get_fn* until it returns a non-empty, non-error dict or
+    timeout."""
     deadline = time.time() + timeout
     while time.time() < deadline:
         result = get_fn()
@@ -103,14 +105,20 @@ def _wait_for_telemetry(get_fn, timeout=TELEMETRY_TIMEOUT):
 
 def _assert_telemetry_shape(data, source_label):
     """Common assertions that a telemetry payload looks sensible."""
-    assert data is not None, f"[{source_label}] Telemetry timed out – no data received"
-    assert isinstance(data, dict), f"[{source_label}] Telemetry is not a dict: {data!r}"
-    assert "error" not in data, f"[{source_label}] Telemetry contains error: {data}"
-    assert "timestamp" in data, f"[{source_label}] Telemetry missing 'timestamp' key: {data}"
+    assert data is not None, (
+        f"[{source_label}] Telemetry timed out – no data received")
+    assert isinstance(
+        data, dict), f"[{source_label}] Telemetry is not a dict: {data!r}"
+    assert "error" not in data, (
+        f"[{source_label}] Telemetry contains error: {data}")
+    assert "timestamp" in data, (
+        f"[{source_label}] Telemetry missing 'timestamp' key: {data}")
     sensor_keys = [k for k in data if k != "timestamp"]
-    assert sensor_keys, f"[{source_label}] Telemetry has no sensor keys: {data}"
+    assert sensor_keys, (
+        f"[{source_label}] Telemetry has no sensor keys: {data}")
     _ok(f"Telemetry shape OK — {len(sensor_keys)} sensor(s): {sensor_keys}")
-    _info(f"Sample values: { {k: data[k] for k in sensor_keys[:3]} }")
+    sample = {k: data[k] for k in sensor_keys[:3]}
+    _info(f"Sample values: {sample}")
 
 
 # ---------------------------------------------------------------------------
@@ -123,9 +131,14 @@ def device():
     _section("Device Discovery")
     devices = discover_devices()
     if not devices:
-        pytest.skip("No BenchLab devices found – skipping integration tests that require a device")
+        pytest.skip(
+            "No BenchLab devices found - skipping integration tests "
+            "that require a device")
     dev = devices[0]
-    _ok(f"Found device: uid={dev['uid']}  port={dev['port']}  fw={dev.get('fw', '?')}")
+    _ok(
+        f"Found device: uid={dev['uid']}  port={dev['port']}"
+        f"  fw={dev.get('fw', '?')}"
+    )
     return dev
 
 
@@ -174,7 +187,8 @@ def fastapi_client(device):
     }
     clients[uid] = set()
 
-    t = threading.Thread(target=read_device_loop, args=(port, uid), daemon=True)
+    t = threading.Thread(
+        target=read_device_loop, args=(port, uid), daemon=True)
     t.start()
     device_threads[uid] = t
     _ok(f"FastAPI reader thread started for {uid} on {port}")
@@ -193,14 +207,16 @@ def fastapi_client(device):
         api_shutdown_event.clear()
         pytest.fail(
             f"FastAPI reader thread failed to produce telemetry from {port} "
-            f"within {TELEMETRY_TIMEOUT}s. Check that the serial port is available."
+            f"within {TELEMETRY_TIMEOUT}s. Check that the serial port "
+            "is available."
         )
     _ok(f"Live telemetry confirmed — {len(live_data)} keys in first reading")
 
     # Patch out lifespan discovery so it doesn't race for the COM port.
     # Our reader thread already has it open; the lifespan scan would just
     # produce a noisy PermissionError and "No devices found" warning.
-    with patch("benchlab.restapi.telemetry_api.find_benchlab_devices", return_value=[]):
+    with patch("benchlab.restapi.telemetry_api.find_benchlab_devices",
+               return_value=[]):
         with TestClient(fastapi_app) as client:
             yield client
 
@@ -222,20 +238,26 @@ class TestDirectSource:
 
     @pytest.mark.integration
     def test_connect_and_snapshot(self, direct_mgr, device):
-        """DataSourceManager connects and returns a snapshot with sensor_data."""
+        """DataSourceManager connects and returns a snapshot with
+        sensor_data."""
         _section("Direct › connect and snapshot")
         time.sleep(2)
         snap = direct_mgr.snapshot()
         _info(f"Top-level snapshot keys: {list(snap.keys())}")
         telem = _extract_telemetry(snap, device["uid"])
-        assert telem, f"Direct snapshot missing telemetry. Keys: {list(snap.keys())}"
+        assert telem, (
+            f"Direct snapshot missing telemetry. "
+            f"Keys: {list(snap.keys())}"
+        )
         _ok(f"Snapshot returned telemetry with {len(telem)} keys")
 
     @pytest.mark.integration
     def test_telemetry_shape(self, direct_mgr, device):
         """Direct telemetry payload has the expected shape."""
         _section("Direct › telemetry shape")
-        data = _wait_for_telemetry(lambda: _extract_telemetry(direct_mgr.snapshot(), device["uid"]))
+        data = _wait_for_telemetry(
+            lambda: _extract_telemetry(direct_mgr.snapshot(), device["uid"])
+        )
         _assert_telemetry_shape(data, "direct")
         _info(f"Timestamp: {data.get('timestamp')}")
 
@@ -247,7 +269,8 @@ class TestDirectSource:
         snap = direct_mgr.snapshot()
         snap_str = str(snap)
         assert device["uid"] in snap_str, (
-            f"Device UID {device['uid']} not found anywhere in snapshot: {snap}"
+            f"Device UID {device['uid']} not found anywhere "
+            f"in snapshot: {snap}"
         )
         _ok(f"Device UID {device['uid']} found in snapshot")
         info = snap.get("device_info") or snap.get("info") or {}
@@ -258,7 +281,9 @@ class TestDirectSource:
     def test_telemetry_accumulates(self, direct_mgr, device):
         """Multiple calls return fresh readings (timestamp advances)."""
         _section("Direct › telemetry accumulates over time")
-        _wait_for_telemetry(lambda: _extract_telemetry(direct_mgr.snapshot(), device["uid"]))
+        _wait_for_telemetry(
+            lambda: _extract_telemetry(direct_mgr.snapshot(), device["uid"])
+        )
         snap1 = direct_mgr.snapshot()
         ts1 = (_extract_telemetry(snap1, device["uid"]) or {}).get("timestamp")
         _info(f"Timestamp at t=0: {ts1}")
@@ -285,9 +310,14 @@ class TestFastAPISource:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "healthy"
-        assert data["connected_devices"] >= 1, "Health endpoint reports no connected devices"
-        _ok(f"status={data['status']}  connected_devices={data['connected_devices']}")
-        _info(f"Platform: {data.get('platform')}  timestamp: {data.get('timestamp')}")
+        assert data["connected_devices"] >= 1, (
+            "Health endpoint reports no connected devices")
+        _ok(f"status={data['status']}  "
+            f"connected_devices={data['connected_devices']}")
+        _info(
+            f"Platform: {data.get('platform')}  "
+            f"timestamp: {data.get('timestamp')}"
+        )
 
     @pytest.mark.integration
     def test_list_devices(self, fastapi_client, device):
@@ -297,7 +327,9 @@ class TestFastAPISource:
         assert resp.status_code == 200
         device_list = resp.json()
         uids = [d["uid"] for d in device_list]
-        assert device["uid"] in uids, f"Device {device['uid']} not in /devices: {uids}"
+        assert device["uid"] in uids, (
+            f"Device {device['uid']} not in /devices: {uids}"
+        )
         _ok(f"Device list contains {len(device_list)} device(s)")
         for d in device_list:
             _info(f"  uid={d['uid']}  port={d['port']}")
@@ -311,8 +343,9 @@ class TestFastAPISource:
         assert resp.status_code == 200
         data = resp.json()
         assert data.get("UID") == uid, f"UID mismatch in info: {data}"
-        assert data.get("port") == device["port"], f"Port mismatch in info: {data}"
-        _ok(f"UID and port match")
+        assert data.get(
+            "port") == device["port"], f"Port mismatch in info: {data}"
+        _ok("UID and port match")
         _info(f"Full info response: {data}")
 
     @pytest.mark.integration
@@ -321,12 +354,20 @@ class TestFastAPISource:
         _section(f"FastAPI › GET /device/{device['uid'][:12]}…/status")
         uid = device["uid"]
         resp = fastapi_client.get(f"/device/{uid}/status")
-        assert resp.status_code == 200, f"Unexpected status code: {resp.status_code}"
+        assert resp.status_code == 200, (
+            f"Unexpected status code: {resp.status_code}"
+        )
         data = resp.json()
         assert data["uid"] == uid
         assert data["port"] == device["port"]
-        _ok(f"uid={data['uid']}  port={data['port']}  connected={data.get('connected')}")
-        _info(f"History count: {data.get('history_count')}  Client count: {data.get('client_count')}")
+        _ok(
+            f"uid={data['uid']}  port={data['port']}  "
+            f"connected={data.get('connected')}"
+        )
+        _info(
+            f"History count: {data.get('history_count')}  "
+            f"Client count: {data.get('client_count')}"
+        )
 
     @pytest.mark.integration
     def test_telemetry(self, fastapi_client, device):
@@ -358,8 +399,11 @@ class TestFastAPISource:
 
     @pytest.mark.integration
     def test_individual_sensor(self, fastapi_client, device):
-        """/device/{uid}/telemetry/{sensor} returns a value for a known sensor."""
-        _section(f"FastAPI › GET /device/{device['uid'][:12]}…/telemetry/{{sensor}}")
+        """/device/{uid}/telemetry/{sensor} returns a value for a
+        known sensor."""
+        _section(
+            f"FastAPI › GET /device/{device['uid'][:12]}…"
+            f"/telemetry/{{sensor}}")
         uid = device["uid"]
         _wait_for_telemetry(
             lambda: fastapi_client.get(f"/device/{uid}/telemetry").json()
@@ -374,7 +418,9 @@ class TestFastAPISource:
         resp = fastapi_client.get(f"/device/{uid}/telemetry/{sensor}")
         assert resp.status_code == 200
         data = resp.json()
-        assert sensor in data, f"Sensor key '{sensor}' missing from response: {data}"
+        assert sensor in data, (
+            f"Sensor key '{sensor}' missing from response: {data}"
+        )
         _ok(f"Queried sensor '{sensor}' → {data[sensor]}")
         _info(f"(Tested 1 of {len(sensors)} available sensors)")
 
@@ -392,11 +438,17 @@ class TestFastAPISource:
         assert resp.status_code == 200
         data = resp.json()
         assert data["count"] >= HISTORY_MIN, (
-            f"History has only {data['count']} entries, expected >= {HISTORY_MIN}"
+            f"History has only {data['count']} entries, "
+            f"expected >= {HISTORY_MIN}"
         )
         for entry in data["data"]:
-            assert "timestamp" in entry, f"History entry missing timestamp: {entry}"
-        _ok(f"{data['count']} history entries (of {data['total_available']} total)")
+            assert "timestamp" in entry, (
+                f"History entry missing timestamp: {entry}"
+            )
+        _ok(
+            f"{data['count']} history entries "
+            f"(of {data['total_available']} total)"
+        )
         _info(f"Oldest: {data['data'][0].get('timestamp')}  "
               f"Newest: {data['data'][-1].get('timestamp')}")
 
@@ -466,8 +518,10 @@ class TestMQTTSource:
     def test_mqtt_publishes_telemetry(self, device):
         """MQTT publisher emits valid JSON telemetry on the expected topic."""
         topic = self._topic(device)
-        _section(f"MQTT › publishes telemetry")
-        _info(f"Broker: {os.getenv('MQTT_BROKER', 'localhost')}:{os.getenv('MQTT_PORT', '1883')}")
+        _section("MQTT › publishes telemetry")
+        broker = os.getenv('MQTT_BROKER', 'localhost')
+        port = os.getenv('MQTT_PORT', '1883')
+        _info(f"Broker: {broker}:{port}")
         _info(f"Topic:  {topic}")
 
         thread, mqtt_pub = self._start_publisher()
@@ -494,11 +548,16 @@ class TestMQTTSource:
         # Collect direct sensor keys first
         mgr = DataSourceManager(source_type="direct")
         mgr.connect(port=device["port"], uid=device["uid"])
-        direct_data = _wait_for_telemetry(lambda: _extract_telemetry(mgr.snapshot(), device["uid"]))
+        direct_data = _wait_for_telemetry(
+            lambda: _extract_telemetry(mgr.snapshot(), device["uid"])
+        )
         mgr.disconnect()
         assert direct_data, "Could not get direct telemetry for key comparison"
         direct_keys = set(direct_data.keys()) - {"timestamp"}
-        _info(f"Direct source sensor keys ({len(direct_keys)}): {sorted(direct_keys)}")
+        _info(
+            f"Direct source sensor keys ({len(direct_keys)}): "
+            f"{sorted(direct_keys)}"
+        )
 
         # Collect one MQTT payload and compare keys
         topic = self._topic(device)
@@ -513,9 +572,13 @@ class TestMQTTSource:
             _info(f"MQTT sensor keys ({len(mqtt_keys)}): {sorted(mqtt_keys)}")
             missing = direct_keys - mqtt_keys
             assert not missing, (
-                f"MQTT payload missing sensor keys present in direct source: {missing}"
+                f"MQTT payload missing sensor keys present in "
+                f"direct source: {missing}"
             )
-            _ok(f"All {len(direct_keys)} direct sensor keys present in MQTT payload")
+            _ok(
+                f"All {len(direct_keys)} direct sensor keys present "
+                f"in MQTT payload"
+            )
         finally:
             client.loop_stop()
             client.disconnect()

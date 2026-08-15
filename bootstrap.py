@@ -89,7 +89,11 @@ def requirements_satisfied(req_file: str) -> Tuple[bool, List[str]]:
 
     try:
         with open(req_file, "r", encoding="utf-8") as f:
-            lines = [l.strip() for l in f if l.strip() and not l.startswith("#")]
+            lines = [
+                line.strip()
+                for line in f
+                if line.strip() and not line.startswith("#")
+            ]
     except OSError:
         return True, []
 
@@ -105,7 +109,8 @@ def requirements_satisfied(req_file: str) -> Tuple[bool, List[str]]:
 
         try:
             installed = Version(metadata.version(req.name))
-            if req.specifier and not req.specifier.contains(installed, prereleases=True):
+            if req.specifier and not req.specifier.contains(
+                    installed, prereleases=True):
                 missing.append(f"{req} (installed {installed})")
         except metadata.PackageNotFoundError:
             missing.append(str(req))

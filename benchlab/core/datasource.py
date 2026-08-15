@@ -9,99 +9,108 @@ Provides a unified interface for tools to consume telemetry data from:
 - Service HTTP API (C# BenchLab service REST API)
 """
 
+from .retry import retry, RetryPolicy
 import json
 import logging
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections import deque
 from datetime import datetime, UTC
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .config import SerialConfig, FastAPIConfig, MQTTConfig
 
 logger = logging.getLogger("benchlab.core.datasource")
 
 # Import retry utilities for robust connection handling
-from .retry import retry, RetryPolicy
 
 
 class DataSource(ABC):
     """Abstract base class for all data sources.
-    
+
     All data sources must implement this interface to provide
     a consistent API for tools to consume telemetry data.
     """
-    
+
     @abstractmethod
     def connect(self) -> bool:
         """Establish connection to the data source.
-        
+
         Returns:
             True if connection successful, False otherwise
         """
         pass
-    
+
     @abstractmethod
     def disconnect(self) -> None:
         """Close connection to the data source."""
         pass
-    
+
     @abstractmethod
     def is_connected(self) -> bool:
         """Check if connected to the data source.
-        
+
         Returns:
             True if connected, False otherwise
         """
         pass
-    
+
     @abstractmethod
     def list_devices(self) -> List[Dict[str, Any]]:
         """Get list of available devices.
-        
+
         Returns:
-            List of device info dictionaries with at least 'uid' and 'port' keys
+            List of device info dictionaries with at least 'uid' and
+            'port' keys
         """
         pass
-    
+
     @abstractmethod
     def get_telemetry(self, uid: str) -> Optional[Dict[str, Any]]:
         """Get latest telemetry data for a device.
-        
+
         Args:
             uid: Device unique identifier
-            
+
         Returns:
             Dictionary of sensor data, or None if unavailable
         """
         pass
-    
+
     @abstractmethod
     def get_device_info(self, uid: str) -> Optional[Dict[str, Any]]:
         """Get device information (firmware, etc.).
-        
+
         Args:
             uid: Device unique identifier
-            
+
         Returns:
             Dictionary with device info, or None if unavailable
         """
         pass
-    
+
     @property
     @abstractmethod
     def source_type(self) -> str:
-        """Return the type of data source (e.g., 'direct', 'fastapi', 'mqtt')."""
+        """Return the type of data source (e.g., 'direct', 'fastapi',
+        'mqtt')."""
         pass
 
 
 class DirectDataSource(DataSource):
     """Data source that connects directly to serial port via pycore.
-    
+
     This is used when running a single tool that can exclusively claim
     the serial port.
     """
-    
-    def __init__(self, *, config: Optional["SerialConfig"] = None, port: Optional[str] = None, poll_interval: float = 1.0):
+
+    def __init__(
+            self,
+            *,
+            config: Optional["SerialConfig"] = None,
+            port: Optional[str] = None,
+            poll_interval: float = 1.0):
         """Initialize direct data source.
 
         Parameters are now wrapped in a :class:`SerialConfig` model for
@@ -124,7 +133,7 @@ class DirectDataSource(DataSource):
         self._worker_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._ser_handles: Dict[str, Any] = {}
-        
+
         # Import pycore
         try:
             from benchlab_pycore.core import (
@@ -135,7 +144,8 @@ class DirectDataSource(DataSource):
             try:
                 from benchlab_pycore.core import BENCHLAB_BL2_PRODUCT_ID
             except ImportError:
-                from benchlab_pycore.core import BENCHLAB_CFE_PRODUCT_ID as BENCHLAB_BL2_PRODUCT_ID
+                from benchlab_pycore.core import (
+                    BENCHLAB_CFE_PRODUCT_ID as BENCHLAB_BL2_PRODUCT_ID)
             # benchlab_pycore.core.serial_io has no connection-opening helper;
             # use the local wrapper instead (see benchlab.core.shared_serial).
             from benchlab.core.shared_serial import open_serial_connection
@@ -152,8 +162,9 @@ class DirectDataSource(DataSource):
         except ImportError as e:
             logger.error(f"Failed to import benchlab_pycore: {e}")
             self._pycore = None
-    
-    @retry(RetryPolicy(max_retries=3, backoff_factor=2.0, base_delay=0.5, allowed_exceptions=(Exception,)))
+
+    @retry(RetryPolicy(max_retries=3, backoff_factor=2.0,
+           base_delay=0.5, allowed_exceptions=(Exception,)))
     def connect(self) -> bool:
         if self._pycore is None:
             return False
@@ -179,9 +190,15 @@ class DirectDataSource(DataSource):
                 uid = self._pycore['read_uid'](ser)
                 info = self._pycore['read_device'](ser) or {}
                 if uid:
-                    product_id = info.get('ProductId', self._pycore['BENCHLAB_ORIGINAL_PRODUCT_ID'])
-                    variant = "BL2" if product_id == self._pycore['BENCHLAB_BL2_PRODUCT_ID'] else "ORIGINAL"
-                    self._device_info[uid] = {**info, 'uid': uid, 'port': port, 'variant': variant}
+                    product_id = info.get(
+                        'ProductId',
+                        self._pycore['BENCHLAB_ORIGINAL_PRODUCT_ID'])
+                    is_bl2 = (
+                        product_id
+                        == self._pycore['BENCHLAB_BL2_PRODUCT_ID'])
+                    variant = "BL2" if is_bl2 else "ORIGINAL"
+                    self._device_info[uid] = {
+                        **info, 'uid': uid, 'port': port, 'variant': variant}
                     self._ser_handles[uid] = ser
                     logger.info(f"Connected to device {uid} on {port}")
                 else:
@@ -198,11 +215,12 @@ class DirectDataSource(DataSource):
         self._ser = self._ser_handles[first_uid]
 
         self._stop_event.clear()
-        self._worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
+        self._worker_thread = threading.Thread(
+            target=self._worker_loop, daemon=True)
         self._worker_thread.start()
         self._connected = True
         return True
-    
+
     def disconnect(self) -> None:
         self._stop_event.set()
         if self._worker_thread and self._worker_thread.is_alive():
@@ -215,14 +233,14 @@ class DirectDataSource(DataSource):
             self._ser = None
         self._connected = False
         logger.info("Disconnected from device")
-    
+
     def is_connected(self) -> bool:
         return self._connected
-    
+
     def list_devices(self) -> List[Dict[str, Any]]:
         if self._pycore is None:
             return []
-        
+
         if self._connected and self._device_info:
             devices = []
             for uid, info in self._device_info.items():
@@ -236,7 +254,7 @@ class DirectDataSource(DataSource):
                     'FwVersion': info.get('FwVersion', 0),
                 })
             return devices
-        
+
         devices = []
         ports = self._pycore['get_benchlab_ports']()
         for port_info in ports:
@@ -249,8 +267,14 @@ class DirectDataSource(DataSource):
                         info = self._pycore['read_device'](ser) or {}
                         ser.close()
                         if uid:
-                            product_id = info.get('ProductId', self._pycore['BENCHLAB_ORIGINAL_PRODUCT_ID'])
-                            variant = "BL2" if product_id == self._pycore['BENCHLAB_BL2_PRODUCT_ID'] else "ORIGINAL"
+                            product_id = info.get(
+                                'ProductId',
+                                self._pycore[
+                                    'BENCHLAB_ORIGINAL_PRODUCT_ID'])
+                            is_bl2 = (
+                                product_id
+                                == self._pycore['BENCHLAB_BL2_PRODUCT_ID'])
+                            variant = "BL2" if is_bl2 else "ORIGINAL"
                             devices.append({
                                 'uid': uid,
                                 'port': port,
@@ -260,26 +284,30 @@ class DirectDataSource(DataSource):
                 except Exception as e:
                     logger.debug(f"Failed to probe {port}: {e}")
         return devices
-    
+
     def get_telemetry(self, uid: str) -> Optional[Dict[str, Any]]:
         with self._lock:
             return self._latest_data.get(uid, None)
-    
+
     def get_device_info(self, uid: str) -> Optional[Dict[str, Any]]:
         return self._device_info.get(uid, None)
-    
+
     @property
     def source_type(self) -> str:
         return "direct"
-    
+
     def _worker_loop(self):
         while not self._stop_event.is_set():
             for uid, ser in list(self._ser_handles.items()):
                 try:
-                    # Get product_id for this device to ensure correct sensor interpretation
+                    # Get product_id for this device to ensure correct sensor
+                    # interpretation
                     device_info = self._device_info.get(uid, {})
-                    product_id = device_info.get('ProductId', self._pycore['BENCHLAB_ORIGINAL_PRODUCT_ID'])
-                    sensors = self._pycore['read_sensors'](ser, product_id=product_id)
+                    product_id = device_info.get(
+                        'ProductId',
+                        self._pycore['BENCHLAB_ORIGINAL_PRODUCT_ID'])
+                    sensors = self._pycore['read_sensors'](
+                        ser, product_id=product_id)
                     if sensors:
                         data = self._pycore['translate_sensor_struct'](sensors)
                         data['timestamp'] = datetime.now(UTC).isoformat()
@@ -297,12 +325,17 @@ class DirectDataSource(DataSource):
 
 class FastAPIDataSource(DataSource):
     """Data source that connects to a FastAPI server.
-    
+
     This is used when multiple tools need to share data from a single
     serial connection managed by the FastAPI server.
     """
 
-    def __init__(self, *, config: Optional["FastAPIConfig"] = None, base_url: str = "http://127.0.0.1:8000", timeout: float = 5.0):
+    def __init__(
+            self,
+            *,
+            config: Optional["FastAPIConfig"] = None,
+            base_url: str = "http://127.0.0.1:8000",
+            timeout: float = 5.0):
         from .config import FastAPIConfig
 
         if config is None:
@@ -318,16 +351,17 @@ class FastAPIDataSource(DataSource):
         except ImportError:
             logger.error("requests library not available")
             self._requests = None
-    
-    @retry(RetryPolicy(max_retries=3, backoff_factor=2.0, base_delay=0.5, allowed_exceptions=(Exception,)))
+
+    @retry(RetryPolicy(max_retries=3, backoff_factor=2.0,
+           base_delay=0.5, allowed_exceptions=(Exception,)))
     def connect(self) -> bool:
         if self._requests is None:
             return False
-        
+
         try:
             self._session = self._requests.Session()
             response = self._session.get(
-                f"{self.base_url}/health", 
+                f"{self.base_url}/health",
                 timeout=self.timeout
             )
             if response.status_code == 200:
@@ -337,12 +371,14 @@ class FastAPIDataSource(DataSource):
                 logger.info(f"Connected to FastAPI server at {self.base_url}")
                 return True
             else:
-                logger.error(f"FastAPI health check returned {response.status_code}")
+                logger.error(
+                    f"FastAPI health check returned {
+                        response.status_code}")
         except Exception as e:
             logger.error(f"Failed to connect to FastAPI server: {e}")
-        
+
         return False
-    
+
     def disconnect(self) -> None:
         if self._session:
             try:
@@ -352,14 +388,14 @@ class FastAPIDataSource(DataSource):
             self._session = None
         self._connected = False
         logger.info("Disconnected from FastAPI server")
-    
+
     def is_connected(self) -> bool:
         return self._connected
-    
+
     def list_devices(self) -> List[Dict[str, Any]]:
         if not self._connected or self._session is None:
             return []
-        
+
         try:
             response = self._session.get(
                 f"{self.base_url}/devices",
@@ -369,13 +405,13 @@ class FastAPIDataSource(DataSource):
                 return response.json()
         except Exception as e:
             logger.error(f"Failed to list devices: {e}")
-        
+
         return []
-    
+
     def get_telemetry(self, uid: str) -> Optional[Dict[str, Any]]:
         if not self._connected or self._session is None:
             return None
-        
+
         try:
             response = self._session.get(
                 f"{self.base_url}/device/{uid}/telemetry",
@@ -386,13 +422,13 @@ class FastAPIDataSource(DataSource):
                 return data if isinstance(data, dict) else None
         except Exception as e:
             logger.error(f"Failed to get telemetry for {uid}: {e}")
-        
+
         return None
-    
+
     def get_device_info(self, uid: str) -> Optional[Dict[str, Any]]:
         if not self._connected or self._session is None:
             return None
-        
+
         try:
             response = self._session.get(
                 f"{self.base_url}/device/{uid}/info",
@@ -402,9 +438,9 @@ class FastAPIDataSource(DataSource):
                 return response.json()
         except Exception as e:
             logger.error(f"Failed to get device info for {uid}: {e}")
-        
+
         return None
-    
+
     @property
     def source_type(self) -> str:
         return "fastapi"
@@ -438,7 +474,10 @@ def resolve_mqtt_protocol(value, mqtt_module):
         "mqttv5": mqtt_module.MQTTv5,
     }
 
-    if value in (mqtt_module.MQTTv31, mqtt_module.MQTTv311, mqtt_module.MQTTv5):
+    if value in (
+            mqtt_module.MQTTv31,
+            mqtt_module.MQTTv311,
+            mqtt_module.MQTTv5):
         return value
 
     key = str(value).strip().lower()
@@ -454,12 +493,24 @@ def resolve_mqtt_protocol(value, mqtt_module):
 class MQTTDataSource(DataSource):
     """Data source that subscribes to an MQTT broker."""
 
-    def __init__(self, *, config: Optional["MQTTConfig"] = None, broker: str = "localhost", port: int = 1883, topic_prefix: str = "benchlab", timeout: float = 5.0, protocol: Optional[str] = None):
+    def __init__(
+            self,
+            *,
+            config: Optional["MQTTConfig"] = None,
+            broker: str = "localhost",
+            port: int = 1883,
+            topic_prefix: str = "benchlab",
+            timeout: float = 5.0,
+            protocol: Optional[str] = None):
         from .config import MQTTConfig
         import os
 
         if config is None:
-            config = MQTTConfig(broker=broker, port=port, topic_prefix=topic_prefix, timeout=timeout)
+            config = MQTTConfig(
+                broker=broker,
+                port=port,
+                topic_prefix=topic_prefix,
+                timeout=timeout)
         self.broker = config.broker
         self.port = config.port
         self.topic_prefix = config.topic_prefix
@@ -467,7 +518,9 @@ class MQTTDataSource(DataSource):
         # Falls back to MQTT_PROTOCOL env var (same variable the publisher
         # side reads) so both producer and consumer resolve consistently,
         # then to MQTTv311 if neither is set.
-        self._protocol_setting = protocol if protocol is not None else os.getenv("MQTT_PROTOCOL", "MQTTv311")
+        self._protocol_setting = (
+            protocol if protocol is not None
+            else os.getenv("MQTT_PROTOCOL", "MQTTv311"))
         self._connected = False
         self._client = None
         self._lock = threading.Lock()
@@ -482,13 +535,15 @@ class MQTTDataSource(DataSource):
             logger.error("paho-mqtt library not available")
             self._mqtt = None
 
-    @retry(RetryPolicy(max_retries=3, backoff_factor=2.0, base_delay=0.5, allowed_exceptions=(Exception,)))
+    @retry(RetryPolicy(max_retries=3, backoff_factor=2.0,
+           base_delay=0.5, allowed_exceptions=(Exception,)))
     def connect(self) -> bool:
         if self._mqtt is None:
             return False
 
         try:
-            resolved_protocol = resolve_mqtt_protocol(self._protocol_setting, self._mqtt)
+            resolved_protocol = resolve_mqtt_protocol(
+                self._protocol_setting, self._mqtt)
             try:
                 from paho.mqtt.enums import CallbackAPIVersion
                 self._client = self._mqtt.Client(
@@ -504,20 +559,21 @@ class MQTTDataSource(DataSource):
             self._client.on_connect = self._on_connect
             self._client.on_message = self._on_message
             self._client.on_disconnect = self._on_disconnect
-            
+
             self._client.connect(self.broker, self.port, keepalive=60)
             self._client.loop_start()
-            
+
             start_time = time.time()
-            while not self._connected and (time.time() - start_time) < self.timeout:
+            while not self._connected and (
+                    time.time() - start_time) < self.timeout:
                 time.sleep(0.1)
-            
+
             return self._connected
-            
+
         except Exception as e:
             logger.error(f"Failed to connect to MQTT broker: {e}")
             return False
-    
+
     def disconnect(self) -> None:
         self._stop_event.set()
         if self._client:
@@ -526,10 +582,10 @@ class MQTTDataSource(DataSource):
             self._client = None
         self._connected = False
         logger.info("Disconnected from MQTT broker")
-    
+
     def is_connected(self) -> bool:
         return self._connected
-    
+
     def list_devices(self) -> List[Dict[str, Any]]:
         start_time = time.time()
         while time.time() - start_time < 2.0:
@@ -537,25 +593,25 @@ class MQTTDataSource(DataSource):
                 if self._device_info:
                     break
             time.sleep(0.1)
-        
+
         with self._lock:
             return [
                 {'uid': uid, 'port': info.get('com_port', 'unknown')}
                 for uid, info in self._device_info.items()
             ]
-    
+
     def get_telemetry(self, uid: str) -> Optional[Dict[str, Any]]:
         with self._lock:
             return self._latest_data.get(uid, None)
-    
+
     def get_device_info(self, uid: str) -> Optional[Dict[str, Any]]:
         with self._lock:
             return self._device_info.get(uid, None)
-    
+
     @property
     def source_type(self) -> str:
         return "mqtt"
-    
+
     def _on_connect(self, client, userdata, flags, rc, properties=None):
         if rc == 0:
             self._connected = True
@@ -565,10 +621,11 @@ class MQTTDataSource(DataSource):
                 (telemetry_topic, 1),
                 (info_topic, 1),
             ])
-            logger.info(f"Connected to MQTT broker, subscribed to {telemetry_topic}")
+            logger.info(
+                f"Connected to MQTT broker, subscribed to {telemetry_topic}")
         else:
             logger.error(f"MQTT connection failed with rc={rc}")
-    
+
     def _on_message(self, client, userdata, msg, properties=None):
         try:
             payload = json.loads(msg.payload.decode('utf-8'))
@@ -576,16 +633,16 @@ class MQTTDataSource(DataSource):
             if len(parts) >= 3 and parts[0] == self.topic_prefix:
                 uid = parts[1]
                 msg_type = parts[2] if len(parts) > 2 else None
-                
+
                 with self._lock:
                     if msg_type == 'telemetry':
                         self._latest_data[uid] = payload
                     elif msg_type == 'info':
                         self._device_info[uid] = payload
-                        
+
         except Exception as e:
             logger.debug(f"Error processing MQTT message: {e}")
-    
+
     def _on_disconnect(self, client, userdata, flags, rc, properties=None):
         self._connected = False
         if rc != 0:
@@ -605,52 +662,65 @@ def _normalise_cs_telemetry(sensors_raw: list) -> Dict[str, Any]:
     # Map C# ShortName → TUI key
     SHORT_NAME_MAP: Dict[str, str] = {
         # Power summary
-        "SYS_P":    "SYS_Power",
-        "CPU_P":    "CPU_Power",
-        "GPU_P":    "GPU_Power",
-        "MB_P":     "MB_Power",
+        "SYS_P": "SYS_Power",
+        "CPU_P": "CPU_Power",
+        "GPU_P": "GPU_Power",
+        "MB_P": "MB_Power",
 
         # Rail power  (EPS, ATX, PCIE, HPWR)
-        "EPS1_P":   "EPS1_Power",   "EPS1_V":  "EPS1_Voltage",  "EPS1_I":  "EPS1_Current",
-        "EPS2_P":   "EPS2_Power",   "EPS2_V":  "EPS2_Voltage",  "EPS2_I":  "EPS2_Current",
-        "ATX3V_P":  "ATX3V_Power",  "ATX3V_V": "ATX3V_Voltage", "ATX3V_I": "ATX3V_Current",
-        "ATX5V_P":  "ATX5V_Power",  "ATX5V_V": "ATX5V_Voltage", "ATX5V_I": "ATX5V_Current",
-        "ATX5VSB_P":"ATX5VSB_Power","ATX5VSB_V":"ATX5VSB_Voltage","ATX5VSB_I":"ATX5VSB_Current",
-        "ATX12V_P": "ATX12V_Power", "ATX12V_V":"ATX12V_Voltage","ATX12V_I":"ATX12V_Current",
-        "PCIE1_P":  "PCIE1_Power",  "PCIE1_V": "PCIE1_Voltage", "PCIE1_I": "PCIE1_Current",
-        "PCIE2_P":  "PCIE2_Power",  "PCIE2_V": "PCIE2_Voltage", "PCIE2_I": "PCIE2_Current",
-        "PCIE3_P":  "PCIE3_Power",  "PCIE3_V": "PCIE3_Voltage", "PCIE3_I": "PCIE3_Current",
-        "HPWR1_P":  "HPWR1_Power",  "HPWR1_V": "HPWR1_Voltage","HPWR1_I": "HPWR1_Current",
-        "HPWR2_P":  "HPWR2_Power",  "HPWR2_V": "HPWR2_Voltage","HPWR2_I": "HPWR2_Current",
+        "EPS1_P": "EPS1_Power", "EPS1_V": "EPS1_Voltage",
+        "EPS1_I": "EPS1_Current",
+        "EPS2_P": "EPS2_Power", "EPS2_V": "EPS2_Voltage",
+        "EPS2_I": "EPS2_Current",
+        "ATX3V_P": "ATX3V_Power", "ATX3V_V": "ATX3V_Voltage",
+        "ATX3V_I": "ATX3V_Current",
+        "ATX5V_P": "ATX5V_Power", "ATX5V_V": "ATX5V_Voltage",
+        "ATX5V_I": "ATX5V_Current",
+        "ATX5VSB_P": "ATX5VSB_Power", "ATX5VSB_V": "ATX5VSB_Voltage",
+        "ATX5VSB_I": "ATX5VSB_Current",
+        "ATX12V_P": "ATX12V_Power", "ATX12V_V": "ATX12V_Voltage",
+        "ATX12V_I": "ATX12V_Current",
+        "PCIE1_P": "PCIE1_Power", "PCIE1_V": "PCIE1_Voltage",
+        "PCIE1_I": "PCIE1_Current",
+        "PCIE2_P": "PCIE2_Power", "PCIE2_V": "PCIE2_Voltage",
+        "PCIE2_I": "PCIE2_Current",
+        "PCIE3_P": "PCIE3_Power", "PCIE3_V": "PCIE3_Voltage",
+        "PCIE3_I": "PCIE3_Current",
+        "HPWR1_P": "HPWR1_Power", "HPWR1_V": "HPWR1_Voltage",
+        "HPWR1_I": "HPWR1_Current",
+        "HPWR2_P": "HPWR2_Power", "HPWR2_V": "HPWR2_Voltage",
+        "HPWR2_I": "HPWR2_Current",
 
         # Board voltages
-        "VDD":      "Vdd",
-        "VREF":     "Vref",
+        "VDD": "Vdd",
+        "VREF": "Vref",
 
         # VIN voltage measurements V1..V13 → VIN_0..VIN_12
-        **{f"V{i}": f"VIN_{i-1}" for i in range(1, 14)},
+        **{f"V{i}": f"VIN_{i - 1}" for i in range(1, 14)},
 
         # Temperatures
-        "T_CHIP":   "Chip_Temp",
-        "T_AMB":    "Ambient_Temp",
-        "HUM":      "Humidity",
-        "TS1":      "TS_1",
-        "TS2":      "TS_2",
-        "TS3":      "TS_3",
-        "TS4":      "TS_4",
+        "T_CHIP": "Chip_Temp",
+        "T_AMB": "Ambient_Temp",
+        "HUM": "Humidity",
+        "TS1": "TS_1",
+        "TS2": "TS_2",
+        "TS3": "TS_3",
+        "TS4": "TS_4",
 
         # Fans — T=tach(RPM), D=duty
-        **{f"FAN{i}_T": f"Fan{i}_RPM"  for i in range(1, 10)},
+        **{f"FAN{i}_T": f"Fan{i}_RPM" for i in range(1, 10)},
         **{f"FAN{i}_D": f"Fan{i}_Duty" for i in range(1, 10)},
-        "FAN_EXT":  "FanExtDuty",
+        "FAN_EXT": "FanExtDuty",
     }
 
     result: Dict[str, Any] = {}
     for s in sensors_raw:
         short = s.get("ShortName") or s.get("shortName", "")
-        value = s.get("Value") if s.get("Value") is not None else s.get("value", 0.0)
+        value = s.get("Value") if s.get(
+            "Value") is not None else s.get("value", 0.0)
 
-        # Skip sentinel value (double.MinValue serialised as very large negative)
+        # Skip sentinel value (double.MinValue serialised as very large
+        # negative)
         if isinstance(value, float) and value < -1e300:
             continue
 
@@ -661,7 +731,8 @@ def _normalise_cs_telemetry(sensors_raw: list) -> Dict[str, Any]:
 
 
 class NamedPipeDataSource(DataSource):
-    """Data source that connects to the C# BenchLab Windows service via named pipes.
+    """Data source that connects to the C# BenchLab Windows service via
+    named pipes.
 
     Uses the BenchlabDiscovery pipe to enumerate devices, then connects to
     each device's individual BenchlabSensorPipe_XX_YYY pipe for telemetry.
@@ -691,9 +762,11 @@ class NamedPipeDataSource(DataSource):
 
         self._connected = False
         self._lock = threading.Lock()
-        self._devices: Dict[str, Dict[str, Any]] = {}   # uid/guid -> device info
+        # uid/guid -> device info
+        self._devices: Dict[str, Dict[str, Any]] = {}
         self._pipe_names: Dict[str, str] = {}            # uid -> pipe name
-        self._telemetry: Dict[str, Dict[str, Any]] = {}  # uid -> latest sensors
+        # uid -> latest sensors
+        self._telemetry: Dict[str, Dict[str, Any]] = {}
         self._worker_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
 
@@ -733,9 +806,12 @@ class NamedPipeDataSource(DataSource):
 
         self._connected = True
         self._stop_event.clear()
-        self._worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
+        self._worker_thread = threading.Thread(
+            target=self._worker_loop, daemon=True)
         self._worker_thread.start()
-        logger.info(f"Connected to BenchLab named pipe service with {len(self._devices)} device(s)")
+        logger.info(
+            f"Connected to BenchLab named pipe service with "
+            f"{len(self._devices)} device(s)")
         return True
 
     def disconnect(self) -> None:
@@ -779,11 +855,13 @@ class NamedPipeDataSource(DataSource):
         import pywintypes  # type: ignore
 
         path = f"\\\\.\\pipe\\{pipe_name}"
-        # WaitNamedPipe gives up to timeout_ms for a server instance to become available
+        # WaitNamedPipe gives up to timeout_ms for a server instance to become
+        # available
         try:
             win32pipe.WaitNamedPipe(path, self.PIPE_TIMEOUT_MS)
         except pywintypes.error as e:
-            raise ConnectionError(f"Pipe '{pipe_name}' not available: {e}") from e
+            raise ConnectionError(
+                f"Pipe '{pipe_name}' not available: {e}") from e
 
         handle = win32file.CreateFile(
             path,
@@ -815,7 +893,8 @@ class NamedPipeDataSource(DataSource):
         win32file.WriteFile(handle, (text + "\n").encode("utf-8"))
 
     def _query_discovery_pipe(self, command: str) -> Any:
-        """Send a command to the discovery pipe and return parsed JSON response."""
+        """Send a command to the discovery pipe and return parsed JSON
+        response."""
         import win32file  # type: ignore
 
         handle = self._open_pipe(self.DISCOVERY_PIPE)
@@ -827,7 +906,8 @@ class NamedPipeDataSource(DataSource):
             win32file.CloseHandle(handle)
 
     def _query_sensor_pipe(self, pipe_name: str, command: str) -> Any:
-        """Send a command to a device sensor pipe and return parsed JSON response."""
+        """Send a command to a device sensor pipe and return parsed JSON
+        response."""
         import win32file  # type: ignore
 
         handle = self._open_pipe(pipe_name)
@@ -854,9 +934,11 @@ class NamedPipeDataSource(DataSource):
                     # First call primes the device; second returns real data.
                     # On subsequent loops we only call once.
                     if first_run:
-                        self._query_sensor_pipe(pipe_name, "GetUpdatedSensorList")
+                        self._query_sensor_pipe(
+                            pipe_name, "GetUpdatedSensorList")
 
-                    data = self._query_sensor_pipe(pipe_name, "GetUpdatedSensorList")
+                    data = self._query_sensor_pipe(
+                        pipe_name, "GetUpdatedSensorList")
                     sensors_raw = data.get("sensors", [])
                     normalised = _normalise_cs_telemetry(sensors_raw)
                     normalised["timestamp"] = datetime.now(UTC).isoformat()
@@ -886,14 +968,20 @@ class ServiceHttpDataSource(DataSource):
 
     DEFAULT_URL = "http://localhost:8585"
 
-    def __init__(self, *, base_url: str = DEFAULT_URL, timeout: float = 5.0, poll_interval: float = 1.0):
+    def __init__(
+            self,
+            *,
+            base_url: str = DEFAULT_URL,
+            timeout: float = 5.0,
+            poll_interval: float = 1.0):
         """Initialize service HTTP data source.
 
         Args:
             base_url: Base URL of the C# BenchLab service. Defaults to
                       http://localhost:8585.
             timeout: HTTP request timeout in seconds.
-            poll_interval: Seconds between telemetry polls in background worker.
+            poll_interval: Seconds between telemetry polls in background
+                      worker.
         """
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
@@ -911,7 +999,8 @@ class ServiceHttpDataSource(DataSource):
             import requests
             self._requests = requests
         except ImportError:
-            logger.error("requests library not available — pip install requests")
+            logger.error(
+                "requests library not available — pip install requests")
             self._requests = None
 
     def connect(self) -> bool:
@@ -922,7 +1011,8 @@ class ServiceHttpDataSource(DataSource):
         self._session = self._requests.Session()
 
         try:
-            resp = self._session.get(f"{self.base_url}/health", timeout=self.timeout)
+            resp = self._session.get(
+                f"{self.base_url}/health", timeout=self.timeout)
         except Exception as e:
             logger.error(
                 f"Cannot reach BenchLab service at {self.base_url}: {e}\n"
@@ -935,9 +1025,9 @@ class ServiceHttpDataSource(DataSource):
 
         if resp.status_code != 200:
             logger.error(
-                f"BenchLab service health check failed (HTTP {resp.status_code}) "
-                f"at {self.base_url}/health"
-            )
+                f"BenchLab service health check failed (HTTP {
+                    resp.status_code}) " f"at {
+                    self.base_url}/health")
             return False
 
         # Fetch initial device list
@@ -957,9 +1047,12 @@ class ServiceHttpDataSource(DataSource):
 
         self._connected = True
         self._stop_event.clear()
-        self._worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
+        self._worker_thread = threading.Thread(
+            target=self._worker_loop, daemon=True)
         self._worker_thread.start()
-        logger.info(f"Connected to BenchLab service HTTP API at {self.base_url}")
+        logger.info(
+            f"Connected to BenchLab service HTTP API at {
+                self.base_url}")
         return True
 
     def disconnect(self) -> None:
@@ -1016,7 +1109,8 @@ class ServiceHttpDataSource(DataSource):
         if not self._session:
             return []
         try:
-            resp = self._session.get(f"{self.base_url}/devices", timeout=self.timeout)
+            resp = self._session.get(
+                f"{self.base_url}/devices", timeout=self.timeout)
             if resp.status_code == 200:
                 return resp.json()
         except Exception as e:
@@ -1036,7 +1130,8 @@ class ServiceHttpDataSource(DataSource):
                 data = resp.json()
                 sensors_raw = data.get("sensors", [])
                 normalised = _normalise_cs_telemetry(sensors_raw)
-                normalised["timestamp"] = data.get("timestamp", datetime.now(UTC).isoformat())
+                normalised["timestamp"] = data.get(
+                    "timestamp", datetime.now(UTC).isoformat())
                 return normalised
         except Exception as e:
             logger.debug(f"Failed to fetch telemetry for {uid}: {e}")
@@ -1077,20 +1172,22 @@ def create_datasource(
     **kwargs
 ) -> DataSource:
     """Factory function to create a DataSource instance.
-    
+
     Args:
         source_type: Type of data source:
                      'direct'        - direct serial via pycore
-                     'fastapi'       - Python benchlab FastAPI server (localhost)
+                     'fastapi'       - Python benchlab FastAPI server
+                                       (localhost)
                      'fastapi_custom'- FastAPI server at custom URL
                      'mqtt'          - MQTT broker
-                     'named_pipe'    - C# BenchLab service named pipes (Windows only)
+                     'named_pipe'    - C# BenchLab service named pipes
+                                       (Windows only)
                      'service_http'  - C# BenchLab service HTTP API
         **kwargs: Arguments passed to the data source constructor
-        
+
     Returns:
         DataSource instance
-        
+
     Raises:
         ValueError: If source_type is not recognized
     """

@@ -1,11 +1,14 @@
 # benchlab_fleet.py
 
-from PIL import Image, ImageDraw, ImageFont
-import os
+from PIL import Image, ImageDraw
 import time
 
-from benchlab.wigidash.benchlab_ui import load_fonts, draw_header, draw_footer, bind_button, load_logo, UIButton, UITheme, BUTTON_DEFS
-from benchlab.wigidash.benchlab_utils import display_image, get_logger, KeepAliveManager
+from benchlab.wigidash.benchlab_ui import (
+    load_fonts, draw_header, draw_footer, bind_button, load_logo, UIButton
+)
+from benchlab.wigidash.benchlab_utils import (
+    display_image, get_logger, KeepAliveManager
+)
 
 logger = get_logger("BenchlabFleet")
 
@@ -32,7 +35,7 @@ class BenchlabFleetSelect:
         if self.manager:
             # Refresh the manager's device cache to ensure we have current data
             self.manager.get_available_benchlabs(log_info=False)
-            
+
             for port, info in self.manager.benchlab_devices.items():
                 self.fleet_cache.append({
                     "port": port,
@@ -44,8 +47,9 @@ class BenchlabFleetSelect:
 
         # Footer buttons (centralized)
         self.footer_btns = [
-            bind_button(UIButton.SHUTDOWN, self.manager.graceful_shutdown if self.manager else None)
-        ]
+            bind_button(
+                UIButton.SHUTDOWN,
+                self.manager.graceful_shutdown if self.manager else None)]
         self.footer_hitboxes = []
 
         # Fleet button layout
@@ -62,10 +66,10 @@ class BenchlabFleetSelect:
         self.running = True
         self.start_time = int(time.monotonic() * 1000)
 
-
     # -------------------------------
     # Touch Handling
     # -------------------------------
+
     def check_touch(self, touch):
         if not getattr(self, "running", False):
             return
@@ -95,11 +99,13 @@ class BenchlabFleetSelect:
 
         # Fleet selection buttons
         for idx, dev in enumerate(self.fleet):
-            y0 = self.start_y + idx*(self.button_height+self.button_margin)
+            y0 = self.start_y + idx * (self.button_height + self.button_margin)
             y1 = y0 + self.button_height
             if 50 <= x <= 966 and y0 <= y <= y1:
                 self.selected_port = dev["port"]
-                logger.info(f"Fleet selection done on {self.selected_port}, opening Overview.")
+                logger.info(
+                    f"Fleet selection done on {
+                        self.selected_port}, opening Overview.")
                 if self.manager and self.wigi:
                     self.manager.start_telemetry(self.selected_port, self.wigi)
 
@@ -118,20 +124,27 @@ class BenchlabFleetSelect:
         draw = ImageDraw.Draw(img)
 
         # ---- Header ----
-        draw_header(draw, img, self.ui_fonts, "SELECT BENCHLAB DEVICE", self.ui_logo)
+        draw_header(
+            draw,
+            img,
+            self.ui_fonts,
+            "SELECT BENCHLAB DEVICE",
+            self.ui_logo)
 
         # ---- Fleet Buttons ----
         for idx, dev in enumerate(self.fleet):
-            y0 = self.start_y + idx*(self.button_height+self.button_margin)
+            y0 = self.start_y + idx * (self.button_height + self.button_margin)
             y1 = y0 + self.button_height
-            draw.rectangle([50, y0, 966, y1], fill=(60, 60, 60), outline=(200, 200, 200), width=2)
-            draw.text((60, y0+15),
-                f"Port: {dev['port']} | UID: {dev['uid']}",
-                fill=(255,255,255),
-                font=self.ui_fonts["title"])
+            draw.rectangle([50, y0, 966, y1], fill=(60, 60, 60),
+                           outline=(200, 200, 200), width=2)
+            draw.text((60, y0 + 15),
+                      f"Port: {dev['port']} | UID: {dev['uid']}",
+                      fill=(255, 255, 255),
+                      font=self.ui_fonts["title"])
 
         # ---- Footer ----
         info_text = f"Available BENCHLABs: {len(self.fleet)}"
-        self.footer_hitboxes = draw_footer(draw, self.ui_fonts, info_text, self.footer_btns)
+        self.footer_hitboxes = draw_footer(
+            draw, self.ui_fonts, info_text, self.footer_btns)
 
         return img
