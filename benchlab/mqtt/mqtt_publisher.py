@@ -67,6 +67,44 @@ logger.addHandler(handler)
 global_stop_event = threading.Event()
 device_stop_events = {}  # {uid: threading.Event}
 
+_MQTT_PROTOCOL_ALIASES = {
+    "3": mqtt.MQTTv31,
+    "3.1": mqtt.MQTTv31,
+    "v3.1": mqtt.MQTTv31,
+    "mqttv31": mqtt.MQTTv31,
+    "4": mqtt.MQTTv311,
+    "3.1.1": mqtt.MQTTv311,
+    "v3.1.1": mqtt.MQTTv311,
+    "mqttv311": mqtt.MQTTv311,
+    "mqttv3.1.1": mqtt.MQTTv311,
+    "5": mqtt.MQTTv5,
+    "v5": mqtt.MQTTv5,
+    "mqttv5": mqtt.MQTTv5,
+}
+
+
+def resolve_mqtt_protocol(value):
+    """Resolve *value* to one of paho's MQTTv31/MQTTv311/MQTTv5 int constants.
+
+    Accepts the int constants themselves, or common name/version strings
+    (case-insensitive, e.g. "MQTTv5", "v3.1.1", "5"). Raises ValueError
+    immediately on anything unrecognized, so a bad MQTT_PROTOCOL value is
+    caught at startup instead of crashing silently inside paho's background
+    network thread once a broker actually accepts the connection.
+    """
+    if value in (mqtt.MQTTv31, mqtt.MQTTv311, mqtt.MQTTv5):
+        return value
+
+    key = str(value).strip().lower()
+    if key in _MQTT_PROTOCOL_ALIASES:
+        return _MQTT_PROTOCOL_ALIASES[key]
+
+    raise ValueError(
+        f"Unrecognized MQTT_PROTOCOL value: {value!r}. "
+        f"Expected one of: MQTTv31 (3.1), MQTTv311 (3.1.1, default), MQTTv5."
+    )
+
+
 def load_local_config(filename="mqtt.config"):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     path = os.path.join(script_dir, filename)
@@ -90,7 +128,7 @@ def load_mqtt_config():
         "transport": os.getenv("MQTT_TRANSPORT", "tcp"),   # default tcp, can override
         "username": os.getenv("MQTT_USERNAME"),
         "password": os.getenv("MQTT_PASSWORD"),
-        "protocol": os.getenv("MQTT_PROTOCOL",mqtt.MQTTv311),
+        "protocol": resolve_mqtt_protocol(os.getenv("MQTT_PROTOCOL", mqtt.MQTTv311)),
         "qos": int(os.getenv("MQTT_QOS", 0)),
         "path": os.getenv("MQTT_PATH"),
         "poll_rate": float(os.getenv("MQTT_POLL_RATE", poll_rate)),

@@ -1,19 +1,24 @@
 """Non-hardware regression tests for benchlab.mqtt.mqtt_publisher.
 
 These tests exercise the pure-Python logic bugs fixed in the mqtt bug sweep
-(issue #24) — no real MQTT broker or BenchLab hardware is required:
+(issue #24) and its protocol-version follow-up — no real MQTT broker or
+BenchLab hardware is required:
 - reason_code_lookup correctly resolving both plain int reason codes and
   paho-mqtt v2's unhashable ReasonCode objects
 - device_stop_events cleanup after a device thread's finally block runs
 - the -mqtt CLI argument setting MQTT_BROKER before run_mqtt_mode reads config
+- resolve_mqtt_protocol normalizing MQTT_PROTOCOL name/version strings to
+  paho's int constants, and failing loudly on unrecognized input instead of
+  crashing silently later inside paho's background network thread
 """
 
 import os
 
 import pytest
+import paho.mqtt.client as mqtt
 
 from benchlab.mqtt import mqtt_publisher
-from benchlab.mqtt.mqtt_publisher import reason_code_lookup, MQTTV5_REASON_CODES
+from benchlab.mqtt.mqtt_publisher import reason_code_lookup, MQTTV5_REASON_CODES, resolve_mqtt_protocol
 
 try:
     from paho.mqtt.reasoncodes import ReasonCode
@@ -96,3 +101,58 @@ def test_cli_mqtt_flag_sets_broker_env_var(monkeypatch):
 
     cfg = mqtt_publisher.load_mqtt_config()
     assert cfg["broker"] == "mybroker.example.com"
+
+
+# ----------------------------------------------------------------------
+# MQTT protocol version resolution
+# ----------------------------------------------------------------------
+
+@pytest.mark.parametrize("value,expected", [
+    ("MQTTv31", mqtt.MQTTv31), ("v3.1", mqtt.MQTTv31), ("3.1", mqtt.MQTTv31), ("3", mqtt.MQTTv31),
+    ("mqttv31", mqtt.MQTTv31),
+    ("MQTTv311", mqtt.MQTTv311), ("v3.1.1", mqtt.MQTTv311), ("3.1.1", mqtt.MQTTv311), ("4", mqtt.MQTTv311),
+    ("mqttv3.1.1", mqtt.MQTTv311),
+    ("MQTTv5", mqtt.MQTTv5), ("v5", mqtt.MQTTv5), ("5", mqtt.MQTTv5), ("mqttv5", mqtt.MQTTv5),
+    (mqtt.MQTTv31, mqtt.MQTTv31), (mqtt.MQTTv311, mqtt.MQTTv311), (mqtt.MQTTv5, mqtt.MQTTv5),
+])
+def test_resolve_mqtt_protocol_accepts_documented_variants(value, expected):
+    assert resolve_mqtt_protocol(value) == expected
+
+
+def test_resolve_mqtt_protocol_rejects_unrecognized_value():
+    """Regression test: MQTT_PROTOCOL=MQTTv5 (the README's own example) used
+    to pass the raw string straight into paho's Client(), which crashed
+    inside paho's background network thread the moment a broker accepted
+    the connection, with no diagnostic in the app's own logs. An invalid
+    value must now fail loudly and immediately instead."""
+    with pytest.raises(ValueError, match="Unrecognized MQTT_PROTOCOL"):
+        resolve_mqtt_protocol("garbage")
+
+
+def test_load_mqtt_config_resolves_protocol_string_from_env(monkeypatch):
+    monkeypatch.setenv("MQTT_PROTOCOL", "MQTTv5")
+    cfg = mqtt_publisher.load_mqtt_config()
+    assert cfg["protocol"] == mqtt.MQTTv5
+
+
+def test_load_mqtt_config_protocol_defaults_to_v311(monkeypatch):
+    monkeypatch.delenv("MQTT_PROTOCOL", raising=False)
+    cfg = mqtt_publisher.load_mqtt_config()
+    assert cfg["protocol"] == mqtt.MQTTv311
+
+
+def test_resolved_protocol_does_not_crash_paho_client_construction(monkeypatch):
+    """End-to-end regression test for the original bug: constructing a real
+    paho Client with the resolved protocol value must not raise when paho
+    internally does int(self._protocol) (previously crashed with
+    ValueError: invalid literal for int() with base 10: 'MQTTv5')."""
+    from paho.mqtt.enums import CallbackAPIVersion
+
+    resolved = resolve_mqtt_protocol("MQTTv5")
+    client = mqtt.Client(
+        callback_api_version=CallbackAPIVersion.VERSION2,
+        client_id="test",
+        protocol=resolved,
+        transport="tcp",
+    )
+    assert int(client._protocol) == mqtt.MQTTv5
