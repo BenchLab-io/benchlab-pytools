@@ -244,6 +244,7 @@ def check_named_pipe_service() -> bool:
         return False
 
     # Quick smoke-test: open the pipe and send ListDevices
+    handle = None
     try:
         import win32file
         import win32pipe
@@ -260,12 +261,17 @@ def check_named_pipe_service() -> bool:
         )
         win32file.WriteFile(handle, b"ListDevices\n")
         _, data = win32file.ReadFile(handle, 65536)
-        win32file.CloseHandle(handle)
         result = json.loads(data.split(b"\n")[0].decode("utf-8"))
         return isinstance(result, list)
     except Exception as e:
         logger.debug(f"Named pipe smoke-test failed: {e}")
         return False
+    finally:
+        if handle is not None:
+            try:
+                win32file.CloseHandle(handle)
+            except Exception:
+                pass
 
 
 # ──────────────────────────────────────────────────────────────
@@ -308,6 +314,16 @@ def check_service_http() -> bool:
     return _service_http_health()
 
 
+def _direct_device_available() -> bool:
+    """Return True if pycore can see a BENCHLAB device on any serial port."""
+    try:
+        from benchlab_pycore.core import get_benchlab_ports
+        return len(get_benchlab_ports()) > 0
+    except Exception as e:
+        logger.debug(f"Direct device scan failed: {e}")
+        return False
+
+
 # ──────────────────────────────────────────────────────────────
 # Unified Source Setup
 # ──────────────────────────────────────────────────────────────
@@ -327,6 +343,11 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
     """
     if source_type == "direct":
         os.environ["BENCHLAB_DATA_SOURCE"] = "direct"
+        if not _direct_device_available():
+            logger.warning(
+                "No BENCHLAB device detected on any serial port. "
+                "Plug in a device or select a different data source."
+            )
         return True
 
     if source_type == "fastapi":

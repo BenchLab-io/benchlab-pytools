@@ -11,9 +11,6 @@ import os
 import sys
 from typing import List, Optional
 
-import sys as _sys
-import os as _os
-_sys.path.insert(0, _os.path.dirname(_os.path.dirname(__file__)))
 from bootstrap import clear_screen
 from .tools import CONSUMER_TOOLS
 from .sources import (

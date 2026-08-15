@@ -52,6 +52,29 @@ def _monitor_process(tool_name: str, proc: subprocess.Popen) -> None:
             logger.error(f"[{tool_name}] {line}")
 
 
+def _terminate_spawned_process(proc: subprocess.Popen, force: bool) -> None:
+    """Terminate a spawned terminal-window process (and its children).
+
+    os.killpg/os.getpgid don't exist on Windows, so this mirrors
+    ProcessManager's platform branch: taskkill /T kills the whole
+    process tree rooted at the terminal emulator's PID on Windows,
+    while POSIX uses the process group created via preexec_fn=os.setsid.
+    """
+    try:
+        if not proc or proc.poll() is not None:
+            return
+        if sys.platform == "win32":
+            subprocess.run(
+                ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                capture_output=True,
+            )
+        else:
+            sig = signal.SIGKILL if force else signal.SIGTERM
+            os.killpg(os.getpgid(proc.pid), sig)
+    except Exception:
+        pass
+
+
 # ──────────────────────────────────────────────────────────────
 # Single-tool Launch (in-process, blocking)
 # ──────────────────────────────────────────────────────────────
@@ -316,20 +339,12 @@ def launch_tools_concurrent(tool_ids: List[str], source_ready_delay: float = 2.0
         logger.info("Stopping all tools...")
 
         for proc in processes.values():
-            try:
-                if proc and proc.poll() is None:
-                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            except Exception:
-                pass
+            _terminate_spawned_process(proc, force=False)
 
         time.sleep(1)
 
         for proc in processes.values():
-            try:
-                if proc and proc.poll() is None:
-                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-            except Exception:
-                pass
+            _terminate_spawned_process(proc, force=True)
 
         cleanup_all_services()
 
