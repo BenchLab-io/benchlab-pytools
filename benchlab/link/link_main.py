@@ -25,7 +25,7 @@ REMOTE_MQTT_QOS       QoS level: 0 | 1 | 2            (default: 1)
 REMOTE_MQTT_TLS       Enable TLS: "true" / "false"    (default: true)
 CLIENT_UUID           Device UUID for identification
 MQTT_POLL_RATE        Poll/publish interval in seconds (default: 2)
-LINK_TOPIC_PATTERN    Topic pattern with {uid} token   (default: benchlab/{uid}/telemetry)
+LINK_TOPIC_PATTERN    Topic pattern with {uid}/{client_uuid} tokens (default: benchlab/{uid}/telemetry)
 LINK_CLIENT_ID        MQTT client ID                   (default: benchlab-link-<hostname>)
 
 .env file
@@ -171,6 +171,7 @@ class CloudMQTTClient:
         transport    = self.cfg.get("transport", "websockets")
 
         client = mqtt.Client(
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             client_id=self.cfg["client_id"],
             transport=transport,
             protocol=protocol,
@@ -244,19 +245,19 @@ class CloudMQTTClient:
     def is_connected(self) -> bool:
         return self._connected
 
-    def _on_connect(self, client, userdata, flags, rc, properties=None):
-        if rc == 0:
+    def _on_connect(self, client, userdata, flags, reason_code, properties=None):
+        if reason_code == 0:
             with self._lock:
                 self._connected = True
             logger.info("Cloud broker: connection established")
         else:
-            logger.error(f"Cloud broker: connection refused (rc={rc})")
+            logger.error(f"Cloud broker: connection refused (reason_code={reason_code})")
 
-    def _on_disconnect(self, client, userdata, rc, properties=None):
+    def _on_disconnect(self, client, userdata, flags, reason_code, properties=None):
         with self._lock:
             self._connected = False
-        if rc != 0:
-            logger.warning(f"Cloud broker: unexpected disconnect (rc={rc})")
+        if reason_code != 0:
+            logger.warning(f"Cloud broker: unexpected disconnect (reason_code={reason_code})")
 
 
 # ---------------------------------------------------------------------------
@@ -316,6 +317,7 @@ class BenchlabLink:
         """Publish latest snapshot for every known device. Returns count published."""
         topic_pattern = self.cfg["topic"]
         qos           = self.cfg.get("qos", 1)
+        client_uuid   = self.cfg.get("client_uuid") or ""
 
         with self._snap_lock:
             snapshots = dict(self._snapshots)
@@ -324,7 +326,7 @@ class BenchlabLink:
         for uid, data in snapshots.items():
             if not data:
                 continue
-            topic   = topic_pattern.format(uid=uid)
+            topic   = topic_pattern.format(uid=uid, client_uuid=client_uuid)
             payload = {"uid": uid, **data}
             if self.cloud.publish(topic, payload, qos=qos):
                 published += 1
