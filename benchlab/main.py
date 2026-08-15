@@ -256,7 +256,9 @@ def launch_mode() -> None:
     elif args.mqtt:
         try:
             from benchlab.mqtt.mqtt_publisher import run_mqtt_mode
-            run_mqtt_mode(args.mqtt if args.mqtt else "localhost")
+            broker = args.mqtt if args.mqtt else "localhost"
+            os.environ.setdefault("MQTT_BROKER", broker)
+            run_mqtt_mode(broker)
         except ModuleNotFoundError:
             print("MQTT module not available in this build.")
 
