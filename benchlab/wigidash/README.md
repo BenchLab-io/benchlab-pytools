@@ -49,7 +49,12 @@ Dependencies include:
 - NumPy
 - pyserial
 - pyusb
+- libusb-package (Windows only — provides the libusb-1.0 backend pyusb needs)
 - benchlab core modules
+
+### Windows Setup
+
+`pyusb` needs a `libusb-1.0` backend DLL, which isn't bundled with the `pyusb` pip package itself. `requirements.txt` includes `libusb-package`, which provides a prebuilt backend that `pyusb` auto-discovers — plain `pip install -r requirements.txt` in any standard Python environment (venv, system Python, etc.) is enough; no Anaconda/conda-forge install is required.
 
 ### Linux Setup
 
