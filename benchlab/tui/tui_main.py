@@ -1,11 +1,13 @@
 """
 Refactored TUI Main Entry Point
-Clean main entry point using the refactored architecture with separated concerns:
+Clean main entry point using the refactored architecture with separated
+concerns:
 - DataSourceManager handles all data source operations
 - ChannelStats manages statistics
 - TUICore handles all UI rendering
 - Config centralizes configuration
-This replaces the original monolithic tui_main.py with a much cleaner implementation.
+This replaces the original monolithic tui_main.py with a much cleaner
+implementation.
 """
 import curses
 import logging
@@ -37,8 +39,9 @@ class _DevNullWriter:
 class _TUIStdoutRedirect:
     """Redirect stdout/stderr to prevent interference with curses display.
 
-    The pycore library writes INFO messages directly to stdout which messes up
-    the curses layout. This class redirects stdout/stderr to a file or /dev/null
+    The pycore library writes INFO messages directly to stdout which messes
+    up the curses layout. This class redirects stdout/stderr to a file or
+    /dev/null
     during TUI operation.
     """
 
@@ -88,7 +91,8 @@ def convert_fleet_format(
         fleet.append({
             'uid': uid,
             'port': device_info.get('port', 'unknown'),
-            'firmware': device_info.get('firmware', device_info.get('FwVersion', 0)),
+            'firmware': device_info.get(
+                'firmware', device_info.get('FwVersion', 0)),
             'variant': device_info.get('variant'),
             'ProductId': device_info.get('ProductId'),
         })
@@ -205,7 +209,9 @@ class TUIApplication:
         elif action_type == 'rescan_fleet':
             self._refresh_fleet_cache()
             count = len(self.fleet_cache)
-            source_label = self.source_type.upper() if self.source_type != 'direct' else 'serial'
+            source_label = (
+                self.source_type.upper()
+                if self.source_type != 'direct' else 'serial')
             self.tui_core.set_status(
                 f"Fleet rescanned ({source_label}) — {count} device(s) found.")
 
@@ -222,7 +228,8 @@ class TUIApplication:
         return True
 
     def _connect_datasource(self):
-        """Connect via non-direct datasource (FastAPI/MQTT/named_pipe/service_http)."""
+        """Connect via non-direct datasource
+        (FastAPI/MQTT/named_pipe/service_http)."""
         try:
             if self.datasource_manager.connect():
                 uid = self.datasource_manager.get_selected_uid()
@@ -290,7 +297,8 @@ class TUIApplication:
                 return
             self.last_fleet_refresh = current_time
 
-            if self.source_type != 'direct' and self.datasource_manager.is_connected():
+            if (self.source_type != 'direct'
+                    and self.datasource_manager.is_connected()):
                 devices_dict = self.datasource_manager.list_devices()
                 self.fleet_cache = convert_fleet_format(devices_dict)
             else:

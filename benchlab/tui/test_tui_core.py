@@ -84,7 +84,8 @@ def _render_tab(tab_index, snapshot, fleet_devices=None):
     only *expected/tolerated* failure mode — anything else, e.g. TypeError
     from bad sensor data, is a real bug).
     """
-    from benchlab.tui.tui_core import TUICore  # imported inside curses.wrapper-safe scope
+    # imported inside curses.wrapper-safe scope
+    from benchlab.tui.tui_core import TUICore
 
     def _run(stdscr):
         core = TUICore(stdscr, version="test")
@@ -99,7 +100,8 @@ def _render_tab(tab_index, snapshot, fleet_devices=None):
     try:
         curses.wrapper(_run)
     except curses.error:
-        pytest.skip("curses screen too small / unavailable in this environment")
+        pytest.skip(
+            "curses screen too small / unavailable in this environment")
 
 
 @pytest.mark.parametrize("tab_index",
@@ -193,7 +195,8 @@ def test_fans_tab_survives_many_fans_on_small_terminal():
 
 
 def test_help_modal_renders_without_stomping_main_refresh():
-    """Regression test: help modal must be composited, not overwritten every tick.
+    """Regression test: help modal must be composited, not overwritten
+    every tick.
 
     See issue #13 — render() called self.stdscr.refresh() (an immediate
     physical repaint from stdscr alone) *after* _render_help_modal() had
@@ -223,7 +226,8 @@ def test_help_modal_renders_without_stomping_main_refresh():
         real_height, real_width = stdscr.getmaxyx()
         if real_height < 10 or real_width < 20:
             pytest.skip(
-                f"console too small for a help modal: {real_width}x{real_height}")
+                "console too small for a help modal: "
+                f"{real_width}x{real_height}")
 
         core = TUICore(stdscr, version="test")
         core.show_help_modal = True

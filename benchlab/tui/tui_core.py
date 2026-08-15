@@ -79,7 +79,8 @@ class TUICore:
         height, width = self.stdscr.getmaxyx()
 
         # Check minimum size
-        if height < Config.MIN_TERMINAL_ROWS or width < Config.MIN_TERMINAL_COLS:
+        if (height < Config.MIN_TERMINAL_ROWS
+                or width < Config.MIN_TERMINAL_COLS):
             self._render_size_warning(width, height)
             return False
 
@@ -156,7 +157,8 @@ class TUICore:
             try:
                 if hasattr(curses, 'resizeterm'):
                     curses.resizeterm(real.lines, real.columns)
-                elif hasattr(curses, '_curses') and hasattr(curses._curses, 'resize_term'):
+                elif (hasattr(curses, '_curses')
+                        and hasattr(curses._curses, 'resize_term')):
                     curses._curses.resize_term(real.lines, real.columns)
             except Exception:
                 pass
@@ -212,8 +214,10 @@ class TUICore:
                 Config.MIN_TERMINAL_COLS}x{
                 Config.MIN_TERMINAL_ROWS} ")
         try:
-            self.stdscr.addstr(0, 0, msg[:width],   # ← truncate, don't center
-                               curses.A_BOLD | curses.color_pair(Config.COLOR_PAIRS['error']))
+            self.stdscr.addstr(
+                0, 0, msg[:width],   # ← truncate, don't center
+                curses.A_BOLD | curses.color_pair(
+                    Config.COLOR_PAIRS['error']))
         except curses.error:
             pass
 
@@ -251,8 +255,9 @@ class TUICore:
     def _render_separator(self, width: int):
         """Render separator line below tabs."""
         try:
-            self.stdscr.addstr(3, 0, "─" * (width - 1),
-                               curses.color_pair(Config.COLOR_PAIRS['default']))
+            self.stdscr.addstr(
+                3, 0, "─" * (width - 1),
+                curses.color_pair(Config.COLOR_PAIRS['default']))
         except curses.error:
             pass
 
@@ -291,8 +296,9 @@ class TUICore:
         """Render bottom status bar."""
         try:
             # Separator line
-            self.stdscr.addstr(height - 2, 0, "─" * (width - 1),
-                               curses.color_pair(Config.COLOR_PAIRS['default']))
+            self.stdscr.addstr(
+                height - 2, 0, "─" * (width - 1),
+                curses.color_pair(Config.COLOR_PAIRS['default']))
 
             # Left side: transient message or last error or help
             if self.status_msg and time.monotonic() < self.status_msg_expires:
@@ -316,16 +322,19 @@ class TUICore:
             device_str = snapshot.get(
                 'uid') or snapshot.get('port') or "no device"
             con_str = "CONN" if snapshot.get('connected') else "DISC"
-            con_col = (curses.color_pair(Config.COLOR_PAIRS['ok']) if snapshot.get(
-                'connected') else curses.color_pair(Config.COLOR_PAIRS['error']))
+            con_col = (
+                curses.color_pair(Config.COLOR_PAIRS['ok'])
+                if snapshot.get('connected')
+                else curses.color_pair(Config.COLOR_PAIRS['error']))
             right_msg = f"{uptime_part}{con_str}  {device_str}"
             right_col = max(0, width - len(right_msg) - 2)
 
             # Draw status bar
             self.stdscr.addstr(
                 height - 1, 2, left_msg[:width - len(right_msg) - 4], left_col)
-            self.stdscr.addstr(height - 1, right_col,
-                               right_msg[:width - right_col - 1], con_col)
+            self.stdscr.addstr(
+                height - 1, right_col,
+                right_msg[:width - right_col - 1], con_col)
 
         except curses.error:
             pass
@@ -374,10 +383,12 @@ class TUICore:
             pass
 
     def _reset_input_settings(self):
-        """Re-apply input settings — windows-curses resets these after resize."""
+        """Re-apply input settings — windows-curses resets these after
+        resize."""
         self.stdscr.nodelay(True)
         self.stdscr.timeout(100)
-        curses.flushinp()  # discard any garbage keystrokes queued during resize
+        # discard any garbage keystrokes queued during resize
+        curses.flushinp()
 
     # ═══════════════════════════════════════════════════════════════════════════════
     #  Tab Renderers
@@ -471,9 +482,9 @@ class TUICore:
                 status_color = curses.color_pair(Config.COLOR_PAIRS['error'])
 
             row_color = (
-                curses.color_pair(
-                    Config.COLOR_PAIRS['header']) | curses.A_BOLD if i == self.fleet_index else curses.color_pair(
-                    Config.COLOR_PAIRS['default']))
+                curses.color_pair(Config.COLOR_PAIRS['header'])
+                | curses.A_BOLD if i == self.fleet_index
+                else curses.color_pair(Config.COLOR_PAIRS['default']))
 
             row = 8 + i
             try:
@@ -592,7 +603,9 @@ class TUICore:
             variant = device_info.get('variant')
             if variant is None:
                 variant = 'BL2' if product_id == 0x11 else 'ORIGINAL'
-            model_str = "BENCHLAB 2 (BL2)" if variant == 'BL2' else "BENCHLAB 1 (Original)"
+            model_str = (
+                "BENCHLAB 2 (BL2)" if variant == 'BL2'
+                else "BENCHLAB 1 (Original)")
 
             self._draw_section(9, 2, "Device")
             self.stdscr.addstr(10, 4, f"{'Model':<22} {model_str}")
@@ -829,7 +842,8 @@ class TUICore:
                 self.stdscr.addstr(
                     6,
                     4,
-                    "HPWR_Wx sense lines are only available on BENCHLAB 2 devices.",
+                    "HPWR_Wx sense lines are only available on BENCHLAB 2 "
+                    "devices.",
                     curses.color_pair(
                         Config.COLOR_PAIRS['info']))
             except curses.error:
@@ -1007,7 +1021,9 @@ class TUICore:
                            ('Humidity', 'Humidity')]:
             val = sd.get(key, 0.0)
             stat = stats.get(uid, key)
-            max_val = Config.BarScales.AMBIENT_TEMP_MAX if key == 'Ambient_Temp' else Config.BarScales.HUMIDITY_MAX
+            max_val = (
+                Config.BarScales.AMBIENT_TEMP_MAX if key == 'Ambient_Temp'
+                else Config.BarScales.HUMIDITY_MAX)
             unit = '°C' if key == 'Ambient_Temp' else '%'
             self._draw_bar(
                 row,
@@ -1081,8 +1097,9 @@ class TUICore:
         except curses.error:
             pass
 
-        # Determine number of fans (highest fan index present, so non-contiguous
-        # numbering like Fan1/Fan3 with no Fan2 still renders all known fans)
+        # Determine number of fans (highest fan index present, so
+        # non-contiguous numbering like Fan1/Fan3 with no Fan2 still
+        # renders all known fans)
         fan_indices = [int(k[3:-5]) for k in sd if k.startswith('Fan')
                        and k.endswith('_Duty') and k[3:-5].isdigit()]
         num_fans = max(fan_indices, default=0)
@@ -1091,7 +1108,8 @@ class TUICore:
         # status bar so fan rows never silently overlap them on a short
         # terminal. Each fan takes one row starting at row 7.
         FAN_ROWS_START = 7
-        RESERVED_TRAILING_ROWS = 4  # ext fan row + active count + status bar + margin
+        # ext fan row + active count + status bar + margin
+        RESERVED_TRAILING_ROWS = 4
         if height is not None:
             max_visible_fans = max(
                 0, height - RESERVED_TRAILING_ROWS - FAN_ROWS_START)
@@ -1104,7 +1122,8 @@ class TUICore:
         for i in range(1, visible_fans + 1):
             duty = sd.get(f'Fan{i}_Duty', 0) or 0
             rpm = sd.get(f'Fan{i}_RPM', 0) or 0
-            enabled = True  # Assume enabled since we can't get status from dict
+            # Assume enabled since we can't get status from dict
+            enabled = True
 
             rpm_key = f'Fan{i}_RPM'
             duty_key = f'Fan{i}_Duty'
@@ -1155,7 +1174,8 @@ class TUICore:
                 self.stdscr.addstr(
                     FAN_ROWS_START + visible_fans,
                     cols['NAME'] + 2,
-                    f"... +{hidden_fans} more fan(s) — resize terminal to see all",
+                    f"... +{hidden_fans} more fan(s) — resize terminal to "
+                    "see all",
                     curses.color_pair(
                         Config.COLOR_PAIRS['caution']))
             except curses.error:
@@ -1173,22 +1193,19 @@ class TUICore:
                 "Ext Fan ",
                 curses.color_pair(
                     Config.COLOR_PAIRS['highlight']))
-            self.stdscr.addstr(ext_row,
-                               cols['DUTY'] + 2,
-                               f"{ext_duty:>5}%",
-                               curses.color_pair(Config.COLOR_PAIRS['highlight']))
-            self.stdscr.addstr(ext_row,
-                               cols['RPM'] + 2,
-                               f"{'N/A':>6}",
-                               curses.color_pair(Config.COLOR_PAIRS['highlight']))
-            self.stdscr.addstr(ext_row,
-                               cols['ENABLED'] + 2,
-                               f"{'N/A':<3}",
-                               curses.color_pair(Config.COLOR_PAIRS['highlight']))
-            self.stdscr.addstr(ext_row,
-                               cols['BAR'] + 2,
-                               "█" * ext_bar + "░" * (20 - ext_bar),
-                               curses.color_pair(Config.COLOR_PAIRS['highlight']))
+            self.stdscr.addstr(
+                ext_row, cols['DUTY'] + 2, f"{ext_duty:>5}%",
+                curses.color_pair(Config.COLOR_PAIRS['highlight']))
+            self.stdscr.addstr(
+                ext_row, cols['RPM'] + 2, f"{'N/A':>6}",
+                curses.color_pair(Config.COLOR_PAIRS['highlight']))
+            self.stdscr.addstr(
+                ext_row, cols['ENABLED'] + 2, f"{'N/A':<3}",
+                curses.color_pair(Config.COLOR_PAIRS['highlight']))
+            self.stdscr.addstr(
+                ext_row, cols['BAR'] + 2,
+                "█" * ext_bar + "░" * (20 - ext_bar),
+                curses.color_pair(Config.COLOR_PAIRS['highlight']))
         except curses.error:
             pass
 
@@ -1272,7 +1289,8 @@ class TUICore:
 
             if stat and stat[0] is not None:
                 stat_str = StatsFormatter.format_stat_string(
-                    stat[0], stat[1], stat[2], decimals, unit, Config.STAT_COLUMN_WIDTH)
+                    stat[0], stat[1], stat[2], decimals, unit,
+                    Config.STAT_COLUMN_WIDTH)
                 self.stdscr.addstr(
                     stat_str, curses.color_pair(
                         Config.COLOR_PAIRS['default']))

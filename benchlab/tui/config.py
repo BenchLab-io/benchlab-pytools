@@ -145,7 +145,8 @@ class Channels:
         ('MB_Power', 'MB Power'),
     ]
 
-    # Rail channels for ORIGINAL variant (11 power sensors total, 7 shown in System tab)
+    # Rail channels for ORIGINAL variant (11 power sensors total, 7 shown in
+    # System tab)
     # Note: ORIGINAL also has ATX3V, ATX5V, ATX5VSB, ATX12V which are shown in
     # Motherboard tab
     RAIL_CHANNELS_ORIGINAL = [
@@ -158,7 +159,8 @@ class Channels:
         ('HPWR2', '12V_HPWR_2'),
     ]
 
-    # Rail channels for BL2 (BENCHLAB 2) variant (7 main rails, same as ORIGINAL)
+    # Rail channels for BL2 (BENCHLAB 2) variant (7 main rails, same as
+    # ORIGINAL)
     # The 12 additional HPWR_Wx sense lines are shown in a separate tab
     RAIL_CHANNELS_BL2 = [
         ('EPS1', 'EPS_1'),
@@ -264,7 +266,8 @@ class Channels:
         Returns:
             'BL2' if BL2-specific sensors detected, 'ORIGINAL' otherwise
         """
-        # Check for BL2-specific sensors (HPWR sense lines or HPWR temperature sensors)
+        # Check for BL2-specific sensors (HPWR sense lines or HPWR
+        # temperature sensors)
         # Power sensors use keys like 'HPWR1_W1_Power', temperature sensors use
         # 'TS_HPWR1_IN'
         bl2_indicators = [
