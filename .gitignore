@@ -1,8 +1,11 @@
 # Benchlab specific files
 *.db
+*.db-journal
 *.config
 *.pid.lock
 .benchlab_prefs.json
+my_config.json
+/logs/
 benchlab/vu/generated/
 benchlab/vu/VU-Server/upload/
 

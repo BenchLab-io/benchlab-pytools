@@ -110,12 +110,21 @@ wigidash/
 ### Launch the Dashboard
 
 ```
-python benchlab.py -wigidash
+python -m benchlab -wigidash
 ```
+
+By default this connects via the `direct` (serial) data source. To use a different source, pass `--source` along with the matching connection flags:
+
+```
+python -m benchlab -wigidash --source fastapi --api-url http://127.0.0.1:8000
+python -m benchlab -wigidash --source mqtt --mqtt-broker localhost --mqtt-port 1883
+```
+
+Supported `--source` values: `direct`, `fastapi`, `fastapi_custom` (via `DataSourceManager`, same as the other consumer tools).
 
 Behavior:
 
-- Detects all connected BENCHLAB devices.
+- Detects all connected BENCHLAB devices via the selected data source.
 - Displays the main overview page.
 - Allows switching to the telemetry graph page for detailed metrics.
 - Supports interactive metric selection and fan toggles.
@@ -170,4 +179,4 @@ This project is licensed under MIT License. See the LICENSE file for details.
 - [Matplotlib](https://matplotlib.org/)  
 - [NumPy](https://numpy.org/)  
 - [pyserial](https://pypi.org/project/pyserial/)  
-- [pyusb](https://pypi.org/project/pyusb/)  
+- [pyusb](https://pypi.org/project/pyusb/)

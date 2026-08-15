@@ -39,13 +39,15 @@ Install the required dependencies for the MQTT module:
 pip install -r requirements.txt
 ```
 
-Dependencies include:
+Dependencies (see `requirements.txt`):
 
 ```
-paho-mqtt
-pyserial
-benchlab core modules
+paho-mqtt>=1.6.1
+amqtt>=0.12.0,<0.13.0
+pyyaml>=6.0,<7.0
 ```
+
+Plus the `benchlab_pycore` core modules and the rest of the `benchlab` package (installed as part of the overall project).
 
 ---
 
@@ -99,8 +101,16 @@ poll_rate = 0.5
 ### Run MQTT Mode
 
 ```
-python benchlab.py -mqtt
+python -m benchlab -mqtt
 ```
+
+`-mqtt` takes an optional positional broker hostname. If omitted, it defaults to `localhost`:
+
+```
+python -m benchlab -mqtt mybroker.local
+```
+
+The broker hostname can also be set via the `MQTT_BROKER` environment variable, or overridden with `--mqtt-broker`/`--mqtt-port` (used when this tool is launched together with other tools that consume the same MQTT source, e.g. via `--source mqtt`).
 
 Behavior:
 
@@ -188,5 +198,4 @@ Payload:
 
 ## References
 
-- [Paho-MQTT Python client](https://pypi.org/project/paho-mqtt/)  
-- [Benchlab core modules](https://github.com/<your-org>/benchlab/tree/main/benchlab/core)
+- [Paho-MQTT Python client](https://pypi.org/project/paho-mqtt/)

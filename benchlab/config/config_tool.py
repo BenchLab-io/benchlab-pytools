@@ -252,24 +252,24 @@ def main(args=None):
             epilog="""
 Examples:
   # List devices
-  python benchlab.py -config --list
+  python -m benchlab -config --list
 
   # Export configuration
-  python benchlab.py -config --export config.json
-  python benchlab.py -config --export config.json --device COM4
+  python -m benchlab -config --export config.json
+  python -m benchlab -config --export config.json --device COM4
 
   # Import configuration (shows a diff of what would change, then asks to confirm)
-  python benchlab.py -config --import config.json
+  python -m benchlab -config --import config.json
 
   # Preview changes without applying anything
-  python benchlab.py -config --import config.json --dry-run
+  python -m benchlab -config --import config.json --dry-run
 
   # Apply without the confirmation prompt (for scripts/automation)
-  python benchlab.py -config --import config.json --yes
+  python -m benchlab -config --import config.json --yes
 
   # Use named pipe source (Windows only)
-  python benchlab.py -config --list --source named_pipe
-  python benchlab.py -config --import config.json --source named_pipe
+  python -m benchlab -config --list --source named_pipe
+  python -m benchlab -config --import config.json --source named_pipe
             """
         )
 

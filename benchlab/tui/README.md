@@ -33,6 +33,8 @@ The BENCHLAB Enhanced TUI provides a modern, feature-rich curses-based interface
 
 ## 📊 Telemetry Tabs
 
+The TUI has 8 tabs: `Fleet`, `Device`, `System`, `Motherboard`, `12VHPWR`, `Voltage`, `Temperature`, `Fans` (in this order; see `Config.TAB_NAMES` in `benchlab/tui/config.py`). Tabs can also be jumped to directly with the number keys `0`-`7`.
+
 ### **Fleet Tab (Tab 0)**
 - Device list with connection status indicators
 - Active device highlighting
@@ -45,21 +47,21 @@ The BENCHLAB Enhanced TUI provides a modern, feature-rich curses-based interface
 - Firmware version display
 - TUI refresh interval
 
-### **Power Tab (Tab 2)**
+### **System / Motherboard / 12VHPWR Tabs (Tabs 2-4)**
 - Real-time power consumption with progress bars
-- Individual component power monitoring (SYS, CPU, GPU, MB)
+- Component power monitoring, split across dedicated System, Motherboard, and 12VHPWR tabs
 - Efficiency calculations and display
 - Min/max power statistics
 - Power progress bars with color coding
 
-### **Voltage Tab (Tab 3)**
+### **Voltage Tab (Tab 5)**
 - Vdd and Vref voltage monitoring with status
 - VIN channel voltage display with progress bars
 - Voltage status indicators (OK/LOW/HIGH)
 - Average voltage calculations
 - Color-coded voltage readings
 
-### **Temperature Tab (Tab 4)**
+### **Temperature Tab (Tab 6)**
 - Chip and ambient temperature monitoring
 - Temperature progress bars with thermal status
 - Multiple temperature sensor readings
@@ -67,7 +69,7 @@ The BENCHLAB Enhanced TUI provides a modern, feature-rich curses-based interface
 - Thermal status classification (NORMAL/WARNING/CRITICAL)
 - Min/max temperature statistics
 
-### **Fans Tab (Tab 5)**
+### **Fans Tab (Tab 7)**
 - Fan duty cycle monitoring with progress bars
 - RPM readings for each fan
 - Fan enable/disable status
@@ -77,10 +79,11 @@ The BENCHLAB Enhanced TUI provides a modern, feature-rich curses-based interface
 ## 🎮 Keyboard Shortcuts
 
 ### **Navigation**
-- `h`, `k`, `←`, `↑` - Move to previous tab
-- `l`, `j`, `→`, `↓` - Move to next tab
+- `h`, `←` - Move to previous tab
+- `l`, `→` - Move to next tab
+- `0`-`7` - Jump directly to a tab by index
 - `q`, `Q` - Quit application
-- `?` - Show help
+- `?` - Show/hide help modal
 
 ### **Fleet Tab Specific**
 - `↑`, `↓` - Navigate device list
@@ -88,6 +91,9 @@ The BENCHLAB Enhanced TUI provides a modern, feature-rich curses-based interface
 
 ### **Global Commands**
 - `r`, `R` - Reset min/max statistics
+- `f` - Rescan the fleet for devices
+
+Note: navigation is arrow-key and `h`/`l` only — there is no vim-style `j`/`k` tab switching or full vim keybinding scheme.
 
 ## 🎨 Color Coding
 
@@ -133,23 +139,35 @@ Ensure your environment has required dependencies:
 pip install -r requirements.txt
 ```
 
-Dependencies include:
-- `python3-curses` (Linux/Unix)
-- `benchlab core modules`
+Dependencies (see `requirements.txt`):
+- `pyserial>=3.5`
+- `windows-curses>=2.4.1` (Windows only — the Python standard library's `curses` module isn't available on Windows, so this package provides it)
+
+On Linux/macOS, `curses` ships with the Python standard library, so no extra curses package is needed there.
 
 ## 🚀 Usage
 
 ### Launch the Enhanced TUI
 
 ```bash
-python benchlab.py -tui
+python -m benchlab -tui
 ```
+
+Running `python -m benchlab` with no flags at all also launches the interactive menu, from which the TUI can be selected; `-tui` is otherwise the default consumer tool.
 
 ### Configuration
 
-The TUI supports the same configuration options as the original:
-- `--interval` - Telemetry refresh interval
-- Environment variables for serial connection settings
+- `-i`, `--interval` - Telemetry refresh interval in seconds (default: `1.0`)
+- `--source` - Data source to read telemetry from: `direct` (serial, default), `fastapi`, `fastapi_custom`, `mqtt`, `named_pipe`, or `service_http`
+- `--api-port` - FastAPI server port, used when `--source fastapi` (default: `8000`)
+- `--mqtt-broker`, `--mqtt-port` - MQTT broker host/port, used when `--source mqtt` (defaults: `localhost` / `1883`)
+- `--service-url` - C# BenchLab service HTTP API URL, used when `--source service_http` (default: `http://localhost:8585`)
+
+Example:
+
+```bash
+python -m benchlab -tui --source fastapi --api-port 8000 --interval 0.5
+```
 
 ## 📋 Requirements
 
@@ -187,7 +205,7 @@ The TUI supports the same configuration options as the original:
 | Statistics | None | Min/max/average tracking |
 | Help System | None | Built-in help modal |
 | Error Handling | Basic | Enhanced with clear indicators |
-| Navigation | Arrow keys only | Vim-style + arrow keys |
+| Navigation | Arrow keys only | Arrow keys + `h`/`l` |
 | Status Indicators | Text only | Color-coded + text |
 | Connection Monitoring | Basic | Uptime + status tracking |
 | Statistics Reset | None | Quick reset functionality |
@@ -218,7 +236,7 @@ The TUI supports the same configuration options as the original:
 ### **Debug Mode**
 Enable debug logging for troubleshooting:
 ```bash
-LOG_LEVEL=DEBUG python benchlab.py -tui
+LOG_LEVEL=DEBUG python -m benchlab -tui
 ```
 
 ## 🔄 Development
@@ -237,9 +255,7 @@ LOG_LEVEL=DEBUG python benchlab.py -tui
 
 ## 📚 References
 
-- [BENCHLAB core modules](https://github.com/<your-org>/benchlab/tree/main/benchlab/core)
 - [Python curses documentation](https://docs.python.org/3/library/curses.html)
-- [Original TUI documentation](README.md)
 
 ## 🤝 Contributing
 
