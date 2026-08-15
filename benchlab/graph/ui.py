@@ -135,6 +135,12 @@ def build_unified_window(app):
                     )
                     dpg.set_item_user_data(app.graph_line, {"x_data": [], "y_data": []})
 
+    # Remember the main window's graph items so the floating window can
+    # hand control back to them when it is closed.
+    app.main_graph_x_axis = app.graph_x_axis
+    app.main_graph_y_axis = app.graph_y_axis
+    app.main_graph_line = app.graph_line
+
 
 def _reset_session_stats(app):
     app.session_stats = {"min": None, "max": None, "avg": None, "count": 0,
@@ -197,8 +203,19 @@ def open_graph_window(app, sender=None, app_data=None):
     if dpg.does_item_exist("graph_window"):
         dpg.delete_item("graph_window")
 
+    def _on_close(sender, app_data):
+        if dpg.does_item_exist(app.main_graph_line):
+            app.graph_x_axis = app.main_graph_x_axis
+            app.graph_y_axis = app.main_graph_y_axis
+            app.graph_line = app.main_graph_line
+        else:
+            app.graph_x_axis = None
+            app.graph_y_axis = None
+            app.graph_line = None
+
     with dpg.window(label=f"Graph: {app.selected_sensor}",
-                    tag="graph_window", width=701, height=400, pos=(0, 151)):
+                    tag="graph_window", width=701, height=400, pos=(0, 151),
+                    on_close=_on_close):
         dpg.add_text(f"Real-time: {app.selected_sensor} — {app.selected_device}")
         with dpg.group(horizontal=True):
             dpg.add_text("Min: --", tag="graph_min_float")

@@ -179,6 +179,7 @@ class GraphApp:
             with self.lock:
                 self.connected = False
                 self.latest_uid = "?"
+                self.sensor_struct = None
 
     # ------------------------------------------------------------------
     # Graph update loop
@@ -200,53 +201,56 @@ class GraphApp:
         current_device = self.selected_device
 
         while dpg.does_item_exist("##main_plot") and self.connected and self.graph_line:
-            if (self.selected_sensor != current_sensor
-                    or self.selected_device != current_device):
-                t = 0
-                x_data.clear()
-                y_data.clear()
-                user_data["x_data"].clear()
-                user_data["y_data"].clear()
-                self.session_stats = {"min": None, "max": None, "avg": None, "count": 0,
-                                       "history": deque(maxlen=1000)}
-                current_sensor = self.selected_sensor
-                current_device = self.selected_device
+            try:
+                if (self.selected_sensor != current_sensor
+                        or self.selected_device != current_device):
+                    t = 0
+                    x_data.clear()
+                    y_data.clear()
+                    user_data["x_data"].clear()
+                    user_data["y_data"].clear()
+                    self.session_stats = {"min": None, "max": None, "avg": None, "count": 0,
+                                           "history": deque(maxlen=1000)}
+                    current_sensor = self.selected_sensor
+                    current_device = self.selected_device
 
-            value = None
-            with self.lock:
-                if self.sensor_struct:
-                    value = self.get_sensor_value(self.sensor_struct, self.selected_sensor)
+                value = None
+                with self.lock:
+                    if self.sensor_struct:
+                        value = self.get_sensor_value(self.sensor_struct, self.selected_sensor)
 
-            if value is not None:
-                t += 1
-                x_data.append(t)
-                y_data.append(value)
-                self._update_session_stats(value)
+                if value is not None and self.graph_line and dpg.does_item_exist(self.graph_line):
+                    t += 1
+                    x_data.append(t)
+                    y_data.append(value)
+                    self._update_session_stats(value)
 
-                user_data["x_data"] = list(x_data)
-                user_data["y_data"] = list(y_data)
-                dpg.set_value(self.graph_line, [list(x_data), list(y_data)])
+                    user_data["x_data"] = list(x_data)
+                    user_data["y_data"] = list(y_data)
+                    dpg.set_value(self.graph_line, [list(x_data), list(y_data)])
 
-                min_y = min(y_data)
-                max_y = max(y_data)
-                margin = (max_y - min_y) * 0.1 if max_y != min_y else 1
+                    min_y = min(y_data)
+                    max_y = max(y_data)
+                    margin = (max_y - min_y) * 0.1 if max_y != min_y else 1
 
-                if x_data and self.graph_x_axis is not None:
-                    dpg.set_axis_limits(self.graph_x_axis,
-                                        float(x_data[0]), float(x_data[-1]))
-                if self.graph_y_axis is not None:
-                    dpg.set_axis_limits(self.graph_y_axis,
-                                        min_y - margin, max_y + margin)
+                    if x_data and self.graph_x_axis is not None and dpg.does_item_exist(self.graph_x_axis):
+                        dpg.set_axis_limits(self.graph_x_axis,
+                                            float(x_data[0]), float(x_data[-1]))
+                    if self.graph_y_axis is not None and dpg.does_item_exist(self.graph_y_axis):
+                        dpg.set_axis_limits(self.graph_y_axis,
+                                            min_y - margin, max_y + margin)
 
-                s = self.session_stats
-                min_text = f"Min: {s['min']:.2f}" if s["min"] is not None else "Min: --"
-                max_text = f"Max: {s['max']:.2f}" if s["max"] is not None else "Max: --"
-                avg_text = f"Avg: {s['avg']:.2f}" if s["avg"] is not None else "Avg: --"
-                for tag, text in (("graph_min", min_text), ("graph_min_float", min_text),
-                                   ("graph_max", max_text), ("graph_max_float", max_text),
-                                   ("graph_avg", avg_text), ("graph_avg_float", avg_text)):
-                    if dpg.does_item_exist(tag):
-                        dpg.set_value(tag, text)
+                    s = self.session_stats
+                    min_text = f"Min: {s['min']:.2f}" if s["min"] is not None else "Min: --"
+                    max_text = f"Max: {s['max']:.2f}" if s["max"] is not None else "Max: --"
+                    avg_text = f"Avg: {s['avg']:.2f}" if s["avg"] is not None else "Avg: --"
+                    for tag, text in (("graph_min", min_text), ("graph_min_float", min_text),
+                                       ("graph_max", max_text), ("graph_max_float", max_text),
+                                       ("graph_avg", avg_text), ("graph_avg_float", avg_text)):
+                        if dpg.does_item_exist(tag):
+                            dpg.set_value(tag, text)
+            except Exception as e:
+                _logger.warning("Graph update error: %s", e)
 
             time.sleep(self.graph_update_interval)
 
