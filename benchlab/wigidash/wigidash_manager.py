@@ -4,7 +4,9 @@ import time
 import types
 
 from benchlab.core.datasource_manager import DataSourceManager
-from benchlab.wigidash.benchlab_telemetry import TelemetryHistory, telemetry_step, TelemetryContext
+from benchlab.wigidash.benchlab_telemetry import (
+    TelemetryHistory, telemetry_step, TelemetryContext
+)
 from benchlab.wigidash.benchlab_utils import get_logger
 from benchlab.wigidash.wigidash_usb import scan_wigidash
 from benchlab.wigidash.wigidash_session import BenchlabWigiSession
@@ -102,7 +104,8 @@ class WigidashManager:
                 ctx = self.telemetry_contexts[port]
 
                 logger.info(
-                    f"Selected device {port} is already in use. Using existing telemetry.")
+                    f"Selected device {port} is already in use. "
+                    "Using existing telemetry.")
 
                 session.ser = ctx.ser
                 session.device_info = ctx.device_info
@@ -160,7 +163,8 @@ class WigidashManager:
                                 or {})
                         if data:
                             telemetry_step(
-                                ctx, device_info=device_info, sensor_struct=data)
+                                ctx, device_info=device_info,
+                                sensor_struct=data)
                     except Exception as e:
                         logger.warning(f"Telemetry error on {port}: {e}")
                     time.sleep(0.1)
@@ -268,7 +272,8 @@ class WigidashManager:
 
         # Wait for all sessions to signal cleanup_done
         for session in active_sessions:
-            session.cleanup_done.wait()  # blocks until each session finishes cleanup
+            # blocks until each session finishes cleanup
+            session.cleanup_done.wait()
 
         # Clean up manager
         self.shutdown_manager()

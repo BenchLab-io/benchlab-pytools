@@ -7,7 +7,8 @@ BenchLab hardware is required:
 - WigidashManager.start_telemetry's lock preventing duplicate telemetry
   contexts/threads when called concurrently for the same port
 - telemetry_step not mutating the caller's input dict in place
-- The touch debounce threshold in benchlab_overview/benchlab_graph/benchlab_fleet
+- The touch debounce threshold in
+  benchlab_overview/benchlab_graph/benchlab_fleet
 - The Linux USB-permissions preflight check and udev rule detection
 """
 
@@ -16,7 +17,9 @@ import threading
 import time
 
 from benchlab.wigidash.wigidash_manager import WigidashManager
-from benchlab.wigidash.benchlab_telemetry import telemetry_step, TelemetryContext, TelemetryHistory
+from benchlab.wigidash.benchlab_telemetry import (
+    telemetry_step, TelemetryContext, TelemetryHistory
+)
 from benchlab.wigidash import wigidash_usb
 
 
@@ -90,7 +93,8 @@ def test_start_telemetry_lock_prevents_duplicate_contexts():
     ds = FakeDataSource([[device]])
     mgr = WigidashManager(datasource=ds)
     mgr.get_available_benchlabs(log_info=False)
-    mgr.shutdown_event.set()  # stop telemetry_loop threads immediately after they start
+    # stop telemetry_loop threads immediately after they start
+    mgr.shutdown_event.set()
 
     barrier = threading.Barrier(2)
 
@@ -188,7 +192,8 @@ def test_udev_rule_exists_matches_vid_pid(tmp_path):
     rules_dir = tmp_path / "rules.d"
     rules_dir.mkdir()
     (rules_dir / "99-wigidash.rules").write_text(
-        'SUBSYSTEM=="usb", ATTR{idVendor}=="28da", ATTR{idProduct}=="ef01", TAG+="uaccess"\n'
+        'SUBSYSTEM=="usb", ATTR{idVendor}=="28da", '
+        'ATTR{idProduct}=="ef01", TAG+="uaccess"\n'
     )
 
     assert wigidash_usb._udev_rule_exists(
@@ -200,7 +205,8 @@ def test_udev_rule_exists_false_when_no_matching_rule(tmp_path):
     rules_dir = tmp_path / "rules.d"
     rules_dir.mkdir()
     (rules_dir / "50-other-device.rules").write_text(
-        'SUBSYSTEM=="usb", ATTR{idVendor}=="1234", ATTR{idProduct}=="5678", TAG+="uaccess"\n'
+        'SUBSYSTEM=="usb", ATTR{idVendor}=="1234", '
+        'ATTR{idProduct}=="5678", TAG+="uaccess"\n'
     )
 
     assert wigidash_usb._udev_rule_exists(

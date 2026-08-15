@@ -24,7 +24,8 @@ if is_windows:
         # Fall back to pyusb's normal backend discovery (e.g. a system-wide
         # libusb-1.0.dll on PATH) if libusb-package isn't installed/usable.
         logger.debug(
-            f"libusb-package backend unavailable, falling back to default discovery: {e}")
+            "libusb-package backend unavailable, falling back to "
+            f"default discovery: {e}")
 
 _PERMISSION_ERROR_SIGNALS = (
     "access denied",
@@ -41,12 +42,14 @@ _UDEV_RULES_DIRS = (
 
 
 def _udev_rule_hint(vendor_id, product_id):
-    """Return the udev rule text + setup steps for granting non-root USB access."""
+    """Return the udev rule text + setup steps for granting non-root
+    USB access."""
     return (
         f'Create /etc/udev/rules.d/99-wigidash.rules with:\n'
         f'  SUBSYSTEM=="usb", ATTR{{idVendor}}=="{vendor_id:04x}", '
         f'ATTR{{idProduct}}=="{product_id:04x}", TAG+="uaccess"\n'
-        f"Then run: sudo udevadm control --reload-rules && sudo udevadm trigger"
+        "Then run: sudo udevadm control --reload-rules "
+        "&& sudo udevadm trigger"
     )
 
 

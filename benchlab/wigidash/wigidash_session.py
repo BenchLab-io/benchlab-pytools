@@ -10,7 +10,9 @@ from benchlab.wigidash.benchlab_fleet import BenchlabFleetSelect
 from benchlab.wigidash.benchlab_overview import BenchlabOverview
 from benchlab.wigidash.benchlab_graph import BenchlabGraph
 from benchlab.wigidash.benchlab_ui import UITheme
-from benchlab.wigidash.benchlab_utils import display_image, get_logger, KeepAliveManager
+from benchlab.wigidash.benchlab_utils import (
+    display_image, get_logger, KeepAliveManager
+)
 
 from benchlab.wigidash.wigidash_device import WigidashDevice
 from benchlab.wigidash.wigidash_widget import WidgetConfig
@@ -233,14 +235,16 @@ class BenchlabWigiSession:
                 self.fleet_page.check_touch(touch)
                 self.fleet_page.render_and_display()
 
-                if not self.fleet_page.running and self.fleet_page.selected_port:
+                if (not self.fleet_page.running
+                        and self.fleet_page.selected_port):
                     # Copy the selected port from fleet page into the session
                     self.selected_port = self.fleet_page.selected_port
 
                     # Fetch the telemetry context for that port
                     if self.manager:
-                        self.telemetry_context = self.manager.telemetry_contexts.get(
-                            self.selected_port)
+                        self.telemetry_context = (
+                            self.manager.telemetry_contexts.get(
+                                self.selected_port))
 
                     # Now create the overview page with a valid context
                     self.overview_page = BenchlabOverview(

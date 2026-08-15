@@ -1,7 +1,10 @@
 # benchlab_graph.py
 
 from benchlab.wigidash.benchlab_utils import display_image, get_logger
-from benchlab.wigidash.benchlab_ui import load_fonts, draw_header, draw_footer, bind_button, load_logo, UIButton, UITheme, BUTTON_DEFS
+from benchlab.wigidash.benchlab_ui import (
+    load_fonts, draw_header, draw_footer, bind_button, load_logo, UIButton,
+    UITheme, BUTTON_DEFS
+)
 import time
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
@@ -123,7 +126,8 @@ class BenchlabGraph:
     # -------------------------------
 
     def toggle_all_fan_metrics(self, suffix):
-        """Selects/deselects all metrics ending with the given suffix (_Duty or _RPM)."""
+        """Selects/deselects all metrics ending with the given suffix
+        (_Duty or _RPM)."""
         # Check if all metrics of this type are already selected
         all_selected = all(
             m in self.plot_metrics
@@ -186,7 +190,8 @@ class BenchlabGraph:
 
         total_top_width = self.SCREEN_WIDTH - 4 * padding
         self.col1_width = self.col2_width = int(total_top_width * 0.25) - 3
-        self.col3_width = total_top_width - self.col1_width - self.col2_width - 1
+        self.col3_width = (
+            total_top_width - self.col1_width - self.col2_width - 1)
 
         self.x1 = padding
         self.x2 = self.x1 + self.col1_width + padding
@@ -194,8 +199,9 @@ class BenchlabGraph:
 
         # ---- Helper: draw rounded card ----
         def rounded_card(x, y, w, h, title):
-            draw.rounded_rectangle([x, y, x + w, y + h], radius=12,
-                                   outline=(200, 200, 200), width=1, fill=(15, 15, 15))
+            draw.rounded_rectangle(
+                [x, y, x + w, y + h], radius=12,
+                outline=(200, 200, 200), width=1, fill=(15, 15, 15))
             draw.text((x + 8, y + 8),
                       title,
                       fill=self.COLOR_SECTION,
@@ -288,7 +294,8 @@ class BenchlabGraph:
                 50,
                 50)
             text_color = BUTTON_DEFS.get(UIButton.GRAPH_METRIC, {}).get(
-                "color", (0, 0, 0)) if duty_m in self.plot_metrics else self.COLOR_TEXT
+                "color", (0, 0, 0)
+            ) if duty_m in self.plot_metrics else self.COLOR_TEXT
             draw.rectangle([panel_x, y0, panel_x + half_width, y1],
                            fill=color, outline=(200, 200, 200))
             draw.text((panel_x + 5, y0 + 6),
@@ -310,7 +317,8 @@ class BenchlabGraph:
                 50,
                 50)
             text_color = BUTTON_DEFS.get(UIButton.GRAPH_METRIC, {}).get(
-                "color", (0, 0, 0)) if rpm_m in self.plot_metrics else self.COLOR_TEXT
+                "color", (0, 0, 0)
+            ) if rpm_m in self.plot_metrics else self.COLOR_TEXT
             draw.rectangle([x_start, y0, panel_x + panel_width,
                            y1], fill=color, outline=(200, 200, 200))
             draw.text((x_start + 5, y0 + 6),
@@ -336,7 +344,8 @@ class BenchlabGraph:
                 50,
                 50)
             text_color = BUTTON_DEFS.get(UIButton.GRAPH_METRIC, {}).get(
-                "color", (0, 0, 0)) if metric in self.plot_metrics else self.COLOR_TEXT
+                "color", (0, 0, 0)
+            ) if metric in self.plot_metrics else self.COLOR_TEXT
             draw.rectangle([panel_x, y0, panel_x + panel_width,
                            y1], fill=color, outline=(200, 200, 200))
             draw.text((panel_x + 5, y0 + 6),
@@ -378,7 +387,8 @@ class BenchlabGraph:
                     return lambda s=suffix: self.toggle_all_fan_metrics(s)
 
                 self.metric_btn_config.append({
-                    "x0": panel_x, "y0": y0, "x1": panel_x + panel_width, "y1": y1,
+                    "x0": panel_x, "y0": y0,
+                    "x1": panel_x + panel_width, "y1": y1,
                     "callback": make_callback(btn["type"]),
                     "text": btn["text"]
                 })
@@ -391,7 +401,8 @@ class BenchlabGraph:
 
         if self.plot_metrics:
             fig, ax = plt.subplots(
-                figsize=(graph_w / 100, graph_h / 100), dpi=100, facecolor=(0, 0, 0))
+                figsize=(graph_w / 100, graph_h / 100), dpi=100,
+                facecolor=(0, 0, 0))
             ax.set_facecolor((0, 0, 0))
 
             y_min, y_max = float('inf'), float('-inf')
@@ -472,8 +483,11 @@ class BenchlabGraph:
 
             # Labels
             ax.set_xlabel("Time", color='white')
-            units = list({self.wigi.sensor_units.get(m)
-                         for m in self.plot_metrics if self.wigi.sensor_units.get(m)})
+            units = list({
+                self.wigi.sensor_units.get(m)
+                for m in self.plot_metrics
+                if self.wigi.sensor_units.get(m)
+            })
             ax.set_ylabel(units[0] if len(units) == 1 else ", ".join(
                 units) if units else "Value", color='white')
 

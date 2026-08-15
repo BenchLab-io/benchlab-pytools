@@ -61,7 +61,8 @@ def telemetry_step(app, device_info=None, sensor_struct=None):
     """
     Process one telemetry iteration.
     - device_info: optional dict already read from serial
-    - sensor_struct: optional raw sensor data (from serial) or already translated dict (from DataSource)
+    - sensor_struct: optional raw sensor data (from serial) or already
+      translated dict (from DataSource)
     """
     try:
         # Use device info if provided

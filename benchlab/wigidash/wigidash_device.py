@@ -117,8 +117,8 @@ class WigidashDevice:
         """Initialize device and verify connection"""
         logger.info("Pinging Wigidash Device...")
         data = self.usb.ctrl_transfer_in(cmd=self.CMD_PING, length=3)
-        logger.info(
-            f"Received {len(data)} bytes: {' '.join(f'{b:02X}' for b in data)}")
+        hex_bytes = ' '.join(f'{b:02X}' for b in data)
+        logger.info(f"Received {len(data)} bytes: {hex_bytes}")
         return data
 
     def verify_device(self):
@@ -272,8 +272,8 @@ class WigidashDevice:
     def write_to_widget(self, page, widget_id, offset, data):
         """Write arbitrary data to widget at offset"""
         logger.debug(
-            f"Writing to widget page={page}, id={widget_id}, offset={offset}, length={
-                len(data)}")
+            f"Writing to widget page={page}, id={widget_id}, "
+            f"offset={offset}, length={len(data)}")
         # Create config buffer (offset + length)
         config_buffer = bytearray(8)
         struct.pack_into('<II', config_buffer, 0, offset, len(data))
@@ -426,7 +426,8 @@ class WigidashDevice:
             if len(data) >= 2:
                 action = data[0]
                 status = data[1]
-                if action == self.FLASH_ACTION_NONE and status == self.FLASH_RESULT_OK:
+                if (action == self.FLASH_ACTION_NONE
+                        and status == self.FLASH_RESULT_OK):
                     return True
             timeout -= 1
 
@@ -465,7 +466,8 @@ class WigidashDevice:
             if len(data) >= 2:
                 action = data[0]
                 status = data[1]
-                if action == self.FLASH_ACTION_NONE and status == self.FLASH_RESULT_OK:
+                if (action == self.FLASH_ACTION_NONE
+                        and status == self.FLASH_RESULT_OK):
                     return True
             timeout -= 1
 

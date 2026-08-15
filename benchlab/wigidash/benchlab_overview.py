@@ -4,8 +4,13 @@ import time
 
 from PIL import Image, ImageDraw
 
-from benchlab.wigidash.benchlab_ui import load_fonts, draw_header, draw_footer, bind_button, load_logo, UIButton, UITheme
-from benchlab.wigidash.benchlab_utils import display_image, KeepAliveManager, get_logger
+from benchlab.wigidash.benchlab_ui import (
+    load_fonts, draw_header, draw_footer, bind_button, load_logo, UIButton,
+    UITheme
+)
+from benchlab.wigidash.benchlab_utils import (
+    display_image, KeepAliveManager, get_logger
+)
 
 logger = get_logger("BenchlabOverview")
 
@@ -102,7 +107,8 @@ class BenchlabOverview:
                 ["SYS_Power", "CPU_Power", "GPU_Power", "MB_Power"]),
             (self.x2, top_y, self.x2 + self.col2_width, top_y + top_h,
                 ["Chip_Temp", "Ambient_Temp", "Humidity",
-                 "Temp_Sensor_1", "Temp_Sensor_2", "Temp_Sensor_3", "Temp_Sensor_4"]),
+                 "Temp_Sensor_1", "Temp_Sensor_2", "Temp_Sensor_3",
+                 "Temp_Sensor_4"]),
             (self.x3, top_y, self.x3 + self.col3_width, top_y + top_h,
                 [k for k in self.sensor_data.keys() if k.startswith("Fan")]),
         ]
@@ -133,22 +139,27 @@ class BenchlabOverview:
                    bottom_y,
                    power_x + col_width,
                    bottom_y + bottom_h,
-                   [f"{r}_Power" for r in all_rails if f"{r}_Power" in self.sensor_data]),
+                   [f"{r}_Power" for r in all_rails
+                    if f"{r}_Power" in self.sensor_data]),
                   (current_x,
                    bottom_y,
                    current_x + col_width,
                    bottom_y + bottom_h,
-                   [f"{r}_Current" for r in all_rails if f"{r}_Current" in self.sensor_data]),
+                   [f"{r}_Current" for r in all_rails
+                    if f"{r}_Current" in self.sensor_data]),
                   (voltage_x,
                    bottom_y,
                    voltage_x + col_width,
                    bottom_y + bottom_h,
-                   [f"{r}_Voltage" for r in all_rails if f"{r}_Voltage" in self.sensor_data]),
+                   [f"{r}_Voltage" for r in all_rails
+                    if f"{r}_Voltage" in self.sensor_data]),
                   ]
 
         vins_x = padding + 3 * (col_width + padding)
 
-        vin_keys = [k for k in self.sensor_data.keys() if k.startswith("VIN_")]
+        vin_keys = [
+            k for k in self.sensor_data.keys() if k.startswith("VIN_")
+        ]
         cards += [
             (vins_x, bottom_y, vins_x + col_width, bottom_y + bottom_h,
                 vin_keys + ["Vdd", "Vref"])
@@ -217,7 +228,8 @@ class BenchlabOverview:
 
         total_top_width = self.SCREEN_WIDTH - 4 * padding
         self.col1_width = self.col2_width = int(total_top_width * 0.25) - 3
-        self.col3_width = total_top_width - self.col1_width - self.col2_width - 1
+        self.col3_width = (
+            total_top_width - self.col1_width - self.col2_width - 1)
 
         self.x1 = padding
         self.x2 = self.x1 + self.col1_width + padding
@@ -226,7 +238,8 @@ class BenchlabOverview:
         # ---- Helper: draw rounded card ----
         def rounded_card(x, y, w, h, title):
             draw.rounded_rectangle(
-                [x, y, x + w, y + h], radius=12, outline=(200, 200, 200), width=1, fill=(15, 15, 15)
+                [x, y, x + w, y + h], radius=12,
+                outline=(200, 200, 200), width=1, fill=(15, 15, 15)
             )
             draw.text((x + 8, y + 8),
                       title,

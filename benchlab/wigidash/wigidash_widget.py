@@ -23,16 +23,12 @@ class WidgetConfig(Structure):
 
     def __str__(self):
         return (
-            f'X: {
-                self.X}, Y: {
-                self.Y}, Width: {
-                self.Width}, Height: {
-                    self.Height}, ' f'BaseClr: {
-                        self.BaseClr}, DrawAddr: {
-                            self.DrawAddr}, ' f'DrawLock: {
-                                self.DrawLock}, InvalidateFlag: {
-                                    self.InvalidateFlag}, ' f'UpdateFromCache: {
-                                        self.UpdateFromCache}')
+            f'X: {self.X}, Y: {self.Y}, Width: {self.Width}, '
+            f'Height: {self.Height}, '
+            f'BaseClr: {self.BaseClr}, DrawAddr: {self.DrawAddr}, '
+            f'DrawLock: {self.DrawLock}, '
+            f'InvalidateFlag: {self.InvalidateFlag}, '
+            f'UpdateFromCache: {self.UpdateFromCache}')
 
     # --- Properties with logging ---
     @property
