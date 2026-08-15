@@ -35,8 +35,8 @@ jobs:
         run: >
           python -c "import benchlab.core, benchlab.core.discovery,
           benchlab.core.datasource, benchlab.core.shared_serial,
-          benchlab.main, benchlab.launcher, benchlab.menu, benchlab.tools,
-          benchlab.sources,
+          benchlab.main, benchlab.launcher, benchlab.menu, benchlab.menu_classic,
+          benchlab.tools, benchlab.sources, benchlab.prefs,
           benchlab.config.config_client, benchlab.config.config_manager,
           benchlab.config.diff, benchlab.restapi.telemetry_api,
           benchlab.mqtt.mqtt_publisher, benchlab.hwinfo.hwinfo_export,
@@ -102,6 +102,9 @@ jobs:
 
       - name: Test - launcher bug sweep
         run: pytest tests/test_launcher.py -v
+
+      - name: Test - interactive menu
+        run: pytest tests/test_menu.py -v
 
   latest:
     name: Import + test against latest pycore (PyPI)
@@ -127,8 +130,8 @@ jobs:
         run: >
           python -c "import benchlab.core, benchlab.core.discovery,
           benchlab.core.datasource, benchlab.core.shared_serial,
-          benchlab.main, benchlab.launcher, benchlab.menu, benchlab.tools,
-          benchlab.sources,
+          benchlab.main, benchlab.launcher, benchlab.menu, benchlab.menu_classic,
+          benchlab.tools, benchlab.sources, benchlab.prefs,
           benchlab.config.config_client, benchlab.config.config_manager,
           benchlab.config.diff, benchlab.restapi.telemetry_api,
           benchlab.mqtt.mqtt_publisher, benchlab.hwinfo.hwinfo_export,
@@ -194,3 +197,6 @@ jobs:
 
       - name: Test - launcher bug sweep
         run: pytest tests/test_launcher.py -v
+
+      - name: Test - interactive menu
+        run: pytest tests/test_menu.py -v

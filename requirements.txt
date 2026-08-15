@@ -1,6 +1,7 @@
 # Core dependencies with version pins (DEP-1)
 packaging>=23.0,<26.0
 python-dotenv>=1.0.0,<2.0
+textual>=0.60,<9.0
 
 # BENCHLAB Serial Handler
 benchlab-pycore>=0.5.1

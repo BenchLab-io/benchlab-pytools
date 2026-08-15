@@ -19,9 +19,17 @@ import traceback
 from .tools import CONSUMER_TOOLS, LAUNCH_PROFILES
 from .sources import check_and_setup_source, cleanup_all_services
 from .launcher import launch_tools_concurrent
-from .menu import interactive_loop
 
 logger = logging.getLogger("benchlab.launcher")
+
+try:
+    from .menu import interactive_loop
+except ImportError as e:
+    # prompt_toolkit isn't installed (or failed to import for some other
+    # reason) — fall back to the plain numbered-input menu rather than
+    # crashing the whole interactive entry point.
+    logger.debug(f"Falling back to classic menu (prompt_toolkit unavailable: {e})")
+    from .menu_classic import interactive_loop
 
 # ──────────────────────────────────────────────────────────────
 # Argument Parser

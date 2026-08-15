@@ -2,6 +2,7 @@
 *.db
 *.config
 *.pid.lock
+.benchlab_prefs.json
 benchlab/vu/generated/
 benchlab/vu/VU-Server/upload/
 
