@@ -113,11 +113,11 @@ class KeepAliveManager:
             self.thread = None
 
     def mark_active(self):
-	    try:
-	        if self.wigidash and hasattr(self.wigidash, "clear_screen_timeout"):
-	            self.wigidash.clear_screen_timeout()
-	    except Exception as e:
-	        logger.warning("Keepalive error: %s", e)
+        try:
+            if self.wigidash and hasattr(self.wigidash, "clear_screen_timeout"):
+                self.wigidash.clear_screen_timeout()
+        except Exception as e:
+            logger.warning("Keepalive error: %s", e)
 
     def loop(self):
         step = 0.1
@@ -161,7 +161,7 @@ def shutdown_wigidash(wigi_instance):
             logger.warning(f"Error shutting down display: {e}")
     
     # Disconnect USB
-    usb_dev = getattr(wigi_instance, "usb_dev", None)
+    usb_dev = getattr(wigi_instance, "usb_device", None)
     if usb_dev:
         try:
             logger.info("Disconnecting USB device...")

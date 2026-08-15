@@ -1,0 +1,24 @@
+{
+  "version": "1.0",
+  "description": "RGB lighting - Set to solid blue",
+  "devices": [
+    {
+      "selector": {
+        "type": "any",
+        "value": null
+      },
+      "rgbProfiles": [
+        {
+          "profileId": 0,
+          "Mode": 9,
+          "Red": 0,
+          "Green": 0,
+          "Blue": 255,
+          "Direction": 0,
+          "Speed": 50
+        }
+      ],
+      "saveToFlash": true
+    }
+  ]
+}

@@ -20,6 +20,7 @@ class BenchlabFleetSelect:
         self.manager = fleet_manager
         self.on_exit = on_exit
         self.last_tap_time = 0
+        self.last_touch_time = 0
         self.keepalive = KeepAliveManager(self.wigidash)
 
         # Fonts and logo from central UI
@@ -29,6 +30,9 @@ class BenchlabFleetSelect:
         # Build fleet cache
         self.fleet_cache = []
         if self.manager:
+            # Refresh the manager's device cache to ensure we have current data
+            self.manager.get_available_benchlabs(log_info=False)
+            
             for port, info in self.manager.benchlab_devices.items():
                 self.fleet_cache.append({
                     "port": port,
@@ -67,7 +71,7 @@ class BenchlabFleetSelect:
             return
 
         now = int(time.monotonic() * 1000)
-        if now - getattr(self, "last_touch_time", 0) < 0.1:
+        if now - self.last_touch_time < 150:
             return
 
         if touch is None or getattr(touch, "Type", 0) == 0:
@@ -78,6 +82,8 @@ class BenchlabFleetSelect:
         # Ignore touches immediately after page start
         if now - getattr(self, "start_time", now) < 500:
             return
+
+        self.last_touch_time = now
 
         # Footer buttons
         for btn in self.footer_hitboxes:

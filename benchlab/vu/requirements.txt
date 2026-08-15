@@ -5,13 +5,20 @@ blessed>=1.20.0
 Pillow>=10.0.0
 pyserial>=3.5
 
-# VU-Server
+# VU-Server (runtime deps only -- pyinstaller and argparse dropped: pyinstaller
+# is only needed to build a standalone VU-Server binary, not to run it, and
+# argparse is a legacy PyPI shim for a module that's been in the stdlib since
+# Python 3.2. Both were pulled in verbatim from the upstream VU-Server
+# requirements.txt. Since `pip install -r` installs the whole file as one
+# atomic command, a failure building pyinstaller's native extensions on a
+# given Linux distro -- a known source of install friction for that package --
+# would silently block installing tornado/pyserial/etc. that VU-Server
+# actually needs, breaking -vu/-vuconfig with no error pointing at the real
+# cause.
 tornado
 numpy
 pillow
 requests
-argparse
 pyyaml
 ruamel.yaml
 pyserial
-pyinstaller

@@ -1,24 +1,32 @@
 # benchlab/hwinfo_export.py
 
-import winreg
+import os
+import sys
 import time
 import logging
 import atexit
-from benchlab.core.serial_io import get_fleet_info, open_serial_connection, read_sensors
-from benchlab.core.sensor_translation import translate_sensor_struct
-from benchlab.core.structures import FAN_NUM
+from benchlab_pycore.core import translate_sensor_struct, FAN_NUM, read_device, BENCHLAB_ORIGINAL_PRODUCT_ID
+from benchlab_pycore.core.serial_io import get_fleet_info
+from benchlab.core.datasource import create_datasource, DataSource
+
+# Conditional import for Windows-only winreg module (BUG-7.2)
+if sys.platform.startswith('win'):
+    import winreg
+else:
+    winreg = None
 
 logger = logging.getLogger("hwinfo_export")
 logger.setLevel(logging.INFO)
 if not logger.handlers:
-    import sys
     handler = logging.StreamHandler(sys.stdout)
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
-HWINFO_CUSTOM_ROOT = winreg.HKEY_CURRENT_USER
-HWINFO_CUSTOM_PATH = r"Software\HWiNFO64\Sensors\Custom"
+# Only define registry constants on Windows (BUG-7.2)
+if winreg is not None:
+    HWINFO_CUSTOM_ROOT = winreg.HKEY_CURRENT_USER
+    HWINFO_CUSTOM_PATH = r"Software\HWiNFO64\Sensors\Custom"
 
 IGNORE_KEYS = [f"Fan{i+1}_Status" for i in range(FAN_NUM)]
 exported_devices = set()
@@ -42,8 +50,6 @@ def get_sensor_type_and_unit(key):
         return "Clock", None
     elif "duty" in key_lower:
         return "Other", "%"
-    elif "fanextduty" in key_lower:
-        return "Other", "%"
     else:
         return "Other", "%"
 
@@ -58,7 +64,7 @@ def write_hwinfo_sensor(device_name, sensor_type, idx, name, value, unit=None):
             if isinstance(value, float):
                 winreg.SetValueEx(key, "Value", 0, winreg.REG_SZ, f"{value:.3f}")
             else:
-                winreg.SetValueEx(key, "Value", 0, winreg.REG_DWORD, value)
+                winreg.SetValueEx(key, "Value", 0, winreg.REG_SZ, str(value))
 
             # Force-overwrite Unit safely
             try:
@@ -78,25 +84,8 @@ def write_hwinfo_sensor(device_name, sensor_type, idx, name, value, unit=None):
     except Exception as e:
         logger.warning("Failed to write %s%d for %s: %s", sensor_type, idx, device_name, e)
 
-def export_device_sensors(device_info):
-    uid = device_info["uid"]
-    port = device_info["port"]
-    device_name = f"BENCHLAB_{port}_{uid}"
-    exported_devices.add(device_name)
-
-    ser = open_serial_connection(port)
-    if not ser:
-        logger.error("Cannot open serial port for device %s", uid)
-        return
-
-    sensor_struct = read_sensors(ser)
-    if not sensor_struct:
-        logger.error("Failed to read sensors for device %s", uid)
-        ser.close()
-        return
-
-    data = translate_sensor_struct(sensor_struct)
-
+def _process_sensor_data(data: dict) -> dict:
+    """Translate raw sensor dict into HWiNFO grouped sensors with rounding."""
     grouped_sensors = {
         "Temp": [],
         "Volt": [],
@@ -109,13 +98,11 @@ def export_device_sensors(device_info):
     }
 
     for key, value in data.items():
-        # Skip ignored keys and FanExtDuty completely
-        if key in IGNORE_KEYS or key.lower() == "fanextduty":
+        if key in IGNORE_KEYS or key.lower() in ("fanextduty", "timestamp"):
             continue
 
         sensor_type, unit = get_sensor_type_and_unit(key)
 
-        # Apply rounding to floats
         if isinstance(value, float):
             if sensor_type == "Volt":
                 value = round(value, 3)
@@ -132,7 +119,11 @@ def export_device_sensors(device_info):
 
         grouped_sensors[sensor_type].append((key, value, unit))
 
-    # Export sensors in grouped order
+    return grouped_sensors
+
+
+def _export_grouped(device_name: str, grouped_sensors: dict):
+    """Write grouped sensors to HWiNFO registry."""
     seq_counters = {k: 0 for k in grouped_sensors.keys()}
     for group in ["Power", "Volt", "Current", "Temp", "Usage", "Clock", "Fan", "Other"]:
         for key, value, unit in grouped_sensors[group]:
@@ -140,10 +131,69 @@ def export_device_sensors(device_info):
             seq_counters[group] += 1
             write_hwinfo_sensor(device_name, group, idx, key, value, unit)
 
-    ser.close()
+    summary = ", ".join(f"{k}: {len(v)}" for k, v in grouped_sensors.items() if v)
+    logger.debug("Device %s export summary: %s", device_name, summary)
 
-    summary = ", ".join(f"{k}: {len(v)}" for k, v in grouped_sensors.items())
-    logger.info("Device %s export summary: %s", device_name, summary)
+
+def export_device_sensors(device_info, datasource=None):
+    """Export sensors from a device to HWiNFO registry.
+
+    Args:
+        device_info: Device info dict with uid and port
+        datasource: Optional DataSource to use (falls back to DirectDataSource env config if None)
+
+    Returns:
+        True if export succeeded, False otherwise.
+    """
+    uid = device_info["uid"]
+    port = device_info["port"]
+    device_name = f"BENCHLAB_{port}_{uid}"
+    exported_devices.add(device_name)
+
+    # Get telemetry from datasource
+    if datasource is not None:
+        # Use provided data source
+        data = datasource.get_telemetry(uid)
+        if not data:
+            logger.debug("No telemetry for %s via %s yet", uid, datasource.source_type)
+    else:
+        # Fallback: direct probe via pycore (legacy behavior)
+        try:
+            from benchlab_pycore.core import read_sensors
+            from benchlab.core.shared_serial import open_serial_connection
+            ser = open_serial_connection(port)
+            if not ser:
+                logger.error("Cannot open serial port for device %s", uid)
+                return False
+            # Get product_id for correct sensor interpretation (BL2 vs ORIGINAL)
+            product_id = BENCHLAB_ORIGINAL_PRODUCT_ID
+            try:
+                device_info = read_device(ser)
+                if device_info:
+                    product_id = device_info.get('ProductId', BENCHLAB_ORIGINAL_PRODUCT_ID)
+            except Exception:
+                pass
+            sensor_struct = read_sensors(ser, product_id=product_id)
+            ser.close()
+            if not sensor_struct:
+                logger.error("Failed to read sensors for device %s", uid)
+                return False
+            data = translate_sensor_struct(sensor_struct)
+        except Exception as e:
+            logger.error("Error exporting sensors for device %s (fallback): %s", uid, e)
+            return False
+
+    if not data:
+        logger.error("No telemetry data for device %s", uid)
+        return False
+
+    try:
+        grouped_sensors = _process_sensor_data(data)
+        _export_grouped(device_name, grouped_sensors)
+        return True
+    except Exception as e:
+        logger.error("Error exporting sensors for device %s: %s", uid, e)
+        return False
 
 def delete_registry_tree(root, path):
     try:
@@ -175,7 +225,42 @@ def cleanup_registry():
 
 atexit.register(cleanup_registry)
 
-def export_all_devices(update_interval=1):
+def _select_datasource() -> DataSource:
+    """Select a data source based on environment config or default to direct."""
+    source_type = os.environ.get("BENCHLAB_DATA_SOURCE", "direct")
+    kwargs = {}
+
+    if source_type in ("fastapi", "fastapi_custom"):
+        kwargs["base_url"] = os.environ.get("BENCHLAB_API_URL", "http://127.0.0.1:8000")
+    elif source_type == "mqtt":
+        kwargs["broker"] = os.environ.get("MQTT_BROKER", "localhost")
+        kwargs["port"] = int(os.environ.get("MQTT_PORT", "1883"))
+        kwargs["topic_prefix"] = os.environ.get("MQTT_TOPIC_PREFIX", "benchlab")
+
+    ds = create_datasource(source_type, **kwargs)
+    if ds.connect():
+        logger.info("Using data source: %s", source_type)
+        return ds
+    else:
+        logger.warning("Failed to connect via %s, falling back to direct", source_type)
+        ds = create_datasource("direct")
+        if ds.connect():
+            return ds
+        raise RuntimeError("All data sources failed")
+
+
+def export_all_devices(update_interval=1, datasource=None):
+    """Export all devices continuously using the configured data source.
+
+    Args:
+        update_interval: Seconds between export cycles
+        datasource: Optional DataSource to use. If None, auto-selects via env config.
+    """
+    # Check Windows availability (BUG-7.2)
+    if winreg is None:
+        logger.error("HWiNFO export is only supported on Windows. Please run on a Windows system.")
+        raise RuntimeError(f"HWiNFO export requires Windows. Current platform: {sys.platform}")
+
     # Remove only old BenchLab entries, not user-created sensors
     try:
         with winreg.OpenKey(HWINFO_CUSTOM_ROOT, HWINFO_CUSTOM_PATH, 0, winreg.KEY_ALL_ACCESS) as root_key:
@@ -192,16 +277,45 @@ def export_all_devices(update_interval=1):
     except FileNotFoundError:
         pass
 
+    # Set up data source
+    if datasource is None:
+        datasource = _select_datasource()
+
     try:
         while True:
-            fleet = get_fleet_info()
+            # Get device list from data source
+            fleet = datasource.list_devices()
+
+            # Remove registry entries for devices no longer present in the fleet
+            current_device_names = {
+                f"BENCHLAB_{device.get('port', 'unknown')}_{device.get('uid', 'unknown')}"
+                for device in fleet
+            }
+            for stale_name in exported_devices - current_device_names:
+                delete_registry_tree(HWINFO_CUSTOM_ROOT, f"{HWINFO_CUSTOM_PATH}\\{stale_name}")
+                exported_devices.discard(stale_name)
+
             if not fleet:
-                logger.warning("No BenchLab devices found")
+                logger.warning("No BenchLab devices found via %s", datasource.source_type)
+                time.sleep(update_interval)
+                continue
+
+            # Export each device
             for device in fleet:
-                export_device_sensors(device)
+                port = device.get("port", "unknown")
+                uid = device.get("uid", "unknown")
+                device_name = f"BENCHLAB_{port}_{uid}"
+
+                success = export_device_sensors(device, datasource)
+                if success:
+                    logger.debug("Exported %s", device_name)
+                else:
+                    logger.warning("Failed to export %s", device_name)
+
             time.sleep(update_interval)
     except KeyboardInterrupt:
         logger.info("Stopping HWiNFO export...")
+        datasource.disconnect()
         logger.info("Cleaning up registry keys...")
         cleanup_registry()
         logger.info("Done.")

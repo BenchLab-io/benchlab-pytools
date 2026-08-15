@@ -36,16 +36,18 @@ Designed for integration with dashboards, monitoring platforms, or other MQTT co
 Install the required dependencies for the MQTT module:
 
 ```
-pip install -r requirements_mqtt.txt
+pip install -r requirements.txt
 ```
 
-Dependencies include:
+Dependencies (see `requirements.txt`):
 
 ```
-paho-mqtt
-pyserial
-benchlab core modules
+paho-mqtt>=1.6.1
+amqtt>=0.12.0,<0.13.0
+pyyaml>=6.0,<7.0
 ```
+
+Plus the `benchlab_pycore` core modules and the rest of the `benchlab` package (installed as part of the overall project).
 
 ---
 
@@ -75,9 +77,22 @@ export MQTT_PATH=/mqtt
 | `MQTT_TRANSPORT` | `tcp` | Transport protocol (`tcp` or `websockets`) |
 | `MQTT_USERNAME` | None | MQTT username if authentication is required |
 | `MQTT_PASSWORD` | None | MQTT password |
-| `MQTT_PROTOCOL` | `MQTTv311` | MQTT protocol version |
+| `MQTT_PROTOCOL` | `MQTTv311` | MQTT protocol version. Accepts (case-insensitive): `MQTTv31`/`v3.1`/`3.1`/`3` for v3.1, `MQTTv311`/`v3.1.1`/`3.1.1`/`4` for v3.1.1 (default), `MQTTv5`/`v5`/`5` for v5. An unrecognized value raises an error at startup rather than failing silently later. |
 | `MQTT_QOS` | `0` | Quality of Service (0, 1, or 2) |
 | `MQTT_PATH` | None | WebSocket path (if transport is `websockets`) |
+| `MQTT_TOPIC_PREFIX` | `benchlab` | Prefix for published topics, e.g. `<prefix>/<device_uid>/telemetry` |
+| `MQTT_POLL_RATE` | `1` (or `mqtt.config`'s `poll_rate`) | Seconds between telemetry publishes per device |
+
+### Poll Rate via Config File
+
+The poll rate can also be set via a local `mqtt.config` file instead of `MQTT_POLL_RATE`. Copy `mqtt.config_template` to `mqtt.config` in this directory and edit the `poll_rate` value:
+
+```ini
+[settings]
+poll_rate = 0.5
+```
+
+`MQTT_POLL_RATE`, if set, takes precedence over the config file.
 
 ---
 
@@ -86,8 +101,16 @@ export MQTT_PATH=/mqtt
 ### Run MQTT Mode
 
 ```
-python benchlab.py -mqtt
+python -m benchlab -mqtt
 ```
+
+`-mqtt` takes an optional positional broker hostname. If omitted, it defaults to `localhost`:
+
+```
+python -m benchlab -mqtt mybroker.local
+```
+
+The broker hostname can also be set via the `MQTT_BROKER` environment variable, or overridden with `--mqtt-broker`/`--mqtt-port` (used when this tool is launched together with other tools that consume the same MQTT source, e.g. via `--source mqtt`).
 
 Behavior:
 
@@ -97,11 +120,15 @@ Behavior:
 
 ### MQTT Topics
 
+Topics are published under a configurable prefix (`MQTT_TOPIC_PREFIX`, default `benchlab`):
+
 #### Device Info
 
 ```
-clients/client_uuid/links/balena_uuid/benchlabs/<device_uid>/info
+<topic_prefix>/<device_uid>/info
 ```
+
+Published with `retain=True` so late subscribers can discover the device without waiting for the next info publish.
 
 Payload:
 
@@ -116,7 +143,7 @@ Payload:
 #### Telemetry
 
 ```
-clients/client_uuid/links/balena_uuid/benchlabs/<device_uid>/telemetry
+<topic_prefix>/<device_uid>/telemetry
 ```
 
 Payload:
@@ -171,5 +198,4 @@ Payload:
 
 ## References
 
-- [Paho-MQTT Python client](https://pypi.org/project/paho-mqtt/)  
-- [Benchlab core modules](https://github.com/<your-org>/benchlab/tree/main/benchlab/core)
+- [Paho-MQTT Python client](https://pypi.org/project/paho-mqtt/)

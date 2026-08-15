@@ -1,4 +1,25 @@
-pyserial>=3.5
-paho-mqtt>=1.6.1
-packaging>=25.0
+# Core dependencies with version pins (DEP-1)
+packaging>=23.0,<26.0
+python-dotenv>=1.0.0,<2.0
+textual>=0.60,<9.0
+
+# BENCHLAB Serial Handler
+benchlab-pycore>=0.5.1
+
+# FastAPI Data Source
+fastapi==0.111.1
+uvicorn[standard]==0.24.0
+python-dotenv==1.1.1
+pydantic>=2.0.0  
+requests>=2.33.1
+
+# MQTT Data Source
+paho-mqtt>=2.0,<3.0
+# Pinned to a narrow range: amqtt's Broker API changed between 0.10 and
+# 0.12 (config moved from Broker.start(config) to the Broker(config)
+# constructor), which broke the embedded broker in benchlab/sources.py
+# with no test coverage to catch it. Bump deliberately, not automatically.
+amqtt>=0.12.0,<0.13.0
+
+# Curses-based TUI
 windows-curses>=2.4.1; platform_system=="Windows"

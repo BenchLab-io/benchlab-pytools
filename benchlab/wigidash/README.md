@@ -49,7 +49,36 @@ Dependencies include:
 - NumPy
 - pyserial
 - pyusb
+- libusb-package (Windows only — provides the libusb-1.0 backend pyusb needs)
 - benchlab core modules
+
+### Windows Setup
+
+`pyusb` needs a `libusb-1.0` backend DLL, which isn't bundled with the `pyusb` pip package itself. `requirements.txt` includes `libusb-package`, which provides a prebuilt backend that `pyusb` auto-discovers — plain `pip install -r requirements.txt` in any standard Python environment (venv, system Python, etc.) is enough; no Anaconda/conda-forge install is required.
+
+### Linux Setup
+
+`pyusb` needs a working `libusb-1.0` backend and permission to access the WigiDash's USB device node as a non-root user.
+
+1. Install libusb (relevant on minimal/ARM images, e.g. Raspberry Pi OS Lite, which may not ship it by default):
+
+   ```
+   sudo apt install libusb-1.0-0
+   ```
+
+2. Grant non-root USB access by creating `/etc/udev/rules.d/99-wigidash.rules`:
+
+   ```
+   SUBSYSTEM=="usb", ATTR{idVendor}=="28da", ATTR{idProduct}=="ef01", TAG+="uaccess"
+   ```
+
+   Then reload udev rules:
+
+   ```
+   sudo udevadm control --reload-rules && sudo udevadm trigger
+   ```
+
+   Without this rule, `pyusb` calls typically fail with an `Access denied (insufficient permissions)` USB error unless run as root. On startup, `scan_wigidash()` runs a best-effort check for this and logs an actionable warning (with the same rule text above) if it looks like access isn't set up — this is a diagnostic only, not a hard requirement check, since udev setups vary across distros.
 
 
 ---
@@ -59,16 +88,18 @@ Dependencies include:
 wigidash/
 ├─ README.md
 ├─ assets/ # Fonts, logos, and other UI resources
-├─ init.py
+├─ __init__.py
 ├─ benchlab_fleet.py # Fleet selection UI
 ├─ benchlab_graph.py # Graph rendering and metric selection
 ├─ benchlab_overview.py # Overview page for system telemetry
 ├─ benchlab_telemetry.py # Data logging and historical telemetry handling
+├─ benchlab_ui.py # Shared UI toolkit: theme, buttons, header/footer drawing
 ├─ benchlab_utils.py # Utilities for image display, logging, and device management
 ├─ wigidash_device.py # Device abstraction layer
+├─ wigidash_manager.py # Top-level orchestrator: device discovery, session/telemetry management
+├─ wigidash_session.py # Per-device UI session and page lifecycle
 ├─ wigidash_usb.py # USB communication layer
 ├─ wigidash_widget.py # Dashboard widget configuration
-├─ wigidash_launcher.py # Launcher for the dashboard
 └─ requirements.txt
 
 
@@ -79,12 +110,21 @@ wigidash/
 ### Launch the Dashboard
 
 ```
-python wigidash_launcher.py
+python -m benchlab -wigidash
 ```
+
+By default this connects via the `direct` (serial) data source. To use a different source, pass `--source` along with the matching connection flags:
+
+```
+python -m benchlab -wigidash --source fastapi --api-url http://127.0.0.1:8000
+python -m benchlab -wigidash --source mqtt --mqtt-broker localhost --mqtt-port 1883
+```
+
+Supported `--source` values: `direct`, `fastapi`, `fastapi_custom` (via `DataSourceManager`, same as the other consumer tools).
 
 Behavior:
 
-- Detects all connected BENCHLAB devices.
+- Detects all connected BENCHLAB devices via the selected data source.
 - Displays the main overview page.
 - Allows switching to the telemetry graph page for detailed metrics.
 - Supports interactive metric selection and fan toggles.
@@ -139,4 +179,4 @@ This project is licensed under MIT License. See the LICENSE file for details.
 - [Matplotlib](https://matplotlib.org/)  
 - [NumPy](https://numpy.org/)  
 - [pyserial](https://pypi.org/project/pyserial/)  
-- [pyusb](https://pypi.org/project/pyusb/)  
+- [pyusb](https://pypi.org/project/pyusb/)

@@ -79,7 +79,7 @@ class BenchlabGraph:
             return
 
         now = int(time.monotonic() * 1000)
-        if now - getattr(self, "last_touch_time", 0) < 0.1:
+        if now - getattr(self, "last_touch_time", 0) < 150:
             return
 
         if touch is None or getattr(touch, "Type", 0) == 0:
@@ -340,14 +340,13 @@ class BenchlabGraph:
                 })
 
 
-        # ---- Graph area ----
+         # ---- Graph area ----
         graph_x = panel_width + 2*padding
         graph_y = header_height + padding
         graph_w = self.SCREEN_WIDTH - graph_x - padding
         graph_h = self.SCREEN_HEIGHT - graph_y - footer_height - padding
         x_label = "Value"
         y_label = "Value"
-
 
         if self.plot_metrics:
             fig, ax = plt.subplots(figsize=(graph_w/100, graph_h/100), dpi=100, facecolor=(0,0,0))
@@ -377,7 +376,18 @@ class BenchlabGraph:
                     continue
 
                 clean_ts, clean_vals = zip(*clean)
-                x_vals = [datetime.fromtimestamp(t) for t in clean_ts]
+                # Handle Unix timestamps (direct serial), milliseconds (MQTT), and ISO strings (DataSource)
+                x_vals = []
+                for t in clean_ts:
+                    if isinstance(t, str):
+                        # ISO format string from DataSource
+                        x_vals.append(datetime.fromisoformat(t))
+                    elif t > 1e12:  # Likely milliseconds (Unix timestamp * 1000)
+                        # Convert milliseconds to seconds
+                        x_vals.append(datetime.fromtimestamp(t / 1000))
+                    else:
+                        # Unix timestamp in seconds from direct serial
+                        x_vals.append(datetime.fromtimestamp(t))
 
                 # Plot
                 short_label = m.replace("_Power", "").replace("_Current", "").replace("_Voltage", "")

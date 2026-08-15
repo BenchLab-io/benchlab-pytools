@@ -4,12 +4,11 @@ import os
 import sys
 import threading
 import time
+import types
 
-from benchlab.core.serial_io import open_serial_connection, read_sensors, read_device, read_uid, get_fleet_info
-
+from benchlab.core.datasource_manager import DataSourceManager
 from benchlab.wigidash.benchlab_telemetry import TelemetryHistory, telemetry_step, TelemetryContext
 from benchlab.wigidash.benchlab_utils import get_logger, display_image
-
 from benchlab.wigidash.wigidash_usb import scan_wigidash, USBDevice
 from benchlab.wigidash.wigidash_session import BenchlabWigiSession
 
@@ -21,48 +20,56 @@ class WigidashManager:
     Manages multiple Wigidash sessions and their assigned Benchlab devices.
     """
 
-    def __init__(self, vendor_id=0x28DA, product_id=0xEF01):
+    def __init__(self, vendor_id=0x28DA, product_id=0xEF01, datasource=None):
         self.vendor_id = vendor_id
         self.product_id = product_id
         self.sessions = []
-        self.benchlab_devices = {}  # port -> {'uid': str, 'in_use': bool, 'firmware': str}
-        self.telemetry_histories = {}  # uid -> TelemetryHistory
+        self.benchlab_devices = {}
+        self.telemetry_histories = {}
         self.telemetry_contexts = {}
         self.shutting_down = False
         self.shutdown_event = threading.Event()
         self.shutdown_barrier = None
+        self.datasource = datasource  # Already-connected DataSourceManager
+        self._telemetry_lock = threading.Lock()
 
     # ----------------- BENCHLAB DEVICE MANAGEMENT ----------------- #
     def get_available_benchlabs(self, log_info=True):
-        """
-        Initial scan: open/close serial ports to populate the cache of Benchlab devices.
-        After this, fleet pages only read from the cache; no serial access.
-        """
+        """Query the datasource for available Benchlab devices."""
+        devices = []
+        query_succeeded = False
         try:
-            devices = get_fleet_info()
+            raw = self.datasource.list_devices()
+            if isinstance(raw, dict):
+                devices = [{"port": info.get("port", "?"), "uid": uid,
+                            "firmware": info.get("firmware", "?")}
+                           for uid, info in raw.items()]
+            else:
+                devices = list(raw)
+            query_succeeded = True
         except Exception as e:
-            logger.warning(f"Failed to get fleet info: {e}")
-            devices = []
+            logger.warning(f"list_devices failed: {e}")
 
         for d in devices:
-            port = d['port']
-            uid = d['uid']
-            fw = d.get('firmware', '?')
-
+            port = d["port"]
+            uid = d["uid"]
+            fw = d.get("firmware", "?")
             if port not in self.benchlab_devices:
-                self.benchlab_devices[port] = {
-                    'uid': uid,
-                    'firmware': fw,
-                    'in_use': False
-                }
+                self.benchlab_devices[port] = {"uid": uid, "firmware": fw, "in_use": False}
             else:
-                # update UID/firmware if changed
-                self.benchlab_devices[port]['uid'] = uid
-                self.benchlab_devices[port]['firmware'] = fw
+                self.benchlab_devices[port]["uid"] = uid
+                self.benchlab_devices[port]["firmware"] = fw
 
-        # Return only devices not currently in use
+        # Prune ports no longer reported by the data source, so a disconnected
+        # device doesn't linger forever with stale UID/firmware/in_use state.
+        if query_succeeded:
+            current_ports = {d["port"] for d in devices}
+            for stale_port in set(self.benchlab_devices) - current_ports:
+                del self.benchlab_devices[stale_port]
+                self.telemetry_contexts.pop(stale_port, None)
+
         all_devices = [
-            {"port": port, "uid": info['uid'], "in_use": info['in_use']}
+            {"port": port, "uid": info["uid"], "in_use": info["in_use"]}
             for port, info in self.benchlab_devices.items()
         ]
 
@@ -71,7 +78,7 @@ class WigidashManager:
             if count:
                 logger.info(f"{count} available Benchlab device{'s' if count > 1 else ''}:")
                 for dev in all_devices:
-                    logger.info(f"{dev['port']}: UID {dev['uid']}")
+                    logger.info(f"  {dev['port']}: UID {dev['uid']}")
             else:
                 logger.info("No Benchlab devices detected.")
 
@@ -87,89 +94,76 @@ class WigidashManager:
             logger.warning(f"Cannot start telemetry: unknown port {port}")
             return
 
-        # ------------------------------------------------
-        # CASE 1: Telemetry already running for this port
-        # ------------------------------------------------
-        if port in self.telemetry_contexts:
-            ctx = self.telemetry_contexts[port]
+        with self._telemetry_lock:
+            # ------------------------------------------------
+            # CASE 1: Telemetry already running for this port
+            # ------------------------------------------------
+            if port in self.telemetry_contexts:
+                ctx = self.telemetry_contexts[port]
 
-            logger.info(
-                f"Selected device {port} is already in use. Using existing telemetry."
-            )
+                logger.info(
+                    f"Selected device {port} is already in use. Using existing telemetry."
+                )
 
-            session.ser = ctx.ser
-            session.device_info = ctx.device_info
-            session.uid = ctx.uid
-            session.telemetry_history = ctx.history
-            session.history = ctx.history
-            session.selected_port = port
-            session.telemetry_context = ctx
+                session.ser = ctx.ser
+                session.device_info = ctx.device_info
+                session.uid = ctx.uid
+                session.telemetry_history = ctx.history
+                session.history = ctx.history
+                session.selected_port = port
+                session.telemetry_context = ctx
 
-            ctx.sessions.append(session)
-            return
+                ctx.sessions.append(session)
+                return
 
-        # ------------------------------------------------
-        # CASE 2: First session → start telemetry
-        # ------------------------------------------------
-        self.benchlab_devices[port]["in_use"] = True
-        uid = self.benchlab_devices[port]["uid"]
+            # ------------------------------------------------
+            # CASE 2: First session → start telemetry
+            # ------------------------------------------------
+            self.benchlab_devices[port]["in_use"] = True
+            uid = self.benchlab_devices[port]["uid"]
+            history = self.telemetry_histories.setdefault(uid, TelemetryHistory())
 
-        history = self.telemetry_histories.setdefault(uid, TelemetryHistory())
-
-        try:
-            ser = open_serial_connection(port)
-            logger.info(f"Opened serial port {port} for telemetry")
-        except Exception as e:
-            logger.warning(f"Error opening serial for {port}: {e}")
-            return
-
-        try:
-            device_info = read_device(ser)
-            uid = device_info.get("UID", uid)
-            logger.info(f"Device info read for {port}: UID={uid}")
-        except Exception as e:
-            logger.warning(f"Failed to read device info from {port}: {e}")
+            # Get device info from datasource
             device_info = {}
-
-        # Create telemetry context
-        ctx = TelemetryContext(
-            port=port,
-            ser=ser,
-            device_info=device_info,
-            uid=uid,
-            history=history,
-        )
-        ctx.sessions = [session]
-
-        self.telemetry_contexts[port] = ctx
-
-        # Inject into first session
-        session.ser = ser
-        session.device_info = device_info
-        session.uid = uid
-        session.telemetry_history = history
-        session.history = history
-        session.selected_port = port
-
-        # Telemetry thread (single owner)
-        def telemetry_loop():
-            while not self.shutdown_event.is_set():
-                try:
-                    sensor_struct = read_sensors(ser)
-                    if sensor_struct:
-                        telemetry_step(ctx, device_info=device_info, sensor_struct=sensor_struct)
-                except Exception as e:
-                    logger.warning(f"Telemetry error on {port}: {e}")
-                time.sleep(0.1)
-
-            # Cleanup serial
             try:
-                ser.close()
-                logger.info(f"Closed serial port {port}")
-            except Exception:
-                pass
+                self.datasource.select_device(uid)
+                snap = self.datasource.snapshot()
+                device_info = snap.get("device_info") or snap.get("all_devices", {}).get(uid, {})
+            except Exception as e:
+                logger.warning(f"Could not get device info for {uid}: {e}")
 
-        threading.Thread(target=telemetry_loop, daemon=True).start()
+            ctx = TelemetryContext(
+                port=port,
+                ser=None,
+                device_info=device_info,
+                uid=uid,
+                history=history,
+            )
+            ctx.sessions = [session]
+            self.telemetry_contexts[port] = ctx
+
+            session.ser = None
+            session.device_info = device_info
+            session.uid = uid
+            session.telemetry_history = history
+            session.history = history
+            session.selected_port = port
+
+            def telemetry_loop():
+                while not self.shutdown_event.is_set():
+                    try:
+                        self.datasource.select_device(uid)
+                        snap = self.datasource.snapshot()
+                        data = (snap.get("sensor_data")
+                                or snap.get("all_telemetry", {}).get(uid)
+                                or {})
+                        if data:
+                            telemetry_step(ctx, device_info=device_info, sensor_struct=data)
+                    except Exception as e:
+                        logger.warning(f"Telemetry error on {port}: {e}")
+                    time.sleep(0.1)
+
+            threading.Thread(target=telemetry_loop, daemon=True).start()
 
 
     # ----------------- SESSION MANAGEMENT ----------------- #
@@ -241,6 +235,14 @@ class WigidashManager:
         self.shutting_down = True
         self.shutdown_event.set()
 
+        # Disconnect DataSource if we created one
+        if self.datasource is not None:
+            try:
+                self.datasource.disconnect()
+                logger.info("DataSource disconnected")
+            except Exception as e:
+                logger.warning(f"Error disconnecting DataSource: {e}")
+
         active_sessions = [s for s in self.sessions if s.app_running]
 
         # Only create a barrier if we want splash synchronization
@@ -268,8 +270,35 @@ class WigidashManager:
         logger.info("Graceful shutdown completed.")
 
 
-def main():
-    manager = WigidashManager()
+def main(args=None):
+    """Entry point. Accepts standard benchlab args namespace."""
+    if args is None:
+        args = types.SimpleNamespace(
+            source=os.environ.get("BENCHLAB_DATA_SOURCE", "direct"),
+            api_url=os.environ.get("BENCHLAB_API_URL", "http://127.0.0.1:8000"),
+            mqtt_broker=os.environ.get("MQTT_BROKER", "localhost"),
+            mqtt_port=int(os.environ.get("MQTT_PORT", "1883")),
+            interval=1.0,
+        )
+
+    source = args.source
+    ds_kwargs = {}
+    if source in ("fastapi", "fastapi_custom"):
+        ds_kwargs["base_url"] = args.api_url
+        logger.info(f"Using FastAPI datasource: {args.api_url}")
+    elif source == "mqtt":
+        ds_kwargs["broker"] = args.mqtt_broker
+        ds_kwargs["port"] = args.mqtt_port
+        logger.info(f"Using MQTT datasource: {args.mqtt_broker}:{args.mqtt_port}")
+    else:
+        logger.info("Using direct datasource")
+
+    datasource = DataSourceManager(source_type=source, **ds_kwargs)
+    if not datasource.connect():
+        logger.error(f"Failed to connect to {source} datasource")
+        return
+
+    manager = WigidashManager(datasource=datasource)
     manager.detect_and_start_sessions()
 
     try:
@@ -282,7 +311,9 @@ def main():
     except KeyboardInterrupt:
         logger.info("Initiating graceful shutdown")
         manager.graceful_shutdown()
-        sys.exit(0)
+    finally:
+        datasource.disconnect()
+
 
 if __name__ == "__main__":
     main()

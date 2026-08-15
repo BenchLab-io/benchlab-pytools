@@ -1,8 +1,13 @@
 # Benchlab specific files
 *.db
+*.db-journal
 *.config
 *.pid.lock
-
+.benchlab_prefs.json
+my_config.json
+/logs/
+benchlab/vu/generated/
+benchlab/vu/VU-Server/upload/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -188,11 +193,11 @@ cython_debug/
 .abstra/
 
 # Visual Studio Code
-#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
+#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore
 #  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
-#  and can be added to the global gitignore or merged into this file. However, if you prefer, 
+#  and can be added to the global gitignore or merged into this file. However, if you prefer,
 #  you could uncomment the following to ignore the entire vscode folder
-# .vscode/
+.vscode/
 
 # Ruff stuff:
 .ruff_cache/
@@ -211,3 +216,23 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+#Cline Settings
+./clinerules/
+clinerules.md
+benchlab/vu/generated/Ambient_Temp_31adb92f7d8c50f2ef571b0e57623d4a_logo.png
+benchlab/vu/generated/HPWR1_Current_3bdca09ec192687fe4737b7eab9b5a40_logo.png
+benchlab/vu/generated/Humidity_5841b6aff86e7995ed175c5d6461a5cf_logo.png
+benchlab/vu/generated/SYS_Power_7932c00b5744a5d26d25928e058c8231_logo.png
+benchlab/vu/VU-Server/upload/img_4A0027000650564139323920
+benchlab/vu/VU-Server/upload/img_4A0038000650564139323920
+benchlab/vu/VU-Server/upload/img_35002F000650564139323920
+benchlab/vu/VU-Server/upload/img_890024000650564139323920
+benchlab/vu/VU-Server/upload/tmp_4A0027000650564139323920
+benchlab/vu/VU-Server/upload/tmp_4A0038000650564139323920
+benchlab/vu/VU-Server/upload/tmp_35002F000650564139323920
+benchlab/vu/VU-Server/upload/tmp_890024000650564139323920
+benchlab/vu/VU-Server/upload/img_4A0027000650564139323920
+benchlab/vu/VU-Server/upload/img_4A0038000650564139323920
+benchlab/vu/VU-Server/upload/img_35002F000650564139323920
+benchlab/vu/VU-Server/upload/img_890024000650564139323920

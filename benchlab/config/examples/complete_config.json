@@ -1,0 +1,56 @@
+{
+  "version": "1.0",
+  "description": "Complete device configuration - Fan curves, RGB, and device name",
+  "devices": [
+    {
+      "selector": {
+        "type": "any",
+        "value": null
+      },
+      "deviceName": "BENCHLAB_GAMING",
+      "fanProfiles": [
+        {
+          "profileId": 0,
+          "fans": [
+            {
+              "fanId": 0,
+              "FanMode": 0,
+              "TempSource": 0,
+              "Temp": [300, 600],
+              "Duty": [30, 80],
+              "RampStep": 5,
+              "FixedDuty": 50,
+              "MinDuty": 20,
+              "MaxDuty": 100,
+              "FanStop": 0
+            },
+            {
+              "fanId": 1,
+              "FanMode": 0,
+              "TempSource": 0,
+              "Temp": [350, 650],
+              "Duty": [35, 85],
+              "RampStep": 5,
+              "FixedDuty": 50,
+              "MinDuty": 25,
+              "MaxDuty": 100,
+              "FanStop": 0
+            }
+          ]
+        }
+      ],
+      "rgbProfiles": [
+        {
+          "profileId": 0,
+          "Mode": 2,
+          "Red": 255,
+          "Green": 255,
+          "Blue": 255,
+          "Direction": 0,
+          "Speed": 75
+        }
+      ],
+      "saveToFlash": true
+    }
+  ]
+}

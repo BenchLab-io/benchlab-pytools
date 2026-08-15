@@ -28,16 +28,16 @@ Built using [Dear PyGui](https://dearpygui.readthedocs.io/), the module supports
 
 ## Installation
 
-Install the required dependencies:
+Install the tool's dependencies (from `benchlab/graph/requirements.txt`):
 
 ```
-pip install -r requirements_graph.txt
+pip install -r benchlab/graph/requirements.txt
 ```
 
-**Dependencies include:**
+**Dependencies:**
 
-- `dearpygui`
-- `numpy` (optional, if used in advanced calculations)
+- `dearpygui>=2.1.1`
+- `pyserial>=3.5`
 - BENCHLAB core modules (`benchlab.core`)
 
 ---
@@ -48,15 +48,19 @@ pip install -r requirements_graph.txt
 
 From the main BENCHLAB launcher:
 
-```
-python benchlab.py -graph
+```bash
+# Default (direct/serial source, 1s sensor poll interval)
+python -m benchlab -graph
+
+# Custom interval
+python -m benchlab -graph -i 0.5
+
+# Choose a data source (direct | fastapi | fastapi_custom | mqtt | mqtt_custom | named_pipe | service_http)
+python -m benchlab -graph --source fastapi --api-url http://127.0.0.1:8000
+python -m benchlab -graph --source mqtt --mqtt-broker localhost --mqtt-port 1883
 ```
 
-Or run directly:
-
-```
-python -m benchlab.graph.app
-```
+`-i`/`--interval` sets `GraphApp.sensor_read_interval` (default 1.0s). `--source`, `--api-url`, `--mqtt-broker`, and `--mqtt-port` are the standard `benchlab/main.py` flags; the graph module has no `-graph`-specific CLI flags of its own.
 
 ### Main GUI
 

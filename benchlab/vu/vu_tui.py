@@ -9,13 +9,12 @@ import sys
 import threading
 from pathlib import Path
 
-from benchlab.core.sensor_translation import translate_sensor_struct
 from benchlab.vu import devices
 from benchlab.vu.vu_server_manager import start_vu_server, check_vu_server, terminate_vu_server, forward_logs
 
 # --- Logger setup ---
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 # Make sure logs go to console
 ch = logging.StreamHandler(sys.stdout)
@@ -37,27 +36,46 @@ def save_json(path, data):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
-def get_available_sensors():
-    class DummyStruct:
-        PowerReadings = [type("P", (), {"Power": 0, "Voltage":0, "Current":0})() for _ in range(12)]
-        Vin = [0]*16
-        Vdd = 0
-        Vref = 0
-        Tchip = 0
-        Tamb = 0
-        Hum = 0
-        Ts = [0]*4
-        Fans = [type("F", (), {"Duty":0, "Tach":0, "Enable":0})() for _ in range(4)]
-        FanExtDuty = 0
-    return list(translate_sensor_struct(DummyStruct()).keys())
+def _parse_float_or(value, fallback):
+    """Parse *value* as a float, returning *fallback* on empty/invalid input
+    instead of raising — matches the existing guarded-input pattern used
+    elsewhere in this TUI (e.g. tab2's int() cast, sensor selection)."""
+    if not value:
+        return fallback
+    try:
+        return float(value)
+    except ValueError:
+        return fallback
 
-SENSORS = get_available_sensors()
+def get_available_sensors(datasource=None) -> list:
+    """Return sensor keys from a live datasource snapshot.
+    Falls back to an empty list if no data is available yet.
+    """
+    if datasource is None:
+        return []
+    try:
+        raw = datasource.list_devices()
+        if isinstance(raw, dict):
+            uids = list(raw.keys())
+        else:
+            uids = [d.get("uid") for d in raw if d.get("uid")]
+        if not uids:
+            return []
+        datasource.select_device(uids[0])
+        snap = datasource.snapshot()
+        data = snap.get("sensor_data") or snap.get("all_telemetry", {}).get(uids[0], {})
+        return [k for k in data if k.lower() != "timestamp"]
+    except Exception as e:
+        logger.warning(f"Could not get sensor list from datasource: {e}")
+        return []
+
 
 class VUTUI:
-    def __init__(self, stdscr, server_proc=None):
+    def __init__(self, stdscr, server_proc=None, datasource=None):
         self.stdscr = stdscr
         self.running = True
         self.server_proc = server_proc
+        self.datasource = datasource
 
         try:
             curses.curs_set(0)
@@ -83,13 +101,18 @@ class VUTUI:
 
         # Load configs & devices
         self.reload_configs()
+        self.SENSORS = get_available_sensors(self.datasource)
 
     # -------------------- CLEANUP --------------------
-    def cleanup(tui: "VUTUI", server_proc=None):
+    def cleanup(self):
+        """Close benchlab serial ports. The auto-started VU server process
+        (if any) is terminated separately by the caller (run_vu_tui), which
+        owns server_proc — not tracked on self.
+        """
         logger.info("Starting cleanup...")
 
         # Close benchlab ports
-        for b in getattr(tui, "benchlabs", []):
+        for b in getattr(self, "benchlabs", []):
             try:
                 if hasattr(b, "close") and callable(b.close):
                     b.close()
@@ -97,19 +120,35 @@ class VUTUI:
             except Exception as e:
                 logger.warning(f"Failed to close port {b.get('port','?')}: {e}")
 
-        # Terminate VU server if it was started
-        if server_proc:
-            logger.info("Terminating local VU server...")
-            terminate_vu_server(server_proc)
-            logger.info("Local VU server terminated.")
-
         logger.info("Cleanup complete.")
 
     # -------------------- CONFIG / DIALS --------------------
     def reload_configs(self):
+        template_server = VU_SERVER_CONFIG.parent / "vu_server.config_template"
+        template_dial   = VU_DIAL_CONFIG.parent   / "vu_dial.config_template"
+
+        if not VU_SERVER_CONFIG.exists():
+            src = template_server if template_server.exists() else None
+            cfg = load_json(src, {"vu_server_url": "http://localhost:5340", "api_key": "", "logo_file": ""}) if src else {"vu_server_url": "http://localhost:5340", "api_key": "", "logo_file": ""}
+            save_json(VU_SERVER_CONFIG, cfg)
+            logger.info("Created VU server config from template" if src else "Created default VU server config")
+
+        if not VU_DIAL_CONFIG.exists():
+            if template_dial.exists():
+                entries = load_json(template_dial, [])
+                for e in entries:
+                    e["benchlab_port"] = ""
+                    e["benchlab_uid"]  = ""
+                    e["sensor"]        = ""
+                save_json(VU_DIAL_CONFIG, entries)
+                logger.info("Created VU dial config from template")
+            else:
+                save_json(VU_DIAL_CONFIG, [])
+                logger.info("Created empty VU dial config")
+
         self.server_cfg = load_json(VU_SERVER_CONFIG, {})
-        self.dial_cfg = load_json(VU_DIAL_CONFIG, [])
-        self.benchlabs = devices.get_benchlab_devices()
+        self.dial_cfg   = load_json(VU_DIAL_CONFIG, [])
+        self.benchlabs = devices.get_benchlab_devices(self.datasource)
 
         self.vu_server_running = devices.vu_server_check(
             self.server_cfg.get("vu_server_url", "http://localhost:5340"),
@@ -151,11 +190,9 @@ class VUTUI:
             if resp.status_code in (200, 201):
                 return True
             else:
-                import logging
-                logging.warning(f"Failed to update dial {dial_uid} name on server: {resp.status_code} {resp.text}")
+                logger.warning(f"Failed to update dial {dial_uid} name on server: {resp.status_code} {resp.text}")
         except Exception as e:
-            import logging
-            logging.warning(f"Exception updating dial {dial_uid} name on server: {e}")
+            logger.warning(f"Exception updating dial {dial_uid} name on server: {e}")
         return False
 
     # -------------------- HELPERS --------------------
@@ -307,7 +344,7 @@ class VUTUI:
         elif key in (ord('p'), ord('P')):
             self.stdscr.addstr(self.h-3, 0, "Scanning and provisioning new devices...".ljust(self.w))
             self.stdscr.refresh()
-            newly_provisioned = devices.provision_missing_vu_dials(
+            success = devices.provision_vu_dials(
                 self.server_cfg.get("vu_server_url", "http://localhost:5340"),
                 self.server_cfg.get("api_key", "")
             )
@@ -315,7 +352,7 @@ class VUTUI:
                 self.server_cfg.get("vu_server_url", "http://localhost:5340"),
                 self.server_cfg.get("api_key", "")
             )
-            msg = f"New devices provisioned: {newly_provisioned}" if newly_provisioned else "No new devices found."
+            msg = "Provisioning successful." if success else "Provisioning failed or no new devices found."
             self.stdscr.addstr(self.h-3, 0, msg.ljust(self.w))
             self.stdscr.refresh()
             curses.napms(1000)
@@ -525,9 +562,21 @@ class VUTUI:
             cfg_entry["benchlab_uid"] = dial["benchlab_uid"]
 
         # --- Step 3: Sensor Selection ---
+        # Refresh sensor list in case datasource wasn't ready at startup
+        if not self.SENSORS:
+            self.SENSORS = get_available_sensors(self.datasource)
+
+        if not self.SENSORS:
+            self.stdscr.addstr(h-2, 0,
+                "No sensors available yet — ensure device is connected.".ljust(w),
+                curses.color_pair(3))
+            self.stdscr.refresh()
+            curses.napms(2000)
+            return
+
         max_display_rows = h - 6
-        num_sensors = len(SENSORS)
-        col_width = max(len(s) for s in SENSORS) + 4
+        num_sensors = len(self.SENSORS)
+        col_width = max(len(s) for s in self.SENSORS) + 4
         num_cols = max(1, w // col_width)
         num_rows = (num_sensors + num_cols - 1) // num_cols
 
@@ -538,7 +587,7 @@ class VUTUI:
                 self.stdscr.clrtoeol()
 
             # Display sensors
-            for idx, sensor in enumerate(SENSORS):
+            for idx, sensor in enumerate(self.SENSORS):
                 row = idx % num_rows
                 col = idx // num_rows
                 x = col * col_width
@@ -558,9 +607,9 @@ class VUTUI:
 
             try:
                 sel = int(inp) - 1
-                if 0 <= sel < len(SENSORS):
-                    dial['sensor'] = SENSORS[sel]
-                    cfg_entry['sensor'] = SENSORS[sel]
+                if 0 <= sel < len(self.SENSORS):
+                    dial['sensor'] = self.SENSORS[sel]
+                    cfg_entry['sensor'] = self.SENSORS[sel]
                     break
             except ValueError:
                 continue
@@ -577,7 +626,7 @@ class VUTUI:
         curses.echo()
         inp = self.stdscr.getstr(h-3, len(prompt), 10).decode().strip()
         curses.noecho()
-        val_min = float(inp) if inp else current_min
+        val_min = _parse_float_or(inp, current_min)
 
         # MAX
         prompt = f"Set MAX [{current_max}]: "
@@ -587,7 +636,7 @@ class VUTUI:
         curses.echo()
         inp = self.stdscr.getstr(h-3, len(prompt), 10).decode().strip()
         curses.noecho()
-        val_max = float(inp) if inp else current_max
+        val_max = _parse_float_or(inp, current_max)
 
         if val_max <= val_min:
             self.stdscr.addstr(h-2, 0, "MAX must be greater than MIN!", curses.color_pair(3))
@@ -627,8 +676,8 @@ class VUTUI:
                     self.handle_tab3_input(key)
 
 # -------------------- RUN TUI --------------------
-def run_vu_tui(stdscr, server_proc=None):
-    tui = VUTUI(stdscr, server_proc=server_proc)
+def run_vu_tui(stdscr, server_proc=None, datasource=None):
+    tui = VUTUI(stdscr, server_proc=server_proc, datasource=datasource)
 
     def sigint_handler(sig, frame):
         tui.running = False
@@ -647,18 +696,36 @@ def run_vu_tui(stdscr, server_proc=None):
             logger.info("VU server terminated.")
 
 # -------------------- LAUNCH FUNCTION --------------------
-def launch_vu_config():
-    # Pre-TUI messages
+def launch_vu_config(args=None):
+    """Launch the VU configuration TUI.
+
+    Parameters
+    ----------
+    args:
+        Standard benchlab args namespace. If None, reads from env vars.
+    """
+    import os, types as _types
+    from benchlab.core.datasource_manager import DataSourceManager
+
+    if args is None:
+        args = _types.SimpleNamespace(
+            source=os.environ.get("BENCHLAB_DATA_SOURCE", "direct"),
+            api_url=os.environ.get("BENCHLAB_API_URL", "http://127.0.0.1:8000"),
+            mqtt_broker=os.environ.get("MQTT_BROKER", "localhost"),
+            mqtt_port=int(os.environ.get("MQTT_PORT", "1883")),
+            interval=1.0,
+        )
+
     logger.info("Launching the BENCHLAB VU Server & Dials Configuration")
     time.sleep(1)
     logger.info("Launch updater with -vu")
     time.sleep(1)
-    logger.info("Checking for VU server ... ")
+    logger.info("Checking for VU server...")
     time.sleep(1)
 
     server_cfg = load_json(VU_SERVER_CONFIG, {})
     server_url = server_cfg.get("vu_server_url", "http://localhost:5340")
-    api_key = server_cfg.get("api_key", "")
+    api_key    = server_cfg.get("api_key", "")
 
     server_proc = None
     if not check_vu_server(server_url, api_key):
@@ -674,8 +741,28 @@ def launch_vu_config():
 
     time.sleep(1)
 
-    # Launch curses TUI
-    curses.wrapper(run_vu_tui, server_proc)
+    ds_kwargs = {}
+    if args.source in ("fastapi", "fastapi_custom"):
+        ds_kwargs["base_url"] = args.api_url
+    elif args.source == "mqtt":
+        ds_kwargs["broker"]   = args.mqtt_broker
+        ds_kwargs["port"]     = args.mqtt_port
+
+    try:
+        datasource = DataSourceManager(source_type=args.source, **ds_kwargs)
+        if not datasource.connect():
+            logger.warning(f"Could not connect to {args.source} datasource — sensor list may be empty")
+    except Exception:
+        # run_vu_tui's own cleanup (which terminates server_proc) never runs
+        # if we fail before reaching curses.wrapper below, so terminate it
+        # here instead of leaking the auto-started server process.
+        terminate_vu_server(server_proc)
+        raise
+
+    try:
+        curses.wrapper(run_vu_tui, server_proc, datasource)
+    finally:
+        datasource.disconnect()
 
 if __name__ == "__main__":
-    main()
+    launch_vu_config()
