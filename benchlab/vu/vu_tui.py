@@ -36,6 +36,17 @@ def save_json(path, data):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
+def _parse_float_or(value, fallback):
+    """Parse *value* as a float, returning *fallback* on empty/invalid input
+    instead of raising — matches the existing guarded-input pattern used
+    elsewhere in this TUI (e.g. tab2's int() cast, sensor selection)."""
+    if not value:
+        return fallback
+    try:
+        return float(value)
+    except ValueError:
+        return fallback
+
 def get_available_sensors(datasource=None) -> list:
     """Return sensor keys from a live datasource snapshot.
     Falls back to an empty list if no data is available yet.
@@ -93,23 +104,21 @@ class VUTUI:
         self.SENSORS = get_available_sensors(self.datasource)
 
     # -------------------- CLEANUP --------------------
-    def cleanup(tui: "VUTUI", server_proc=None):
+    def cleanup(self):
+        """Close benchlab serial ports. The auto-started VU server process
+        (if any) is terminated separately by the caller (run_vu_tui), which
+        owns server_proc — not tracked on self.
+        """
         logger.info("Starting cleanup...")
 
         # Close benchlab ports
-        for b in getattr(tui, "benchlabs", []):
+        for b in getattr(self, "benchlabs", []):
             try:
                 if hasattr(b, "close") and callable(b.close):
                     b.close()
                     logger.info(f"Closed serial port for benchlab {b.get('port','?')}")
             except Exception as e:
                 logger.warning(f"Failed to close port {b.get('port','?')}: {e}")
-
-        # Terminate VU server if it was started
-        if server_proc:
-            logger.info("Terminating local VU server...")
-            terminate_vu_server(server_proc)
-            logger.info("Local VU server terminated.")
 
         logger.info("Cleanup complete.")
 
@@ -181,11 +190,9 @@ class VUTUI:
             if resp.status_code in (200, 201):
                 return True
             else:
-                import logging
-                logging.warning(f"Failed to update dial {dial_uid} name on server: {resp.status_code} {resp.text}")
+                logger.warning(f"Failed to update dial {dial_uid} name on server: {resp.status_code} {resp.text}")
         except Exception as e:
-            import logging
-            logging.warning(f"Exception updating dial {dial_uid} name on server: {e}")
+            logger.warning(f"Exception updating dial {dial_uid} name on server: {e}")
         return False
 
     # -------------------- HELPERS --------------------
@@ -619,7 +626,7 @@ class VUTUI:
         curses.echo()
         inp = self.stdscr.getstr(h-3, len(prompt), 10).decode().strip()
         curses.noecho()
-        val_min = float(inp) if inp else current_min
+        val_min = _parse_float_or(inp, current_min)
 
         # MAX
         prompt = f"Set MAX [{current_max}]: "
@@ -629,7 +636,7 @@ class VUTUI:
         curses.echo()
         inp = self.stdscr.getstr(h-3, len(prompt), 10).decode().strip()
         curses.noecho()
-        val_max = float(inp) if inp else current_max
+        val_max = _parse_float_or(inp, current_max)
 
         if val_max <= val_min:
             self.stdscr.addstr(h-2, 0, "MAX must be greater than MIN!", curses.color_pair(3))
@@ -741,9 +748,16 @@ def launch_vu_config(args=None):
         ds_kwargs["broker"]   = args.mqtt_broker
         ds_kwargs["port"]     = args.mqtt_port
 
-    datasource = DataSourceManager(source_type=args.source, **ds_kwargs)
-    if not datasource.connect():
-        logger.warning(f"Could not connect to {args.source} datasource — sensor list may be empty")
+    try:
+        datasource = DataSourceManager(source_type=args.source, **ds_kwargs)
+        if not datasource.connect():
+            logger.warning(f"Could not connect to {args.source} datasource — sensor list may be empty")
+    except Exception:
+        # run_vu_tui's own cleanup (which terminates server_proc) never runs
+        # if we fail before reaching curses.wrapper below, so terminate it
+        # here instead of leaking the auto-started server process.
+        terminate_vu_server(server_proc)
+        raise
 
     try:
         curses.wrapper(run_vu_tui, server_proc, datasource)
@@ -751,4 +765,4 @@ def launch_vu_config(args=None):
         datasource.disconnect()
 
 if __name__ == "__main__":
-    main()
+    launch_vu_config()

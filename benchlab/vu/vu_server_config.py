@@ -15,7 +15,7 @@ def update_vu_config(dial_uid, dial_name, device, sensor):
 
     # Remove any mapping with the same dial_uid
     existing = config.get("mappings", [])
-    filtered = [m for m in existing if m["dial_uid"] != dial_uid]
+    filtered = [m for m in existing if m.get("dial_uid") != dial_uid]
 
     # Add new mapping
     filtered.append({
