@@ -20,7 +20,8 @@ def query_named_pipe(
         command: str,
         payload=None,
         timeout_ms: int = 5000):
-    """Send a single command to a named pipe and return the parsed JSON response.
+    """Send a single command to a named pipe and return the parsed JSON
+    response.
 
     Standalone helper (not tied to a device-scoped NamedPipeConfigClient) so
     the BenchlabDiscovery pipe -- which isn't associated with any one device
@@ -395,7 +396,11 @@ class DirectConfigClient(ConfigClient):
         # BL2 has 8 temp sensors vs Original's 4, so the struct sizes and
         # array lengths differ. Mirrors benchlab_pycore.core.read_calibration's
         # own product_id -> struct_type selection.
-        struct_type = CalibrationStructBL2 if self.product_id == BENCHLAB_BL2_PRODUCT_ID else CalibrationStruct
+        struct_type = (
+            CalibrationStructBL2
+            if self.product_id == BENCHLAB_BL2_PRODUCT_ID
+            else CalibrationStruct
+        )
 
         # Reconstruct calibration struct from dict
         try:
@@ -520,7 +525,8 @@ class NamedPipeConfigClient(ConfigClient):
                         self.handle, (payload + "\n").encode("utf-8"))
                 else:
                     win32file.WriteFile(
-                        self.handle, (json.dumps(payload) + "\n").encode("utf-8"))
+                        self.handle,
+                        (json.dumps(payload) + "\n").encode("utf-8"))
 
             # Read response
             response_text = self._read_response()

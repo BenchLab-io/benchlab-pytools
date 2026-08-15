@@ -97,7 +97,11 @@ def test_write_calibration_bl2_data_no_longer_raises_indexerror():
     # _dict_to_struct is the piece that previously raised IndexError when
     # forced into the wrong (4-sensor) struct type; call it directly with
     # the now-correct struct type to confirm reconstruction succeeds.
-    struct_type = CalibrationStructBL2 if client.product_id == BENCHLAB_BL2_PRODUCT_ID else CalibrationStruct
+    struct_type = (
+        CalibrationStructBL2
+        if client.product_id == BENCHLAB_BL2_PRODUCT_ID
+        else CalibrationStruct
+    )
     result = client._dict_to_struct(cal_dict, struct_type)
 
     assert len(result.Ts) == 8

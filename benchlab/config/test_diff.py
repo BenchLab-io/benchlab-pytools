@@ -6,7 +6,8 @@ profiles, and calibration, and format_diff()'s rendering including the
 "no changes" case.
 """
 
-from benchlab.config.schema import DeviceConfig, DeviceSelector, FanProfile, FanConfig, RGBConfig
+from benchlab.config.schema import (
+    DeviceConfig, DeviceSelector, FanProfile, FanConfig, RGBConfig)
 from benchlab.config.diff import compute_diff, format_diff
 
 

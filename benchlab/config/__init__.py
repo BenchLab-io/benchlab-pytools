@@ -1,7 +1,8 @@
 """
 BENCHLAB Device Configuration Tool
 
-Import/export device configuration (fan profiles, RGB, calibration) via JSON files.
+Import/export device configuration (fan profiles, RGB, calibration) via
+JSON files.
 Supports both direct serial (pycore) and named pipe (Windows service) sources.
 """
 

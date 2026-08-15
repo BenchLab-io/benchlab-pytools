@@ -58,12 +58,15 @@ def _dict_diff(current: Dict[str, Any], desired: Dict[str,
 
 def compute_diff(current_state: Dict[str, Any],
                  desired_device_config) -> DiffResult:
-    """Compare a device's current state against a DeviceConfig (pydantic model).
+    """Compare a device's current state against a DeviceConfig (pydantic
+    model).
 
     Args:
         current_state: dict as returned by ConfigManager._read_current_state
-                        (deviceName, fanProfiles, rgbProfiles, calibration, readErrors)
-        desired_device_config: schema.DeviceConfig instance from the loaded config file
+                        (deviceName, fanProfiles, rgbProfiles, calibration,
+                        readErrors)
+        desired_device_config: schema.DeviceConfig instance from the
+                        loaded config file
 
     Returns:
         DiffResult describing only the fields that differ.
@@ -99,7 +102,8 @@ def compute_diff(current_state: Dict[str, Any],
 
     # RGB profiles: index current by profileId
     current_rgb: Dict[int, Dict[str, Any]] = {
-        rgb.get('profileId'): rgb for rgb in (current_state.get('rgbProfiles') or [])
+        rgb.get('profileId'): rgb
+        for rgb in (current_state.get('rgbProfiles') or [])
     }
     for rgb in (desired_device_config.rgbProfiles or []):
         rgb_dict = rgb.model_dump()

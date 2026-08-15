@@ -8,7 +8,9 @@ import json
 import logging
 from typing import Optional, Dict, Any, List
 
-from .config_client import create_config_client, ConfigClient, query_named_pipe, DISCOVERY_PIPE_NAME
+from .config_client import (
+    create_config_client, ConfigClient, query_named_pipe,
+    DISCOVERY_PIPE_NAME)
 from .schema import validate_config_file
 from .diff import compute_diff, format_diff, DiffResult
 
@@ -97,7 +99,8 @@ class ConfigManager:
             return []
 
     def select_device(
-            self, selector: Dict[str, Any], devices: List[Dict[str, Any]]) -> Optional[str]:
+            self, selector: Dict[str, Any],
+            devices: List[Dict[str, Any]]) -> Optional[str]:
         """Select device based on selector criteria.
 
         Args:
@@ -136,9 +139,11 @@ class ConfigManager:
                 # Named pipe matching
                 if sel_type == 'guid' and device.get('guid') == sel_value:
                     return device.get('pipe')
-                elif sel_type == 'productId' and device.get('productId') == sel_value:
+                elif (sel_type == 'productId'
+                        and device.get('productId') == sel_value):
                     return device.get('pipe')
-                elif sel_type == 'pipeName' and device.get('pipe') == sel_value:
+                elif (sel_type == 'pipeName'
+                        and device.get('pipe') == sel_value):
                     return device.get('pipe')
 
         return None
@@ -171,7 +176,8 @@ class ConfigManager:
                     fan_config = client.read_fan_config(profile_id, fan_id)
                 except Exception as e:
                     logger.warning(
-                        f"Could not read fan config {profile_id}/{fan_id}: {e}")
+                        f"Could not read fan config "
+                        f"{profile_id}/{fan_id}: {e}")
                     read_errors.append(
                         f"fan profile {profile_id} fan {fan_id}: {e}")
                     continue
@@ -266,7 +272,8 @@ class ConfigManager:
             # Build config structure
             config = {
                 'version': '1.0',
-                'description': f'Exported from {state["deviceName"] or identifier}',
+                'description':
+                    f'Exported from {state["deviceName"] or identifier}',
                 'devices': [{
                     'selector': selector,
                     'deviceName': state['deviceName'],
@@ -308,8 +315,9 @@ class ConfigManager:
             config_file: Input JSON file path
             dry_run: If True, show the diff for each device but don't apply
                      or prompt for confirmation.
-            save_to_flash: If True, override saveToFlash in config and save to flash.
-                          If False, override and don't save. If None, use config file setting.
+            save_to_flash: If True, override saveToFlash in config and save
+                          to flash. If False, override and don't save.
+                          If None, use config file setting.
             auto_confirm: If True, skip the confirmation prompt and apply
                           immediately after showing the diff (for automation).
             confirm_callback: Called with the rendered diff text; return True
@@ -396,7 +404,8 @@ class ConfigManager:
                 return True
 
             logger.info(
-                f"{success_count}/{len(config.devices)} devices configured successfully")
+                f"{success_count}/{len(config.devices)} devices "
+                f"configured successfully")
             return success_count == len(config.devices)
 
         except Exception as e:
@@ -413,7 +422,8 @@ class ConfigManager:
         Args:
             identifier: Device identifier
             device_config: DeviceConfig object
-            save_to_flash: Override saveToFlash setting (None = use config file setting)
+            save_to_flash: Override saveToFlash setting
+                (None = use config file setting)
 
         Returns:
             True if successful
@@ -465,7 +475,9 @@ class ConfigManager:
                     success = False
 
             # Determine whether to save to flash (override takes precedence)
-            should_save = save_to_flash if save_to_flash is not None else device_config.saveToFlash
+            should_save = (
+                save_to_flash if save_to_flash is not None
+                else device_config.saveToFlash)
 
             if should_save:
                 if not client.save_config():

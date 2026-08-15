@@ -58,7 +58,8 @@ def cmd_import(args):
     manager = ConfigManager(source=args.source)
 
     if args.dry_run:
-        print("DRY RUN MODE - showing what would change, no changes will be applied")
+        print("DRY RUN MODE - showing what would change, "
+              "no changes will be applied")
 
     if manager.import_config(
             args.config_file,
@@ -125,7 +126,8 @@ def interactive_mode(args):
             print(f"  {i}. {device.get('port')} - {device.get('uid', 'N/A')}")
         else:
             print(
-                f"  {i}. {device.get('deviceName', 'N/A')} - {device.get('guid', 'N/A')}")
+                f"  {i}. {device.get('deviceName', 'N/A')} - "
+                f"{device.get('guid', 'N/A')}")
     print()
 
     # Ask for operation type
@@ -156,7 +158,8 @@ def interactive_mode(args):
         # diff/confirm below is the only remaining approval step.
         print()
         print("Save configuration to device flash memory?")
-        print("(If 'no', changes will only be applied to RAM and lost on device reset)")
+        print("(If 'no', changes will only be applied to RAM "
+              "and lost on device reset)")
         save_flash = input("Save to flash? (yes/no): ").strip().lower()
 
         # Read + diff + confirm happens per device inside import_config,
@@ -194,10 +197,12 @@ def interactive_mode(args):
             for i, device in enumerate(devices, 1):
                 if args.source == 'direct':
                     print(
-                        f"  {i}. {device.get('port')} - {device.get('uid', 'N/A')}")
+                        f"  {i}. {device.get('port')} - "
+                        f"{device.get('uid', 'N/A')}")
                 else:
                     print(
-                        f"  {i}. {device.get('deviceName', 'N/A')} - {device.get('guid', 'N/A')}")
+                        f"  {i}. {device.get('deviceName', 'N/A')} - "
+                        f"{device.get('guid', 'N/A')}")
             print()
             device_choice = input(f"Device [1-{len(devices)}]: ").strip()
             try:
@@ -270,7 +275,8 @@ Examples:
   python -m benchlab -config --export config.json
   python -m benchlab -config --export config.json --device COM4
 
-  # Import configuration (shows a diff of what would change, then asks to confirm)
+  # Import configuration (shows a diff of what would change,
+  # then asks to confirm)
   python -m benchlab -config --import config.json
 
   # Preview changes without applying anything
@@ -303,12 +309,15 @@ Examples:
         parser.add_argument(
             '--dry-run',
             action='store_true',
-            help='Show what would change without applying anything (connects to the device and reads its current config)')
+            help='Show what would change without applying anything '
+                 '(connects to the device and reads its current '
+                 'config)')
         parser.add_argument(
             '-y',
             '--yes',
             action='store_true',
-            help='Apply changes without the confirmation prompt (the diff is still shown)')
+            help='Apply changes without the confirmation prompt '
+                 '(the diff is still shown)')
 
         args = parser.parse_args()
     else:

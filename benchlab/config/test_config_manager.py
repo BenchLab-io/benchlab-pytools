@@ -68,7 +68,9 @@ def test_export_config_closes_client_on_exception():
     fake_client.get_device_info.side_effect = RuntimeError(
         "simulated read failure")
 
-    with patch("benchlab.config.config_manager.create_config_client", return_value=fake_client):
+    with patch(
+            "benchlab.config.config_manager.create_config_client",
+            return_value=fake_client):
         result = mgr.export_config("COM4", "unused_output.json")
 
     assert result is False
@@ -87,7 +89,9 @@ def test_apply_device_config_closes_client_on_exception():
         selector=DeviceSelector(
             type="any"), deviceName="Test")
 
-    with patch("benchlab.config.config_manager.create_config_client", return_value=fake_client):
+    with patch(
+            "benchlab.config.config_manager.create_config_client",
+            return_value=fake_client):
         result = mgr._apply_device_config("COM4", device_config)
 
     assert result is False
