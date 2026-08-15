@@ -79,7 +79,7 @@ class BenchlabGraph:
             return
 
         now = int(time.monotonic() * 1000)
-        if now - getattr(self, "last_touch_time", 0) < 0.1:
+        if now - getattr(self, "last_touch_time", 0) < 150:
             return
 
         if touch is None or getattr(touch, "Type", 0) == 0:

@@ -31,11 +31,13 @@ class WigidashManager:
         self.shutdown_event = threading.Event()
         self.shutdown_barrier = None
         self.datasource = datasource  # Already-connected DataSourceManager
+        self._telemetry_lock = threading.Lock()
 
     # ----------------- BENCHLAB DEVICE MANAGEMENT ----------------- #
     def get_available_benchlabs(self, log_info=True):
         """Query the datasource for available Benchlab devices."""
         devices = []
+        query_succeeded = False
         try:
             raw = self.datasource.list_devices()
             if isinstance(raw, dict):
@@ -44,6 +46,7 @@ class WigidashManager:
                            for uid, info in raw.items()]
             else:
                 devices = list(raw)
+            query_succeeded = True
         except Exception as e:
             logger.warning(f"list_devices failed: {e}")
 
@@ -56,6 +59,14 @@ class WigidashManager:
             else:
                 self.benchlab_devices[port]["uid"] = uid
                 self.benchlab_devices[port]["firmware"] = fw
+
+        # Prune ports no longer reported by the data source, so a disconnected
+        # device doesn't linger forever with stale UID/firmware/in_use state.
+        if query_succeeded:
+            current_ports = {d["port"] for d in devices}
+            for stale_port in set(self.benchlab_devices) - current_ports:
+                del self.benchlab_devices[stale_port]
+                self.telemetry_contexts.pop(stale_port, None)
 
         all_devices = [
             {"port": port, "uid": info["uid"], "in_use": info["in_use"]}
@@ -83,75 +94,76 @@ class WigidashManager:
             logger.warning(f"Cannot start telemetry: unknown port {port}")
             return
 
-        # ------------------------------------------------
-        # CASE 1: Telemetry already running for this port
-        # ------------------------------------------------
-        if port in self.telemetry_contexts:
-            ctx = self.telemetry_contexts[port]
+        with self._telemetry_lock:
+            # ------------------------------------------------
+            # CASE 1: Telemetry already running for this port
+            # ------------------------------------------------
+            if port in self.telemetry_contexts:
+                ctx = self.telemetry_contexts[port]
 
-            logger.info(
-                f"Selected device {port} is already in use. Using existing telemetry."
+                logger.info(
+                    f"Selected device {port} is already in use. Using existing telemetry."
+                )
+
+                session.ser = ctx.ser
+                session.device_info = ctx.device_info
+                session.uid = ctx.uid
+                session.telemetry_history = ctx.history
+                session.history = ctx.history
+                session.selected_port = port
+                session.telemetry_context = ctx
+
+                ctx.sessions.append(session)
+                return
+
+            # ------------------------------------------------
+            # CASE 2: First session → start telemetry
+            # ------------------------------------------------
+            self.benchlab_devices[port]["in_use"] = True
+            uid = self.benchlab_devices[port]["uid"]
+            history = self.telemetry_histories.setdefault(uid, TelemetryHistory())
+
+            # Get device info from datasource
+            device_info = {}
+            try:
+                self.datasource.select_device(uid)
+                snap = self.datasource.snapshot()
+                device_info = snap.get("device_info") or snap.get("all_devices", {}).get(uid, {})
+            except Exception as e:
+                logger.warning(f"Could not get device info for {uid}: {e}")
+
+            ctx = TelemetryContext(
+                port=port,
+                ser=None,
+                device_info=device_info,
+                uid=uid,
+                history=history,
             )
+            ctx.sessions = [session]
+            self.telemetry_contexts[port] = ctx
 
-            session.ser = ctx.ser
-            session.device_info = ctx.device_info
-            session.uid = ctx.uid
-            session.telemetry_history = ctx.history
-            session.history = ctx.history
+            session.ser = None
+            session.device_info = device_info
+            session.uid = uid
+            session.telemetry_history = history
+            session.history = history
             session.selected_port = port
-            session.telemetry_context = ctx
 
-            ctx.sessions.append(session)
-            return
+            def telemetry_loop():
+                while not self.shutdown_event.is_set():
+                    try:
+                        self.datasource.select_device(uid)
+                        snap = self.datasource.snapshot()
+                        data = (snap.get("sensor_data")
+                                or snap.get("all_telemetry", {}).get(uid)
+                                or {})
+                        if data:
+                            telemetry_step(ctx, device_info=device_info, sensor_struct=data)
+                    except Exception as e:
+                        logger.warning(f"Telemetry error on {port}: {e}")
+                    time.sleep(0.1)
 
-        # ------------------------------------------------
-        # CASE 2: First session → start telemetry
-        # ------------------------------------------------
-        self.benchlab_devices[port]["in_use"] = True
-        uid = self.benchlab_devices[port]["uid"]
-        history = self.telemetry_histories.setdefault(uid, TelemetryHistory())
-
-        # Get device info from datasource
-        device_info = {}
-        try:
-            self.datasource.select_device(uid)
-            snap = self.datasource.snapshot()
-            device_info = snap.get("device_info") or snap.get("all_devices", {}).get(uid, {})
-        except Exception as e:
-            logger.warning(f"Could not get device info for {uid}: {e}")
-
-        ctx = TelemetryContext(
-            port=port,
-            ser=None,
-            device_info=device_info,
-            uid=uid,
-            history=history,
-        )
-        ctx.sessions = [session]
-        self.telemetry_contexts[port] = ctx
-
-        session.ser = None
-        session.device_info = device_info
-        session.uid = uid
-        session.telemetry_history = history
-        session.history = history
-        session.selected_port = port
-
-        def telemetry_loop():
-            while not self.shutdown_event.is_set():
-                try:
-                    self.datasource.select_device(uid)
-                    snap = self.datasource.snapshot()
-                    data = (snap.get("sensor_data")
-                            or snap.get("all_telemetry", {}).get(uid)
-                            or {})
-                    if data:
-                        telemetry_step(ctx, device_info=device_info, sensor_struct=data)
-                except Exception as e:
-                    logger.warning(f"Telemetry error on {port}: {e}")
-                time.sleep(0.1)
-
-        threading.Thread(target=telemetry_loop, daemon=True).start()
+            threading.Thread(target=telemetry_loop, daemon=True).start()
 
 
     # ----------------- SESSION MANAGEMENT ----------------- #

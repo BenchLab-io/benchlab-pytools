@@ -144,6 +144,10 @@ class BenchlabWigiSession:
             return True
         except Exception as e:
             logger.error(f"Failed to initialize Wigidash {self.usb_device.serial}: {e}")
+            try:
+                self.usb_device.disconnect()
+            except Exception:
+                pass
             return False
 
 
@@ -286,6 +290,11 @@ class BenchlabWigiSession:
                 self.wigidash.clear_page(0)
             except Exception:
                 pass
+        if self.usb_device:
+            try:
+                self.usb_device.disconnect()
+            except Exception as e:
+                logger.warning(f"Error disconnecting USB device: {e}")
         logger.info(f"Wigidash session {self.usb_device.serial} cleaned up.")
 
 
