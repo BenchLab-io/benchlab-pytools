@@ -18,7 +18,8 @@ logger = logging.getLogger("benchlab.core.infrastructure")
 
 
 class InfrastructureManager:
-    """Manages infrastructure services (FastAPI, MQTT) for multi-tool scenarios.
+    """Manages infrastructure services (FastAPI, MQTT) for multi-tool
+    scenarios.
 
     This class is responsible for:
     - Starting FastAPI server as a subprocess when needed
@@ -74,8 +75,8 @@ class InfrastructureManager:
             # externally)
             if self._is_port_in_use(self.fastapi_host, self.fastapi_port):
                 logger.info(
-                    f"Port {
-                        self.fastapi_port} already in use, assuming FastAPI is running")
+                    f"Port {self.fastapi_port} already in use, "
+                    f"assuming FastAPI is running")
                 return True
 
             logger.info(

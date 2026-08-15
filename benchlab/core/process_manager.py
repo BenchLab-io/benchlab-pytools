@@ -230,7 +230,8 @@ class ProcessManager:
     # -- internals -----------------------------------------------------------
 
     def _wait_for_health(self, mp: ManagedProcess, timeout: float) -> bool:
-        """Block until health_check passes or timeout.  Also fails if the process dies early."""
+        """Block until health_check passes or timeout.  Also fails if the
+        process dies early."""
         deadline = time.time() + timeout
         while time.time() < deadline:
             # Check if process crashed
@@ -249,7 +250,8 @@ class ProcessManager:
                         "logs",
                         f"svc_{
                             mp.name}")
-                    with open(f"{log_base}_stderr.log", "r", encoding="utf-8") as f:
+                    with open(f"{log_base}_stderr.log", "r",
+                              encoding="utf-8") as f:
                         mp.stderr_log = f.read()
                 except OSError:
                     pass

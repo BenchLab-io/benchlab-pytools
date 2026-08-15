@@ -147,7 +147,8 @@ class ChannelStats:
                 return False
             if channel is None:
                 return bool(self._data[device])
-            return channel in self._data[device] and self._data[device][channel]['count'] > 0
+            return (channel in self._data[device]
+                    and self._data[device][channel]['count'] > 0)
 
 
 class StatsFormatter:

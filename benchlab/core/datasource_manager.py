@@ -46,9 +46,11 @@ class DataSourceManager:
                          'direct'       — direct serial via pycore
                          'fastapi'      — Python benchlab FastAPI server
                          'mqtt'         — MQTT broker
-                         'named_pipe'   — C# BenchLab service named pipes (Windows)
+                         'named_pipe'   — C# BenchLab service named pipes
+                                          (Windows)
                          'service_http' — C# BenchLab service HTTP API
-            stats_callback: Optional callback(device_uid, channel, value) for statistics
+            stats_callback: Optional callback(device_uid, channel, value)
+                for statistics
             **datasource_kwargs: Arguments passed to datasource constructor
         """
         self.source_type = source_type
@@ -287,7 +289,8 @@ class DataSourceManager:
             if port:
                 kwargs['port'] = port
             if 'poll_interval' in self.datasource_kwargs:
-                kwargs['poll_interval'] = self.datasource_kwargs['poll_interval']
+                kwargs['poll_interval'] = (
+                    self.datasource_kwargs['poll_interval'])
             return kwargs
 
         elif self.source_type == 'fastapi':
@@ -381,10 +384,11 @@ class DataSourceManager:
                             if self.stats_callback:
                                 prev_data = self._prev_telemetry.get(uid, {})
                                 for key, value in telemetry.items():
-                                    if isinstance(
-                                            value, (int, float)) and key != 'timestamp':
-                                        if key not in prev_data or value != prev_data.get(
-                                                key):
+                                    if (isinstance(value, (int, float))
+                                            and key != 'timestamp'):
+                                        if (key not in prev_data
+                                                or value
+                                                != prev_data.get(key)):
                                             self.stats_callback(
                                                 uid, key, value)
                                 self._prev_telemetry[uid] = {**prev_data, **{

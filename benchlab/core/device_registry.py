@@ -9,7 +9,8 @@ Usage:
     reg = DeviceRegistry.get_instance()
 
     # Register a device (called by whichever owns the serial bus)
-    reg.register(uid="2C003D001457435735363620", port="COM4", firmware="0x01234567")
+    reg.register(uid="2C003D001457435735363620", port="COM4",
+                 firmware="0x01234567")
 
     # Subscribe to lifecycle events
     def on_connect(info):

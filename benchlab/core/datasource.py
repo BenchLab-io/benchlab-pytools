@@ -61,7 +61,8 @@ class DataSource(ABC):
         """Get list of available devices.
 
         Returns:
-            List of device info dictionaries with at least 'uid' and 'port' keys
+            List of device info dictionaries with at least 'uid' and
+            'port' keys
         """
         pass
 
@@ -92,7 +93,8 @@ class DataSource(ABC):
     @property
     @abstractmethod
     def source_type(self) -> str:
-        """Return the type of data source (e.g., 'direct', 'fastapi', 'mqtt')."""
+        """Return the type of data source (e.g., 'direct', 'fastapi',
+        'mqtt')."""
         pass
 
 
@@ -142,7 +144,8 @@ class DirectDataSource(DataSource):
             try:
                 from benchlab_pycore.core import BENCHLAB_BL2_PRODUCT_ID
             except ImportError:
-                from benchlab_pycore.core import BENCHLAB_CFE_PRODUCT_ID as BENCHLAB_BL2_PRODUCT_ID
+                from benchlab_pycore.core import (
+                    BENCHLAB_CFE_PRODUCT_ID as BENCHLAB_BL2_PRODUCT_ID)
             # benchlab_pycore.core.serial_io has no connection-opening helper;
             # use the local wrapper instead (see benchlab.core.shared_serial).
             from benchlab.core.shared_serial import open_serial_connection
@@ -188,8 +191,13 @@ class DirectDataSource(DataSource):
                 info = self._pycore['read_device'](ser) or {}
                 if uid:
                     product_id = info.get(
-                        'ProductId', self._pycore['BENCHLAB_ORIGINAL_PRODUCT_ID'])
-                    variant = "BL2" if product_id == self._pycore['BENCHLAB_BL2_PRODUCT_ID'] else "ORIGINAL"
+                        'ProductId',
+                        self._pycore['BENCHLAB_ORIGINAL_PRODUCT_ID'])
+                    variant = (
+                        "BL2"
+                        if product_id
+                        == self._pycore['BENCHLAB_BL2_PRODUCT_ID']
+                        else "ORIGINAL")
                     self._device_info[uid] = {
                         **info, 'uid': uid, 'port': port, 'variant': variant}
                     self._ser_handles[uid] = ser
@@ -261,9 +269,15 @@ class DirectDataSource(DataSource):
                         ser.close()
                         if uid:
                             product_id = info.get(
-                                'ProductId', self._pycore['BENCHLAB_ORIGINAL_PRODUCT_ID'])
-                            variant = "BL2" if product_id == self._pycore[
-                                'BENCHLAB_BL2_PRODUCT_ID'] else "ORIGINAL"
+                                'ProductId',
+                                self._pycore[
+                                    'BENCHLAB_ORIGINAL_PRODUCT_ID'])
+                            variant = (
+                                "BL2"
+                                if product_id
+                                == self._pycore[
+                                    'BENCHLAB_BL2_PRODUCT_ID']
+                                else "ORIGINAL")
                             devices.append({
                                 'uid': uid,
                                 'port': port,
@@ -293,7 +307,8 @@ class DirectDataSource(DataSource):
                     # interpretation
                     device_info = self._device_info.get(uid, {})
                     product_id = device_info.get(
-                        'ProductId', self._pycore['BENCHLAB_ORIGINAL_PRODUCT_ID'])
+                        'ProductId',
+                        self._pycore['BENCHLAB_ORIGINAL_PRODUCT_ID'])
                     sensors = self._pycore['read_sensors'](
                         ser, product_id=product_id)
                     if sensors:
@@ -506,8 +521,9 @@ class MQTTDataSource(DataSource):
         # Falls back to MQTT_PROTOCOL env var (same variable the publisher
         # side reads) so both producer and consumer resolve consistently,
         # then to MQTTv311 if neither is set.
-        self._protocol_setting = protocol if protocol is not None else os.getenv(
-            "MQTT_PROTOCOL", "MQTTv311")
+        self._protocol_setting = (
+            protocol if protocol is not None
+            else os.getenv("MQTT_PROTOCOL", "MQTTv311"))
         self._connected = False
         self._client = None
         self._lock = threading.Lock()
@@ -655,17 +671,28 @@ def _normalise_cs_telemetry(sensors_raw: list) -> Dict[str, Any]:
         "MB_P": "MB_Power",
 
         # Rail power  (EPS, ATX, PCIE, HPWR)
-        "EPS1_P": "EPS1_Power", "EPS1_V": "EPS1_Voltage", "EPS1_I": "EPS1_Current",
-        "EPS2_P": "EPS2_Power", "EPS2_V": "EPS2_Voltage", "EPS2_I": "EPS2_Current",
-        "ATX3V_P": "ATX3V_Power", "ATX3V_V": "ATX3V_Voltage", "ATX3V_I": "ATX3V_Current",
-        "ATX5V_P": "ATX5V_Power", "ATX5V_V": "ATX5V_Voltage", "ATX5V_I": "ATX5V_Current",
-        "ATX5VSB_P": "ATX5VSB_Power", "ATX5VSB_V": "ATX5VSB_Voltage", "ATX5VSB_I": "ATX5VSB_Current",
-        "ATX12V_P": "ATX12V_Power", "ATX12V_V": "ATX12V_Voltage", "ATX12V_I": "ATX12V_Current",
-        "PCIE1_P": "PCIE1_Power", "PCIE1_V": "PCIE1_Voltage", "PCIE1_I": "PCIE1_Current",
-        "PCIE2_P": "PCIE2_Power", "PCIE2_V": "PCIE2_Voltage", "PCIE2_I": "PCIE2_Current",
-        "PCIE3_P": "PCIE3_Power", "PCIE3_V": "PCIE3_Voltage", "PCIE3_I": "PCIE3_Current",
-        "HPWR1_P": "HPWR1_Power", "HPWR1_V": "HPWR1_Voltage", "HPWR1_I": "HPWR1_Current",
-        "HPWR2_P": "HPWR2_Power", "HPWR2_V": "HPWR2_Voltage", "HPWR2_I": "HPWR2_Current",
+        "EPS1_P": "EPS1_Power", "EPS1_V": "EPS1_Voltage",
+        "EPS1_I": "EPS1_Current",
+        "EPS2_P": "EPS2_Power", "EPS2_V": "EPS2_Voltage",
+        "EPS2_I": "EPS2_Current",
+        "ATX3V_P": "ATX3V_Power", "ATX3V_V": "ATX3V_Voltage",
+        "ATX3V_I": "ATX3V_Current",
+        "ATX5V_P": "ATX5V_Power", "ATX5V_V": "ATX5V_Voltage",
+        "ATX5V_I": "ATX5V_Current",
+        "ATX5VSB_P": "ATX5VSB_Power", "ATX5VSB_V": "ATX5VSB_Voltage",
+        "ATX5VSB_I": "ATX5VSB_Current",
+        "ATX12V_P": "ATX12V_Power", "ATX12V_V": "ATX12V_Voltage",
+        "ATX12V_I": "ATX12V_Current",
+        "PCIE1_P": "PCIE1_Power", "PCIE1_V": "PCIE1_Voltage",
+        "PCIE1_I": "PCIE1_Current",
+        "PCIE2_P": "PCIE2_Power", "PCIE2_V": "PCIE2_Voltage",
+        "PCIE2_I": "PCIE2_Current",
+        "PCIE3_P": "PCIE3_Power", "PCIE3_V": "PCIE3_Voltage",
+        "PCIE3_I": "PCIE3_Current",
+        "HPWR1_P": "HPWR1_Power", "HPWR1_V": "HPWR1_Voltage",
+        "HPWR1_I": "HPWR1_Current",
+        "HPWR2_P": "HPWR2_Power", "HPWR2_V": "HPWR2_Voltage",
+        "HPWR2_I": "HPWR2_Current",
 
         # Board voltages
         "VDD": "Vdd",
@@ -707,7 +734,8 @@ def _normalise_cs_telemetry(sensors_raw: list) -> Dict[str, Any]:
 
 
 class NamedPipeDataSource(DataSource):
-    """Data source that connects to the C# BenchLab Windows service via named pipes.
+    """Data source that connects to the C# BenchLab Windows service via
+    named pipes.
 
     Uses the BenchlabDiscovery pipe to enumerate devices, then connects to
     each device's individual BenchlabSensorPipe_XX_YYY pipe for telemetry.
@@ -785,7 +813,8 @@ class NamedPipeDataSource(DataSource):
             target=self._worker_loop, daemon=True)
         self._worker_thread.start()
         logger.info(
-            f"Connected to BenchLab named pipe service with {len(self._devices)} device(s)")
+            f"Connected to BenchLab named pipe service with "
+            f"{len(self._devices)} device(s)")
         return True
 
     def disconnect(self) -> None:
@@ -867,7 +896,8 @@ class NamedPipeDataSource(DataSource):
         win32file.WriteFile(handle, (text + "\n").encode("utf-8"))
 
     def _query_discovery_pipe(self, command: str) -> Any:
-        """Send a command to the discovery pipe and return parsed JSON response."""
+        """Send a command to the discovery pipe and return parsed JSON
+        response."""
         import win32file  # type: ignore
 
         handle = self._open_pipe(self.DISCOVERY_PIPE)
@@ -879,7 +909,8 @@ class NamedPipeDataSource(DataSource):
             win32file.CloseHandle(handle)
 
     def _query_sensor_pipe(self, pipe_name: str, command: str) -> Any:
-        """Send a command to a device sensor pipe and return parsed JSON response."""
+        """Send a command to a device sensor pipe and return parsed JSON
+        response."""
         import win32file  # type: ignore
 
         handle = self._open_pipe(pipe_name)
@@ -952,7 +983,8 @@ class ServiceHttpDataSource(DataSource):
             base_url: Base URL of the C# BenchLab service. Defaults to
                       http://localhost:8585.
             timeout: HTTP request timeout in seconds.
-            poll_interval: Seconds between telemetry polls in background worker.
+            poll_interval: Seconds between telemetry polls in background
+                      worker.
         """
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
@@ -1147,10 +1179,12 @@ def create_datasource(
     Args:
         source_type: Type of data source:
                      'direct'        - direct serial via pycore
-                     'fastapi'       - Python benchlab FastAPI server (localhost)
+                     'fastapi'       - Python benchlab FastAPI server
+                                       (localhost)
                      'fastapi_custom'- FastAPI server at custom URL
                      'mqtt'          - MQTT broker
-                     'named_pipe'    - C# BenchLab service named pipes (Windows only)
+                     'named_pipe'    - C# BenchLab service named pipes
+                                       (Windows only)
                      'service_http'  - C# BenchLab service HTTP API
         **kwargs: Arguments passed to the data source constructor
 

@@ -44,7 +44,8 @@ try:
     try:
         from benchlab_pycore.core import BENCHLAB_BL2_PRODUCT_ID
     except ImportError:
-        from benchlab_pycore.core import BENCHLAB_CFE_PRODUCT_ID as BENCHLAB_BL2_PRODUCT_ID
+        from benchlab_pycore.core import (
+            BENCHLAB_CFE_PRODUCT_ID as BENCHLAB_BL2_PRODUCT_ID)
 except ImportError:
     logger.warning(
         "benchlab_pycore not installed; using fallback product ID constants")

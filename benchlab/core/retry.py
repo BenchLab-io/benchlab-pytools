@@ -68,13 +68,15 @@ def retry(
                 except policy.allowed_exceptions as exc:
                     if attempt >= policy.max_retries:
                         logger.error(
-                            f"{func.__name__} failed after {attempt + 1} attempts: {exc}"
+                            f"{func.__name__} failed after "
+                            f"{attempt + 1} attempts: {exc}"
                         )
                         raise
                     delay = policy.base_delay * \
                         (policy.backoff_factor ** attempt)
                     logger.warning(
-                        f"{func.__name__} attempt {attempt + 1} failed ({exc}); retrying in {delay:.2f}s"
+                        f"{func.__name__} attempt {attempt + 1} failed "
+                        f"({exc}); retrying in {delay:.2f}s"
                     )
                     time.sleep(delay)
                     attempt += 1

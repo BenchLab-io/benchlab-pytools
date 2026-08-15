@@ -26,7 +26,8 @@ from benchlab.core.shared_serial import open_serial_connection
 try:
     from benchlab_pycore.core import BENCHLAB_BL2_PRODUCT_ID
 except ImportError:
-    from benchlab_pycore.core import BENCHLAB_CFE_PRODUCT_ID as BENCHLAB_BL2_PRODUCT_ID
+    from benchlab_pycore.core import (
+        BENCHLAB_CFE_PRODUCT_ID as BENCHLAB_BL2_PRODUCT_ID)
 from benchlab_pycore.core import BENCHLAB_ORIGINAL_PRODUCT_ID
 
 # Re‑use the retry decorator defined in ``benchlab.core.retry``
@@ -40,10 +41,11 @@ logger = logging.getLogger("benchlab.core.discovery")
 def discover_devices() -> List[Dict[str, Any]]:
     """Return a list of connected BenchLab devices.
 
-    Each entry is a mapping with the keys ``uid``, ``port`` and ``fw`` (firmware).
+    Each entry is a mapping with the keys ``uid``, ``port`` and ``fw``
+    (firmware).
     The function:
-    1. Calls :func:`benchlab_pycore.core.get_benchlab_ports` to obtain candidate
-       ports that match the known hardware ID.
+    1. Calls :func:`benchlab_pycore.core.get_benchlab_ports` to obtain
+       candidate ports that match the known hardware ID.
     2. Opens each port, reads the UID and firmware version, then closes the
        connection.
     3. Logs discovery details at INFO level and any failures at DEBUG level.
@@ -68,11 +70,14 @@ def discover_devices() -> List[Dict[str, Any]]:
                 fw = info.get("FwVersion", "?")
                 product_id = info.get(
                     "ProductId", BENCHLAB_ORIGINAL_PRODUCT_ID)
-                variant = "BL2" if product_id == BENCHLAB_BL2_PRODUCT_ID else "ORIGINAL"
+                variant = (
+                    "BL2" if product_id == BENCHLAB_BL2_PRODUCT_ID
+                    else "ORIGINAL")
                 devices.append({"uid": uid, "port": port,
                                "fw": fw, "variant": variant})
                 logger.info(
-                    "Discovered BenchLab device UID=%s on %s (FW=%s, Variant=%s)",
+                    "Discovered BenchLab device UID=%s on %s "
+                    "(FW=%s, Variant=%s)",
                     uid,
                     port,
                     fw,
