@@ -8,6 +8,8 @@ dial is required:
 - vu_server.config only being written once the new server is confirmed up
 - terminate_vu_server falling back to proc.kill() when graceful shutdown
   times out
+- check_vu_server sending the API key as the query parameter the vendored
+  server actually reads, not an HTTP header it ignores
 """
 
 import subprocess
@@ -113,3 +115,45 @@ def test_terminate_vu_server_noop_when_already_exited():
 
 def test_terminate_vu_server_noop_on_none():
     vsm.terminate_vu_server(None)  # must not raise
+
+
+# ----------------------------------------------------------------------
+# check_vu_server auth mechanism
+# ----------------------------------------------------------------------
+
+def test_check_vu_server_sends_key_as_query_param_not_header(monkeypatch):
+    """Regression test for issue #30: the vendored server reads the API
+    key via self.get_argument('key', None) -- a query parameter -- not an
+    X-Master-Key header. Sending it as a header meant the key was never
+    actually validated by the server."""
+    captured = {}
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        captured["params"] = params
+        captured["headers"] = headers
+        resp = MagicMock()
+        resp.status_code = 200
+        return resp
+
+    monkeypatch.setattr(vsm.requests, "get", fake_get)
+
+    vsm.check_vu_server("http://localhost:5340", "mykey")
+
+    assert captured["params"] == {"key": "mykey"}
+    assert not captured["headers"]
+
+
+def test_check_vu_server_no_params_when_key_empty(monkeypatch):
+    captured = {}
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        captured["params"] = params
+        resp = MagicMock()
+        resp.status_code = 200
+        return resp
+
+    monkeypatch.setattr(vsm.requests, "get", fake_get)
+
+    vsm.check_vu_server("http://localhost:5340")
+
+    assert captured["params"] == {}

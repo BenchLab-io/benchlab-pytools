@@ -6,7 +6,6 @@ import yaml
 import json
 import signal
 import logging
-import shutil
 from pathlib import Path
 import sys
 import platform
@@ -18,7 +17,6 @@ import os
 IS_WINDOWS = platform.system() == "Windows"
 PYTHON_CMD = sys.executable
 CREATIONFLAGS = subprocess.CREATE_NEW_PROCESS_GROUP if IS_WINDOWS else 0
-PREEXEC_FN = None if IS_WINDOWS else lambda: signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 # -----------------------------------------------------------------------------
 # Paths
@@ -27,7 +25,6 @@ BASE_DIR = Path(__file__).parent
 VU_SERVER_DIR = BASE_DIR / "VU-Server"
 VU_SERVER_CONFIG = BASE_DIR / "vu_server.config"
 SERVER_YAML_CONFIG = VU_SERVER_DIR / "config.yaml"
-STANDARD_LOGO = BASE_DIR / "assets" / "bl_logo_144x200.png"
 
 # -----------------------------------------------------------------------------
 # Logging
@@ -38,10 +35,19 @@ logger = logging.getLogger("vu_server_manager")
 # Helpers
 # -----------------------------------------------------------------------------
 def check_vu_server(server_url: str, api_key: str = "") -> bool:
-    """Return True if the VU server responds successfully."""
+    """Return True if the VU server responds successfully.
+
+    The server reads the API key as a `key` query parameter (see
+    server.py's BaseHandler.is_valid_api_key), not an HTTP header — match
+    that here so a correct api_key is actually validated by the server
+    instead of always being rejected and falling through to the 403
+    "still running" case below.
+    """
     try:
-        headers = {"X-Master-Key": api_key} if api_key else {}
-        r = requests.get(f"{server_url}/api/v0/dial/list", headers=headers, timeout=1)
+        params = {"key": api_key} if api_key else {}
+        r = requests.get(f"{server_url}/api/v0/dial/list", params=params, timeout=1)
+        # 403 (missing/invalid key) still means a real VU server answered —
+        # that's enough to know we shouldn't auto-start a second one.
         return r.status_code in (200, 403)
     except requests.RequestException:
         return False
