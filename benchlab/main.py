@@ -3,10 +3,12 @@
 This module implements the command-line entry point for the Benchlab
 telemetry suite. The workflow is split into three steps:
 
-1. **Select a data source** – FastAPI, MQTT, direct serial, named pipe, or service HTTP.
-2. **Choose consumer tools** – one or many tools that will read from the selected source.
-3. **Launch** – start the source (if needed) and then launch the selected tools,
-   handling cleanup on exit.
+1. **Select a data source** – FastAPI, MQTT, direct serial, named pipe,
+   or service HTTP.
+2. **Choose consumer tools** – one or many tools that will read from the
+   selected source.
+3. **Launch** – start the source (if needed) and then launch the
+   selected tools, handling cleanup on exit.
 """
 
 import argparse
@@ -16,7 +18,8 @@ import os
 import sys
 import traceback
 
-from .tools import CONSUMER_TOOLS, LAUNCH_PROFILES  # noqa: F401 - CONSUMER_TOOLS re-exported for benchlab.main.CONSUMER_TOOLS consumers
+from .tools import CONSUMER_TOOLS, LAUNCH_PROFILES  # noqa: F401
+# CONSUMER_TOOLS re-exported for benchlab.main.CONSUMER_TOOLS consumers
 from .sources import check_and_setup_source, cleanup_all_services
 from .launcher import launch_tools_concurrent
 
@@ -85,12 +88,16 @@ def get_parser() -> argparse.ArgumentParser:
         "--topic-pattern",
         default=None,
         dest="topic_pattern",
-        help="MQTT topic pattern with {uid} token (overrides LINK_TOPIC_PATTERN)")
+        help=(
+            "MQTT topic pattern with {uid} token "
+            "(overrides LINK_TOPIC_PATTERN)"))
     parser.add_argument("-tui", action="store_true",
                         help="Enable TUI (default)")
     parser.add_argument(
         "--source",
-        help="Data source: direct | fastapi | fastapi_custom | mqtt | mqtt_custom | named_pipe | service_http",
+        help=(
+            "Data source: direct | fastapi | fastapi_custom | mqtt | "
+            "mqtt_custom | named_pipe | service_http"),
         choices=[
             "direct",
             "fastapi",
@@ -119,7 +126,9 @@ def get_parser() -> argparse.ArgumentParser:
         "--service-url",
         default="http://localhost:8585",
         dest="service_url",
-        help="C# BenchLab service HTTP API URL (default: http://localhost:8585)")
+        help=(
+            "C# BenchLab service HTTP API URL "
+            "(default: http://localhost:8585)"))
     parser.add_argument("-vu", action="store_true",
                         help="Launch VU analog dials")
     parser.add_argument("-vuconfig", action="store_true",
@@ -138,7 +147,8 @@ def get_parser() -> argparse.ArgumentParser:
 # ──────────────────────────────────────────────────────────────
 
 def _setup_source_from_args(args) -> bool:
-    """Resolve and start the data source requested via --source (or env fallback).
+    """Resolve and start the data source requested via --source (or env
+    fallback).
 
     Returns True if the source is ready, False on failure.
     """
@@ -340,7 +350,8 @@ def launch_mode() -> None:
             api_port=getattr(args, "api_port", 8000),
             mqtt_broker=getattr(args, "mqtt_broker", "localhost"),
             mqtt_port=getattr(args, "mqtt_port", 1883),
-            service_url=getattr(args, "service_url", "http://localhost:8585"),
+            service_url=getattr(
+                args, "service_url", "http://localhost:8585"),
         )
         if not _setup_source_from_args(profile_args):
             print("Failed to initialize data source")

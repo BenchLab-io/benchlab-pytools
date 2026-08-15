@@ -89,8 +89,11 @@ def requirements_satisfied(req_file: str) -> Tuple[bool, List[str]]:
 
     try:
         with open(req_file, "r", encoding="utf-8") as f:
-            lines = [line.strip()
-                     for line in f if line.strip() and not line.startswith("#")]
+            lines = [
+                line.strip()
+                for line in f
+                if line.strip() and not line.startswith("#")
+            ]
     except OSError:
         return True, []
 

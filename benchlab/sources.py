@@ -69,7 +69,8 @@ def _fastapi_devices_available(host: str, port: int) -> bool:
 
 
 def _trigger_fastapi_scan(host: str, port: int) -> None:
-    """POST /scan to an already-running FastAPI server to force device discovery."""
+    """POST /scan to an already-running FastAPI server to force
+    device discovery."""
     try:
         req = urllib.request.Request(
             f"http://{host}:{port}/scan", method="POST", data=b""
@@ -216,7 +217,8 @@ def start_mqtt_source(broker: str = "localhost", port: int = 1883) -> bool:
 # ──────────────────────────────────────────────────────────────
 
 def _named_pipe_available() -> bool:
-    """Return True if the BenchlabDiscovery pipe exists (service is running)."""
+    """Return True if the BenchlabDiscovery pipe exists (service is
+    running)."""
     if not sys.platform.startswith("win"):
         return False
     try:
@@ -378,7 +380,8 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
                 os.environ["BENCHLAB_DATA_SOURCE"] = "fastapi"
                 return True
             logger.error(
-                f"Port {port} is occupied but server is not responding — cannot start")
+                f"Port {port} is occupied but server is not responding "
+                "— cannot start")
             return False
 
         logger.info(f"FastAPI not detected at {api_url}")
@@ -416,8 +419,10 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
         if not _named_pipe_available():
             logger.error(
                 "BenchLab named pipe service not detected.\n"
-                "  → Make sure the BenchLab Windows service (BL_Service) is running.\n"
-                "  → You can start it via Windows Services or by running BL_Service.exe.")
+                "  → Make sure the BenchLab Windows service (BL_Service) "
+                "is running.\n"
+                "  → You can start it via Windows Services or by "
+                "running BL_Service.exe.")
             return False
 
         logger.info("BenchLab named pipe service detected and ready")
@@ -430,8 +435,10 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
 
         if not _service_http_health(host, port):
             logger.error(
-                f"BenchLab service HTTP API not detected at http://{host}:{port}.\n"
-                "  → Make sure the BenchLab Windows service (BL_Service) is running.\n"
+                f"BenchLab service HTTP API not detected at "
+                f"http://{host}:{port}.\n"
+                "  → Make sure the BenchLab Windows service (BL_Service) "
+                "is running.\n"
                 "  → The service HTTP API listens on port 8585 by default."
             )
             return False
@@ -439,7 +446,8 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
         devices_msg = "with device(s)" if _service_http_devices_available(
             host, port) else "but no devices detected"
         logger.info(
-            f"BenchLab service HTTP API ready at http://{host}:{port} {devices_msg}")
+            f"BenchLab service HTTP API ready at "
+            f"http://{host}:{port} {devices_msg}")
         os.environ["BENCHLAB_DATA_SOURCE"] = "service_http"
         os.environ["BENCHLAB_SERVICE_URL"] = f"http://{host}:{port}"
         return True
@@ -448,7 +456,8 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
         base_url = kwargs.get("base_url")
         if not base_url:
             logger.error(
-                "fastapi_custom requires a base_url (e.g., http://192.168.1.100:8000)")
+                "fastapi_custom requires a base_url "
+                "(e.g., http://192.168.1.100:8000)")
             return False
 
         # Parse the URL to get host and port
@@ -470,7 +479,8 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
         else:
             logger.error(f"FastAPI server not reachable at {base_url}")
             logger.error(
-                "Make sure the remote server is running and accessible from this machine.")
+                "Make sure the remote server is running and accessible "
+                "from this machine.")
             return False
 
     if source_type == "mqtt_custom":

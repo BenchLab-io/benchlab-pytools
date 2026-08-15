@@ -53,11 +53,16 @@ def print_banner() -> None:
 # ──────────────────────────────────────────────────────────────
 
 def show_step1_menu() -> Optional[str]:
-    """Display mode selection. Returns 'provider', 'single', 'multi', or None."""
+    """Display mode selection.
+
+    Returns 'provider', 'single', 'multi', or None.
+    """
     print("What would you like to do?\n")
     print("  1. Data Provider   - Run FastAPI or MQTT server for other tools")
     print("  2. Single Tool     - Run one tool with a data source")
-    print("  3. Multi-Tool      - Run multiple tools with shared data (Experimental!)")
+    print(
+        "  3. Multi-Tool      - Run multiple tools with shared data "
+        "(Experimental!)")
     print()
     print("  q. Quit")
     print()
@@ -65,7 +70,8 @@ def show_step1_menu() -> Optional[str]:
     try:
         choice = input("Choice: ").strip().lower()
         return {"1": "provider", "2": "single", "3": "multi"}.get(choice) or (
-            None if choice in ("q", "quit", "exit") else _invalid("Enter 1, 2, 3, or q.")
+            None if choice in ("q", "quit", "exit")
+            else _invalid("Enter 1, 2, 3, or q.")
         )
     except (EOFError, KeyboardInterrupt):
         return None
@@ -162,7 +168,10 @@ def step2_single_tool() -> None:
 # ──────────────────────────────────────────────────────────────
 
 def step2_multi_tool() -> None:
-    """Select multiple tools and proceed to source selection. (Experimental!)"""
+    """Select multiple tools and proceed to source selection.
+
+    (Experimental!)
+    """
     print()
     print("=== Select Tools ===")
     print("Enter tool numbers separated by commas (e.g., 1,3,5)")
@@ -210,7 +219,8 @@ def _build_source_menu(is_multi: bool,
 
     Args:
         is_multi: Whether multiple tools are being launched
-        supported_sources: Optional list of source types to include (e.g., ["direct", "named_pipe"])
+        supported_sources: Optional list of source types to include
+                          (e.g., ["direct", "named_pipe"])
                           If None, all sources are shown.
 
     Returns a dict mapping menu key → (label, source_type).
@@ -340,7 +350,8 @@ def step3_select_source(tool_ids: List[str], tool_names: List[str]) -> None:
         print(f"\n  ✗ Could not set up {source_type} data source.")
         if source_type in ("named_pipe", "service_http"):
             print(
-                "  → Start the BenchLab Windows service (BL_Service.exe) and try again.")
+                "  → Start the BenchLab Windows service (BL_Service.exe) "
+                "and try again.")
         return
 
     print()

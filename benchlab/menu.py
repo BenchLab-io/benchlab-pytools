@@ -61,7 +61,9 @@ SOURCE_LABELS: Dict[str, str] = {
     "mqtt": "MQTT (Python, experimental)",
     "mqtt_custom": "MQTT (custom)",
     "named_pipe": "BenchLab service - named pipe",
-    "service_http": f"BenchLab service - HTTP API (port {SERVICE_HTTP_DEFAULT_PORT})",
+    "service_http": (
+        f"BenchLab service - HTTP API (port {SERVICE_HTTP_DEFAULT_PORT})"
+    ),
 }
 
 SOURCE_ORDER = [
@@ -88,7 +90,8 @@ def print_banner() -> None:
 # ──────────────────────────────────────────────────────────────
 
 def _available_sources(
-        is_multi: bool, supported_sources: Optional[List[str]]) -> List[Tuple[str, str]]:
+        is_multi: bool,
+        supported_sources: Optional[List[str]]) -> List[Tuple[str, str]]:
     """Return (source_id, label) pairs valid for the given tool selection."""
     is_windows = sys.platform.startswith("win")
 
@@ -113,7 +116,8 @@ def _combined_supported_sources(tool_ids: List[str]) -> Optional[List[str]]:
     restrictions = [
         CONSUMER_TOOLS[tid]["supported_sources"]
         for tid in tool_ids
-        if tid in CONSUMER_TOOLS and CONSUMER_TOOLS[tid].get("supported_sources") is not None
+        if tid in CONSUMER_TOOLS
+        and CONSUMER_TOOLS[tid].get("supported_sources") is not None
     ]
     if not restrictions:
         return None
@@ -219,7 +223,10 @@ def _build_launcher_app(
                     with Vertical(id="tools-panel", classes="panel"):
                         yield Static("[b]Tools[/b] (space to toggle)")
                         tool_selections = [
-                            Selection(f"{t['name']} - {t['description']}", tid, tid in self._default_tool_ids)
+                            Selection(
+                                f"{t['name']} - {t['description']}",
+                                tid,
+                                tid in self._default_tool_ids)
                             for tid, t in CONSUMER_TOOLS.items()
                         ]
                         yield SelectionList[str](*tool_selections, id="tools")
@@ -227,17 +234,24 @@ def _build_launcher_app(
                         yield Static("[b]Data Source[/b]")
                         yield RadioSet(id="sources")
                     yield Static("", id="tools-summary")
-                    yield Button("Launch", id="launch-btn", variant="primary", classes="launch-btn")
+                    yield Button(
+                        "Launch", id="launch-btn", variant="primary",
+                        classes="launch-btn")
                 with TabPane("Data Provider", id="tab-provider"):
                     with Vertical(classes="panel", id="provider-panel"):
-                        yield Static("[b]Provider[/b] - runs standalone, no consumer tool")
+                        yield Static(
+                            "[b]Provider[/b] - runs standalone, "
+                            "no consumer tool")
                         yield RadioSet(
-                            RadioButton(PROVIDER_LABELS["fastapi"], value=True),
+                            RadioButton(
+                                PROVIDER_LABELS["fastapi"], value=True),
                             RadioButton(PROVIDER_LABELS["mqtt"]),
                             id="providers",
                         )
                     yield Static("", id="provider-summary")
-                    yield Button("Start Provider", id="provider-btn", variant="primary", classes="launch-btn")
+                    yield Button(
+                        "Start Provider", id="provider-btn",
+                        variant="primary", classes="launch-btn")
             yield Footer()
 
         async def on_mount(self) -> None:
@@ -265,7 +279,8 @@ def _build_launcher_app(
             radio_set._pressed_button = None
             await radio_set.remove_children()
             if not sources:
-                await radio_set.mount(RadioButton("(no compatible source)", disabled=True))
+                await radio_set.mount(
+                    RadioButton("(no compatible source)", disabled=True))
             else:
                 preferred_idx = 0
                 if self._default_source in self._source_ids:
@@ -298,7 +313,8 @@ def _build_launcher_app(
             tool_ids = self._selected_tool_ids()
             source = self._current_source_id()
             tool_names = ", ".join(
-                CONSUMER_TOOLS[tid]["name"] for tid in tool_ids) or "(none selected)"
+                CONSUMER_TOOLS[tid]["name"]
+                for tid in tool_ids) or "(none selected)"
             source_label = SOURCE_LABELS.get(
                 source, "(none)") if source else "(none)"
             summary = self.query_one("#tools-summary", Static)
@@ -370,7 +386,8 @@ def _run_picker_screen(
         app.run()
     except Exception as e:
         logger.debug(
-            f"Textual picker failed ({e}); falling back to sequential prompts")
+            f"Textual picker failed ({e}); "
+            "falling back to sequential prompts")
         return _sequential_pick(default_tool_ids, default_source)
     except KeyboardInterrupt:
         return None
@@ -450,8 +467,18 @@ def _sequential_pick(
     """Fallback flow when the full-screen picker can't run: choose tools
     vs. data-provider mode, then pick accordingly, via sequential prompts."""
     mode_choice = _fuzzy_pick(
-        [("tools", "Run tool(s) - pick one or more consumer tools and a data source"),
-         ("provider", "Data provider - run FastAPI or MQTT standalone for other processes")],
+        [
+            (
+                "tools",
+                "Run tool(s) - pick one or more consumer tools and a "
+                "data source",
+            ),
+            (
+                "provider",
+                "Data provider - run FastAPI or MQTT standalone for "
+                "other processes",
+            ),
+        ],
         "What would you like to do?",
     )
     if mode_choice is None:
@@ -639,7 +666,9 @@ def _launch(tool_ids: List[str], source: str) -> None:
     if not _setup_source(source):
         print(f"\n  Could not set up '{source}' data source.")
         if source in ("named_pipe", "service_http"):
-            print("  Start the BenchLab Windows service (BL_Service.exe) and try again.")
+            print(
+                "  Start the BenchLab Windows service (BL_Service.exe) "
+                "and try again.")
         return
 
     print("\n=== Launch Summary ===")

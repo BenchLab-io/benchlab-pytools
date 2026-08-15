@@ -40,7 +40,8 @@ def _build_args_namespace() -> _types.SimpleNamespace:
         api_port=int(os.environ.get("API_PORT", "8000")),
         mqtt_broker=os.environ.get("MQTT_BROKER", "localhost"),
         mqtt_port=int(os.environ.get("MQTT_PORT", "1883")),
-        service_url=os.environ.get("BENCHLAB_SERVICE_URL", "http://localhost:8585"),
+        service_url=os.environ.get(
+            "BENCHLAB_SERVICE_URL", "http://localhost:8585"),
     )
 
 
@@ -101,7 +102,8 @@ def launch_single_tool(tool_id: str) -> None:
                 func(args)
             else:
                 logger.warning(
-                    f"{tool['name']}: {tool['module']}.{tool['function']} takes no args. "
+                    f"{tool['name']}: {tool['module']}."
+                    f"{tool['function']} takes no args. "
                     "Update it to accept an args parameter."
                 )
                 func()
@@ -214,7 +216,10 @@ def _spawn_tool_in_terminal(
     # --- XFCE Terminal ---
     if term == "xfce4-terminal":
         return subprocess.Popen(
-            [term, "--title", title, "--command", f"bash -lc '{shlex.join(cmd)}; exec bash'"],
+            [
+                term, "--title", title, "--command",
+                f"bash -lc '{shlex.join(cmd)}; exec bash'",
+            ],
             env=env,
             preexec_fn=os.setsid,
             shell=False,
@@ -241,8 +246,9 @@ def _spawn_tool_in_terminal(
 
     # --- Windows Terminal (wt) ---
     if term == "wt":
-        # Windows Terminal inherits window size from default profile settings.
-        # The actual size depends on the user's Windows Terminal profile configuration.
+        # Windows Terminal inherits window size from default profile
+        # settings. The actual size depends on the user's Windows Terminal
+        # profile configuration.
         # For guaranteed sizing, users should configure their default profile
         # with adequate rows/columns in settings.json (profiles.defaults)
         wt_cmd = ["wt",
@@ -274,8 +280,10 @@ def _spawn_tool_in_terminal(
             f'$title = "{title}"; '
             f'$command = "{shlex.join(cmd)}"; '
             f'$Host.UI.RawUI.WindowTitle = $title; '
-            f'$Host.UI.RawUI.BufferSize = New-Object System.Management.Automation.Host.Size(120, 9999); '
-            f'$Host.UI.RawUI.WindowSize = New-Object System.Management.Automation.Host.Size(120, 40); '
+            f'$Host.UI.RawUI.BufferSize = New-Object '
+            f'System.Management.Automation.Host.Size(120, 9999); '
+            f'$Host.UI.RawUI.WindowSize = New-Object '
+            f'System.Management.Automation.Host.Size(120, 40); '
             f'Write-Host "Starting BENCHLAB tool..."; '
             f'Invoke-Expression $command'
         )
@@ -310,7 +318,8 @@ def launch_tools_concurrent(
 
     Args:
         tool_ids: List of tool IDs to launch.
-        source_ready_delay: Time to wait after source is ready before launching tools (default: 2.0s).
+        source_ready_delay: Time to wait after source is ready before
+            launching tools (default: 2.0s).
     """
     args = _build_args_namespace()
     processes: dict = {}
@@ -319,7 +328,8 @@ def launch_tools_concurrent(
     # Wait for the source to be fully ready before spawning any tools
     if source_ready_delay > 0:
         logger.info(
-            f"Waiting {source_ready_delay}s for data source to stabilize before launching tools...")
+            f"Waiting {source_ready_delay}s for data source to stabilize "
+            "before launching tools...")
         time.sleep(source_ready_delay)
 
     for idx, tid in enumerate(tool_ids):
@@ -327,17 +337,19 @@ def launch_tools_concurrent(
         logger.info(f"Launching {tool['name']} in terminal...")
         proc = _spawn_tool_in_terminal(tid, args)
 
-        # Only consider it a failure if the process exited with a non-zero code
-        # Some terminal launchers (like Windows Terminal 'wt') exit immediately with code 0
-        # after successfully launching the terminal window
+        # Only consider it a failure if the process exited with a non-zero
+        # code. Some terminal launchers (like Windows Terminal 'wt') exit
+        # immediately with code 0 after successfully launching the
+        # terminal window
         if proc.poll() is not None and proc.returncode != 0:
             logger.error(
-                f"{tool['name']} terminal failed to launch (exit code {proc.returncode})")
+                f"{tool['name']} terminal failed to launch "
+                f"(exit code {proc.returncode})")
             continue
 
-        # Graceful launch: wait between tool spawns to avoid overwhelming the system
-        # First tool launches immediately after source delay, subsequent tools
-        # wait 1 second each
+        # Graceful launch: wait between tool spawns to avoid overwhelming
+        # the system. First tool launches immediately after source delay,
+        # subsequent tools wait 1 second each
         if idx < len(tool_ids) - 1:  # Don't sleep after the last tool
             time.sleep(1.0)
 
