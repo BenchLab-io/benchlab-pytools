@@ -18,7 +18,11 @@ import pytest
 import paho.mqtt.client as mqtt
 
 from benchlab.mqtt import mqtt_publisher
-from benchlab.mqtt.mqtt_publisher import reason_code_lookup, MQTTV5_REASON_CODES, resolve_mqtt_protocol
+from benchlab.mqtt.mqtt_publisher import (
+    reason_code_lookup,
+    MQTTV5_REASON_CODES,
+    resolve_mqtt_protocol,
+)
 
 try:
     from paho.mqtt.reasoncodes import ReasonCode
@@ -109,12 +113,23 @@ def test_cli_mqtt_flag_sets_broker_env_var(monkeypatch):
 # ----------------------------------------------------------------------
 
 @pytest.mark.parametrize("value,expected", [
-    ("MQTTv31", mqtt.MQTTv31), ("v3.1", mqtt.MQTTv31), ("3.1", mqtt.MQTTv31), ("3", mqtt.MQTTv31),
+    ("MQTTv31", mqtt.MQTTv31),
+    ("v3.1", mqtt.MQTTv31),
+    ("3.1", mqtt.MQTTv31),
+    ("3", mqtt.MQTTv31),
     ("mqttv31", mqtt.MQTTv31),
-    ("MQTTv311", mqtt.MQTTv311), ("v3.1.1", mqtt.MQTTv311), ("3.1.1", mqtt.MQTTv311), ("4", mqtt.MQTTv311),
+    ("MQTTv311", mqtt.MQTTv311),
+    ("v3.1.1", mqtt.MQTTv311),
+    ("3.1.1", mqtt.MQTTv311),
+    ("4", mqtt.MQTTv311),
     ("mqttv3.1.1", mqtt.MQTTv311),
-    ("MQTTv5", mqtt.MQTTv5), ("v5", mqtt.MQTTv5), ("5", mqtt.MQTTv5), ("mqttv5", mqtt.MQTTv5),
-    (mqtt.MQTTv31, mqtt.MQTTv31), (mqtt.MQTTv311, mqtt.MQTTv311), (mqtt.MQTTv5, mqtt.MQTTv5),
+    ("MQTTv5", mqtt.MQTTv5),
+    ("v5", mqtt.MQTTv5),
+    ("5", mqtt.MQTTv5),
+    ("mqttv5", mqtt.MQTTv5),
+    (mqtt.MQTTv31, mqtt.MQTTv31),
+    (mqtt.MQTTv311, mqtt.MQTTv311),
+    (mqtt.MQTTv5, mqtt.MQTTv5),
 ])
 def test_resolve_mqtt_protocol_accepts_documented_variants(value, expected):
     assert resolve_mqtt_protocol(value) == expected

@@ -11,7 +11,12 @@ import sys
 import threading
 import time
 
-from benchlab_pycore.core import translate_sensor_struct, read_sensors, read_device, BENCHLAB_ORIGINAL_PRODUCT_ID
+from benchlab_pycore.core import (
+    translate_sensor_struct,
+    read_sensors,
+    read_device,
+    BENCHLAB_ORIGINAL_PRODUCT_ID,
+)
 from benchlab_pycore.core.serial_io import get_fleet_info
 
 # Import DeviceRegistry so the MQTT publisher publishes device lifecycle events
@@ -21,7 +26,9 @@ from benchlab.core.device_registry import DeviceRegistry
 from benchlab.core.shared_serial import open_serial_connection
 # Shared with benchlab.core.datasource.MQTTDataSource so both the publisher
 # and consumer sides resolve MQTT_PROTOCOL the same way.
-from benchlab.core.datasource import resolve_mqtt_protocol as _resolve_mqtt_protocol
+from benchlab.core.datasource import (
+    resolve_mqtt_protocol as _resolve_mqtt_protocol,
+)
 
 MQTTV5_REASON_CODES = {
     0: "Success",
@@ -112,7 +119,8 @@ def load_mqtt_config():
         "transport": os.getenv("MQTT_TRANSPORT", "tcp"),
         "username": os.getenv("MQTT_USERNAME"),
         "password": os.getenv("MQTT_PASSWORD"),
-        "protocol": resolve_mqtt_protocol(os.getenv("MQTT_PROTOCOL", mqtt.MQTTv311)),
+        "protocol": resolve_mqtt_protocol(
+            os.getenv("MQTT_PROTOCOL", mqtt.MQTTv311)),
         "qos": int(os.getenv("MQTT_QOS", 0)),
         "path": os.getenv("MQTT_PATH"),
         "poll_rate": float(os.getenv("MQTT_POLL_RATE", poll_rate)),
@@ -312,7 +320,8 @@ def device_thread(device, cfg, publish_interval=1):
     max_retries = 10
 
     try:
-        while not global_stop_event.is_set() and not device_stop_event.is_set():
+        while (not global_stop_event.is_set()
+               and not device_stop_event.is_set()):
             if ser is None:
                 try:
                     ser = open_serial_connection(port)
@@ -325,7 +334,8 @@ def device_thread(device, cfg, publish_interval=1):
                     retry_count += 1
                     if retry_count >= max_retries:
                         logger.error(
-                            "Too many failed attempts for %s, stopping thread.", uid)
+                            "Too many failed attempts for %s, "
+                            "stopping thread.", uid)
                         break
                     time.sleep(1)
                     continue
@@ -373,7 +383,7 @@ def device_thread(device, cfg, publish_interval=1):
                 result = mqtt_publish(
                     client, topic_telemetry, payload, qos=qos)
 
-                if result and payload:  # only log if a payload was actually sent
+                if result and payload:  # only log if a payload was sent
                     payload_size = len(json.dumps(payload))
                     logger.debug(
                         "%s payload sent: %d bytes", uid, payload_size)
@@ -402,11 +412,13 @@ def device_thread(device, cfg, publish_interval=1):
                     uids = [d["uid"] for d in current_fleet]
                     if uid not in uids:
                         logger.info(
-                            "Device %s removed from fleet, stopping thread.", uid)
+                            "Device %s removed from fleet, "
+                            "stopping thread.", uid)
                         break  # exit device thread gracefully
                     else:
                         logger.info(
-                            "Device %s still detected, retrying connection...", uid)
+                            "Device %s still detected, "
+                            "retrying connection...", uid)
                 except Exception as scan_err:
                     logger.error("Rescan failed: %s", scan_err)
 
@@ -477,7 +489,8 @@ def run_mqtt_mode(broker_type="localhost"):
         threads.append(t)
 
     # Start periodic logging thread
-    # The periodic log thread sleeps for a relatively long interval (default 30 s).
+    # The periodic log thread sleeps for a relatively long interval
+    # (default 30 s).
     # Store the interval so we can use an appropriate join timeout during
     # shutdown.
     log_interval = 30

@@ -62,7 +62,8 @@ API_KEY = VU_CONFIG.get("api_key", "")
 
 
 def get_benchlab_devices(datasource=None) -> list:
-    """Return list of {port, uid, name} dicts via datasource (no serial access)."""
+    """Return list of {port, uid, name} dicts via datasource (no serial
+    access)."""
     if datasource is None:
         logger.warning("get_benchlab_devices called without a datasource")
         return []
@@ -145,8 +146,9 @@ def provision_missing_vu_dials(datasource, vu_server_url=VU_SERVER_URL,
     newly_provisioned = []
     while time.time() - start < max_wait:
         updated_uids = {uid for uid, _ in get_vu_dials(vu_server_url, api_key)}
-        newly_provisioned = [d["uid"]
-                             for d in unprovisioned if d["uid"] in updated_uids]
+        newly_provisioned = [
+            d["uid"]
+            for d in unprovisioned if d["uid"] in updated_uids]
         if newly_provisioned:
             break
         time.sleep(0.1)

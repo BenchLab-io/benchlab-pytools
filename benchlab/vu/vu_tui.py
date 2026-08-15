@@ -10,7 +10,8 @@ import threading
 from pathlib import Path
 
 from benchlab.vu import devices
-from benchlab.vu.vu_server_manager import start_vu_server, check_vu_server, terminate_vu_server, forward_logs
+from benchlab.vu.vu_server_manager import (
+    start_vu_server, check_vu_server, terminate_vu_server, forward_logs)
 
 # --- Logger setup ---
 logger = logging.getLogger(__name__)
@@ -162,7 +163,8 @@ class VUTUI:
                 "logo_file": ""}
             save_json(VU_SERVER_CONFIG, cfg)
             logger.info(
-                "Created VU server config from template" if src else "Created default VU server config")
+                "Created VU server config from template"
+                if src else "Created default VU server config")
 
         if not VU_DIAL_CONFIG.exists():
             if template_dial.exists():
@@ -393,7 +395,8 @@ class VUTUI:
         self.stdscr.addstr(
             self.h - 1,
             0,
-            "TAB: Switch tabs | r: Reload | p: Provision new devices | q: Quit")
+            "TAB: Switch tabs | r: Reload | p: Provision new devices | "
+            "q: Quit")
 
     def handle_tab1_input(self, key):
         if key in (ord('r'), ord('R')):
@@ -413,7 +416,9 @@ class VUTUI:
                 self.server_cfg.get("vu_server_url", "http://localhost:5340"),
                 self.server_cfg.get("api_key", "")
             )
-            msg = "Provisioning successful." if success else "Provisioning failed or no new devices found."
+            msg = (
+                "Provisioning successful." if success
+                else "Provisioning failed or no new devices found.")
             self.stdscr.addstr(self.h - 3, 0, msg.ljust(self.w))
             self.stdscr.refresh()
             curses.napms(1000)
@@ -442,7 +447,8 @@ class VUTUI:
             self.tab2_start_line = self.tab2_cursor - visible_lines + 1
 
         for idx, key in enumerate(
-                keys[self.tab2_start_line:self.tab2_start_line + visible_lines]):
+                keys[self.tab2_start_line:
+                     self.tab2_start_line + visible_lines]):
             val = str(self.server_cfg[key])
             line_y = y + idx
             key_text = f"{key}:".ljust(key_col_width)
@@ -566,18 +572,19 @@ class VUTUI:
                 dial['min']:<{col_min_width}} " f"{
                     dial['max']:<{col_max_width}} {
                         dial['sensor']}"
-            self.stdscr.addstr(y + idx,
-                               2,
-                               line[:self.w - 3],
-                               curses.color_pair(1) if idx == self.tab3_cursor else 0)
+            self.stdscr.addstr(
+                y + idx,
+                2,
+                line[:self.w - 3],
+                curses.color_pair(1) if idx == self.tab3_cursor else 0)
 
+        footer_text = (
+            "Enter: Configure Dial | ↑/↓: Navigate | TAB: Switch tabs | "
+            "r: Reload | q: Quit")
         self.stdscr.addstr(
-            self.h -
-            1,
+            self.h - 1,
             0,
-            "Enter: Configure Dial | ↑/↓: Navigate | TAB: Switch tabs | r: Reload | q: Quit"[
-                :self.w -
-                1])
+            footer_text[:self.w - 1])
 
     def handle_tab3_input(self, key):
         if not self.all_dials:
@@ -683,7 +690,8 @@ class VUTUI:
             self.stdscr.addstr(
                 h - 2,
                 0,
-                "No sensors available yet — ensure device is connected.".ljust(w),
+                "No sensors available yet — ensure device is connected."
+                .ljust(w),
                 curses.color_pair(3))
             self.stdscr.refresh()
             curses.napms(2000)

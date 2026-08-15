@@ -82,7 +82,8 @@ def forward_logs(proc: subprocess.Popen):
 def start_vu_server() -> subprocess.Popen | None:
     """
     Ensure a VU server is running.
-    Returns a subprocess.Popen handle if a new server was started, or None if already running.
+    Returns a subprocess.Popen handle if a new server was started, or
+    None if already running.
     """
     logger.info("Checking for existing VU server...")
 

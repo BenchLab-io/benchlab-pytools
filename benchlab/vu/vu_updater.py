@@ -170,8 +170,9 @@ class VUClient:
             headers = {
                 "Authorization": f"Bearer {
                     self.api_key}"} if self.api_key else {}
-            r = requests.get(f"{self.server_url}/api/v0/dial/{dial_uid}/image/crc",
-                             headers=headers, timeout=10)
+            r = requests.get(
+                f"{self.server_url}/api/v0/dial/{dial_uid}/image/crc",
+                headers=headers, timeout=10)
             r.raise_for_status()
             return r.json().get("crc", "").upper()
         except requests.RequestException as e:
@@ -199,7 +200,8 @@ class BenchlabVUUpdater:
 
         if not self.mappings:
             logger.warning(
-                "No dial mappings found in vu_dial.config — run -vuconfig to configure dials. Waiting for config...")
+                "No dial mappings found in vu_dial.config — run "
+                "-vuconfig to configure dials. Waiting for config...")
 
         # uid → latest telemetry snapshot dict
         self._snapshots: dict = {}
@@ -211,7 +213,8 @@ class BenchlabVUUpdater:
         self._poller.start()
 
     def _poll_loop(self):
-        """Background thread: keeps _snapshots up to date via DataSourceManager."""
+        """Background thread: keeps _snapshots up to date via
+        DataSourceManager."""
         # Discover all UIDs we care about from the mappings
         while not shutdown_event.is_set():
             try:
@@ -454,7 +457,8 @@ def run_updater(args=None):
                     server_proc,), daemon=True).start()
         else:
             logger.error(
-                "Failed to start local VU server — dial updates will not work.")
+                "Failed to start local VU server — dial updates "
+                "will not work.")
 
     time.sleep(1)
 
@@ -501,7 +505,8 @@ def run_updater(args=None):
                 if not dial_uid:
                     continue
                 logger.info(
-                    f"[{idx}/{len(updater.mappings)}] Restoring logo on {dial_uid}")
+                    f"[{idx}/{len(updater.mappings)}] Restoring logo "
+                    f"on {dial_uid}")
                 try:
                     updater.client.upload_logo(
                         dial_uid, standard_logo, force=True)

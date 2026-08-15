@@ -25,7 +25,8 @@ def test_creates_config_from_valid_template(tmp_path):
     config_path = tmp_path / "vu_server.config"
     template_path = tmp_path / "vu_server.config_template"
     template_path.write_text(
-        '{"vu_server_url": "http://localhost:5340", "api_key": "", "logo_file": ""}')
+        '{"vu_server_url": "http://localhost:5340", "api_key": "", '
+        '"logo_file": ""}')
 
     result = load_vu_server_config(config_path, template_path)
 

@@ -39,4 +39,5 @@ def test_update_vu_config_tolerates_mapping_without_dial_uid(
     # The malformed entry (no dial_uid) survives untouched rather than
     # crashing the whole save.
     assert any(
-        "benchlab_uid" in m and "dial_uid" not in m for m in result["mappings"])
+        "benchlab_uid" in m and "dial_uid" not in m
+        for m in result["mappings"])

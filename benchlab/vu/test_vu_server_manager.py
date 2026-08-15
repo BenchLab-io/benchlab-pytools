@@ -25,7 +25,8 @@ from benchlab.vu import vu_server_manager as vsm
 
 @pytest.fixture
 def fake_yaml_config(tmp_path, monkeypatch):
-    """Point SERVER_YAML_CONFIG/VU_SERVER_CONFIG/VU_SERVER_DIR at a scratch dir."""
+    """Point SERVER_YAML_CONFIG/VU_SERVER_CONFIG/VU_SERVER_DIR at a
+    scratch dir."""
     server_dir = tmp_path / "VU-Server"
     server_dir.mkdir()
     (server_dir / "server.py").write_text("# stub\n")
