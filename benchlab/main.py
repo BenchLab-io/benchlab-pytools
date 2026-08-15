@@ -36,10 +36,14 @@ except ImportError as e:
 # ──────────────────────────────────────────────────────────────
 
 def get_parser() -> argparse.ArgumentParser:
+    from . import __version__
+
     parser = argparse.ArgumentParser(
         description="BENCHLAB PyTools v2 - Device Telemetry Suite"
     )
 
+    parser.add_argument("--version", action="version",
+                        version=f"benchlab-pytools {__version__}")
     parser.add_argument("-config", action="store_true",
                         help="Device configuration import/export tool")
     parser.add_argument("-fastapi", action="store_true",
