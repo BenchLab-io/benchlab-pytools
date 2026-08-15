@@ -259,3 +259,42 @@ def test_is_permission_error_detects_known_signals():
     assert wigidash_usb._is_permission_error(Exception("Operation not permitted")) is True
     assert wigidash_usb._is_permission_error(Exception("Resource busy")) is False
 
+
+def test_scan_wigidash_passes_explicit_backend_when_available(monkeypatch):
+    """Regression test: on Windows, pyusb's default backend discovery can
+    silently pick up an unrelated system-wide libusb-1.0.dll instead of the
+    one bundled with libusb-package, so scan_wigidash must pass the
+    libusb-package backend explicitly rather than relying on auto-discovery."""
+    sentinel_backend = object()
+    monkeypatch.setattr(wigidash_usb, "_usb_backend", sentinel_backend)
+
+    captured_kwargs = {}
+
+    def fake_find(**kwargs):
+        captured_kwargs.update(kwargs)
+        return []
+
+    monkeypatch.setattr(wigidash_usb.usb.core, "find", fake_find)
+
+    wigidash_usb.scan_wigidash(0x28DA, 0xEF01)
+
+    assert captured_kwargs.get("backend") is sentinel_backend
+
+
+def test_scan_wigidash_omits_backend_kwarg_when_unavailable(monkeypatch):
+    """When libusb-package isn't installed/usable, fall back to pyusb's
+    normal backend discovery instead of passing backend=None explicitly."""
+    monkeypatch.setattr(wigidash_usb, "_usb_backend", None)
+
+    captured_kwargs = {}
+
+    def fake_find(**kwargs):
+        captured_kwargs.update(kwargs)
+        return []
+
+    monkeypatch.setattr(wigidash_usb.usb.core, "find", fake_find)
+
+    wigidash_usb.scan_wigidash(0x28DA, 0xEF01)
+
+    assert "backend" not in captured_kwargs
+

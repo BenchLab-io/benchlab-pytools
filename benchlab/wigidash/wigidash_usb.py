@@ -11,8 +11,20 @@ import usb.util
 from benchlab.wigidash.benchlab_utils import get_logger
 
 is_linux = sys.platform.startswith("linux")
+is_windows = sys.platform.startswith("win")
 
 logger = get_logger("WigidashUsb")
+
+_usb_backend = None
+if is_windows:
+    try:
+        import libusb_package
+        _usb_backend = libusb_package.get_libusb1_backend()
+        logger.debug("Using bundled libusb-package backend for pyusb")
+    except Exception as e:
+        # Fall back to pyusb's normal backend discovery (e.g. a system-wide
+        # libusb-1.0.dll on PATH) if libusb-package isn't installed/usable.
+        logger.debug(f"libusb-package backend unavailable, falling back to default discovery: {e}")
 
 _PERMISSION_ERROR_SIGNALS = (
     "access denied",
@@ -110,7 +122,10 @@ def scan_wigidash(vendor_id=0x28DA, product_id=0xEF01):
             logger.warning(f"WigiDash USB access may be misconfigured: {hint}")
 
     devices = []
-    found = usb.core.find(idVendor=vendor_id, idProduct=product_id, find_all=True)
+    find_kwargs = {"idVendor": vendor_id, "idProduct": product_id, "find_all": True}
+    if _usb_backend is not None:
+        find_kwargs["backend"] = _usb_backend
+    found = usb.core.find(**find_kwargs)
     for dev in found:
         try:
             dev.set_configuration()
