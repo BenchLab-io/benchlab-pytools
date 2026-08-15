@@ -72,7 +72,7 @@ During runtime or on exit:
 
 Run the exporter from the BenchLab project directory:
 
-python -m benchlab.hwinfo_export
+python benchlab.py -hwinfo
 
 
 It will:

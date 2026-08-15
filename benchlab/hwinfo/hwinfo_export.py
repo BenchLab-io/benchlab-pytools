@@ -50,8 +50,6 @@ def get_sensor_type_and_unit(key):
         return "Clock", None
     elif "duty" in key_lower:
         return "Other", "%"
-    elif "fanextduty" in key_lower:
-        return "Other", "%"
     else:
         return "Other", "%"
 
@@ -100,7 +98,7 @@ def _process_sensor_data(data: dict) -> dict:
     }
 
     for key, value in data.items():
-        if key in IGNORE_KEYS or key.lower() == "fanextduty":
+        if key in IGNORE_KEYS or key.lower() in ("fanextduty", "timestamp"):
             continue
 
         sensor_type, unit = get_sensor_type_and_unit(key)
@@ -157,9 +155,7 @@ def export_device_sensors(device_info, datasource=None):
         # Use provided data source
         data = datasource.get_telemetry(uid)
         if not data:
-            # Try to refresh (DirectDataSource polls, FastAPI/MQTT get latest)
-            logger.debug("No telemetry for %s via %s, retrying...", uid, datasource.source_type)
-            data = datasource.get_telemetry(uid)
+            logger.debug("No telemetry for %s via %s yet", uid, datasource.source_type)
     else:
         # Fallback: direct probe via pycore (legacy behavior)
         try:
@@ -289,6 +285,16 @@ def export_all_devices(update_interval=1, datasource=None):
         while True:
             # Get device list from data source
             fleet = datasource.list_devices()
+
+            # Remove registry entries for devices no longer present in the fleet
+            current_device_names = {
+                f"BENCHLAB_{device.get('port', 'unknown')}_{device.get('uid', 'unknown')}"
+                for device in fleet
+            }
+            for stale_name in exported_devices - current_device_names:
+                delete_registry_tree(HWINFO_CUSTOM_ROOT, f"{HWINFO_CUSTOM_PATH}\\{stale_name}")
+                exported_devices.discard(stale_name)
+
             if not fleet:
                 logger.warning("No BenchLab devices found via %s", datasource.source_type)
                 time.sleep(update_interval)
