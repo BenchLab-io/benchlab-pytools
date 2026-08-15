@@ -35,7 +35,8 @@ jobs:
         run: >
           python -c "import benchlab.core, benchlab.core.discovery,
           benchlab.core.datasource, benchlab.core.shared_serial,
-          benchlab.config.config_client, benchlab.restapi.telemetry_api,
+          benchlab.config.config_client, benchlab.config.config_manager,
+          benchlab.config.diff, benchlab.restapi.telemetry_api,
           benchlab.mqtt.mqtt_publisher, benchlab.hwinfo.hwinfo_export,
           benchlab.tui.config, benchlab.tui.tui_core, benchlab.tui.tui_main,
           benchlab.graph.app, benchlab.graph.ui,
@@ -87,6 +88,15 @@ jobs:
 
       - name: Test - vu tui logic
         run: pytest benchlab/vu/test_vu_tui.py -v
+
+      - name: Test - config diff logic
+        run: pytest benchlab/config/test_diff.py -v
+
+      - name: Test - config manager
+        run: pytest benchlab/config/test_config_manager.py -v
+
+      - name: Test - config client (calibration struct selection)
+        run: pytest benchlab/config/test_config_client.py -v
 
   latest:
     name: Import + test against latest pycore (PyPI)
@@ -112,7 +122,8 @@ jobs:
         run: >
           python -c "import benchlab.core, benchlab.core.discovery,
           benchlab.core.datasource, benchlab.core.shared_serial,
-          benchlab.config.config_client, benchlab.restapi.telemetry_api,
+          benchlab.config.config_client, benchlab.config.config_manager,
+          benchlab.config.diff, benchlab.restapi.telemetry_api,
           benchlab.mqtt.mqtt_publisher, benchlab.hwinfo.hwinfo_export,
           benchlab.tui.config, benchlab.tui.tui_core, benchlab.tui.tui_main,
           benchlab.graph.app, benchlab.graph.ui,
@@ -164,3 +175,12 @@ jobs:
 
       - name: Test - vu tui logic
         run: pytest benchlab/vu/test_vu_tui.py -v
+
+      - name: Test - config diff logic
+        run: pytest benchlab/config/test_diff.py -v
+
+      - name: Test - config manager
+        run: pytest benchlab/config/test_config_manager.py -v
+
+      - name: Test - config client (calibration struct selection)
+        run: pytest benchlab/config/test_config_client.py -v

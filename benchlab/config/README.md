@@ -73,11 +73,18 @@ python benchlab.py -config --export my_config.json --source named_pipe
 #### Import Configuration
 
 ```bash
-# Import configuration
+# Import configuration - shows a diff of what would actually change on the
+# device (current value -> new value, only changed fields), then asks for
+# confirmation before applying
 python benchlab.py -config --import my_config.json
 
-# Dry-run (validate without applying)
+# Preview changes without applying anything (still connects to the device
+# and reads its current config to compute the diff)
 python benchlab.py -config --import my_config.json --dry-run
+
+# Apply without the confirmation prompt (diff is still printed) - for
+# scripts/automation
+python benchlab.py -config --import my_config.json --yes
 
 # Import via named pipe
 python benchlab.py -config --import my_config.json --source named_pipe
@@ -253,7 +260,7 @@ The tool provides detailed error messages for:
 - Device connection errors
 - Configuration write failures
 
-Use `--dry-run` to validate configuration files without applying changes.
+Use `--dry-run` to preview exactly what would change on the device (connects and reads current config to compute a diff) without applying anything. Use `--yes` to skip the confirmation prompt while still showing the diff, for scripted/automated use.
 
 ## Troubleshooting
 
@@ -310,9 +317,8 @@ manager.import_config('input.json', dry_run=False)
 
 ## See Also
 
-- [AI_GUIDE_JSON_CONFIG_TOOL.md](AI_GUIDE_JSON_CONFIG_TOOL.md) - Detailed implementation guide
-- [pycore_README.md](pycore_README.md) - PyCore library documentation
 - [BENCHLAB PyTools Documentation](../../README.md) - Main PyTools documentation
+- [benchlab-pycore](https://github.com/BenchLab-io/benchlab-pycore) - PyCore library used for direct serial configuration I/O
 
 ## License
 

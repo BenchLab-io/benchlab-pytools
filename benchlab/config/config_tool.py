@@ -54,13 +54,13 @@ def cmd_import(args):
     if not Path(args.config_file).exists():
         print(f"ERROR: Config file not found: {args.config_file}")
         return 1
-    
+
     manager = ConfigManager(source=args.source)
-    
+
     if args.dry_run:
-        print("DRY RUN MODE - No changes will be applied")
-    
-    if manager.import_config(args.config_file, dry_run=args.dry_run):
+        print("DRY RUN MODE - showing what would change, no changes will be applied")
+
+    if manager.import_config(args.config_file, dry_run=args.dry_run, auto_confirm=args.yes):
         if not args.dry_run:
             print("SUCCESS: Configuration applied")
         return 0
@@ -147,26 +147,17 @@ def interactive_mode(args):
             print()
             input("Press Enter to exit...")
             return 1
-        
-        # Confirm before applying
-        print()
-        print(f"Configuration file: {config_file}")
-        print("Apply this configuration? (yes/no)")
-        confirm = input("> ").strip().lower()
-        
-        if confirm not in ('yes', 'y'):
-            print("Cancelled.")
-            return 0
-        
-        # Ask about saving to flash
+
+        # Ask about saving to flash up front, so import_config's per-device
+        # diff/confirm below is the only remaining approval step.
         print()
         print("Save configuration to device flash memory?")
         print("(If 'no', changes will only be applied to RAM and lost on device reset)")
         save_flash = input("Save to flash? (yes/no): ").strip().lower()
-        
-        # Apply configuration
+
+        # Read + diff + confirm happens per device inside import_config,
+        # which prints the diff and prompts before applying each one.
         print()
-        print("Applying configuration...")
         if manager.import_config(config_file, dry_run=False, save_to_flash=(save_flash in ('yes', 'y'))):
             print()
             if save_flash in ('yes', 'y'):
@@ -262,25 +253,30 @@ def main(args=None):
 Examples:
   # List devices
   python benchlab.py -config --list
-  
+
   # Export configuration
   python benchlab.py -config --export config.json
   python benchlab.py -config --export config.json --device COM4
-  
-  # Import configuration
+
+  # Import configuration (shows a diff of what would change, then asks to confirm)
   python benchlab.py -config --import config.json
+
+  # Preview changes without applying anything
   python benchlab.py -config --import config.json --dry-run
-  
+
+  # Apply without the confirmation prompt (for scripts/automation)
+  python benchlab.py -config --import config.json --yes
+
   # Use named pipe source (Windows only)
   python benchlab.py -config --list --source named_pipe
   python benchlab.py -config --import config.json --source named_pipe
             """
         )
-        
-        parser.add_argument('--source', choices=['direct', 'named_pipe'], 
+
+        parser.add_argument('--source', choices=['direct', 'named_pipe'],
                           default='direct',
                           help='Data source type (default: direct)')
-        
+
         # Commands
         parser.add_argument('--list', action='store_true',
                           help='List available devices')
@@ -288,13 +284,15 @@ Examples:
                           help='Export configuration to JSON file')
         parser.add_argument('--import', metavar='FILE', dest='config_file',
                           help='Import configuration from JSON file')
-        
+
         # Options
         parser.add_argument('--device', metavar='ID',
                           help='Device identifier (port or pipe name)')
         parser.add_argument('--dry-run', action='store_true',
-                          help='Validate configuration without applying')
-        
+                          help='Show what would change without applying anything (connects to the device and reads its current config)')
+        parser.add_argument('-y', '--yes', action='store_true',
+                          help='Apply changes without the confirmation prompt (the diff is still shown)')
+
         args = parser.parse_args()
     else:
         # Called from launcher - add missing command attributes
@@ -311,6 +309,8 @@ Examples:
             args.device = None
         if not hasattr(args, 'dry_run'):
             args.dry_run = False
+        if not hasattr(args, 'yes'):
+            args.yes = False
     
     # If no command specified, run interactive mode
     if not (args.list or args.output or args.config_file):

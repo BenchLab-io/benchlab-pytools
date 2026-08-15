@@ -12,6 +12,69 @@ from typing import Optional, Dict, Any
 
 logger = logging.getLogger("benchlab.config.client")
 
+DISCOVERY_PIPE_NAME = "BenchlabDiscovery"
+
+
+def query_named_pipe(pipe_name: str, command: str, payload=None, timeout_ms: int = 5000):
+    """Send a single command to a named pipe and return the parsed JSON response.
+
+    Standalone helper (not tied to a device-scoped NamedPipeConfigClient) so
+    the BenchlabDiscovery pipe -- which isn't associated with any one device
+    -- can be queried the same way, e.g. for ListDevices. Mirrors
+    NamedPipeConfigClient._send_command's open/write/read/close sequence.
+
+    Returns the parsed JSON response (dict or list), or None on failure.
+    """
+    import win32file
+    import win32pipe
+    import pywintypes
+
+    path = f"\\\\.\\pipe\\{pipe_name}"
+    handle = None
+    try:
+        win32pipe.WaitNamedPipe(path, timeout_ms)
+        handle = win32file.CreateFile(
+            path,
+            win32file.GENERIC_READ | win32file.GENERIC_WRITE,
+            0, None,
+            win32file.OPEN_EXISTING,
+            0, None
+        )
+
+        win32file.WriteFile(handle, (command + "\n").encode("utf-8"))
+        if payload is not None:
+            if isinstance(payload, str):
+                win32file.WriteFile(handle, (payload + "\n").encode("utf-8"))
+            else:
+                win32file.WriteFile(handle, (json.dumps(payload) + "\n").encode("utf-8"))
+
+        chunks = []
+        while True:
+            try:
+                _, data = win32file.ReadFile(handle, 4096)
+                if not data:
+                    break
+                chunks.append(data)
+            except pywintypes.error as e:
+                if e.winerror == 109:  # Pipe closed
+                    break
+                raise
+
+        response_text = b"".join(chunks).decode("utf-8", errors="replace").strip()
+        if not response_text:
+            return None
+        return json.loads(response_text)
+
+    except (pywintypes.error, json.JSONDecodeError) as e:
+        logger.error(f"Pipe command failed on {pipe_name}: {e}")
+        return None
+    finally:
+        if handle is not None:
+            try:
+                win32file.CloseHandle(handle)
+            except Exception:
+                pass
+
 
 class ConfigClient(ABC):
     """Abstract base class for device configuration clients."""
@@ -285,15 +348,23 @@ class DirectConfigClient(ConfigClient):
     
     def write_calibration(self, calibration: Dict[str, Any]) -> bool:
         """Write calibration data."""
-        from benchlab_pycore.core import write_calibration, CalibrationStruct
-        
+        from benchlab_pycore.core import (
+            write_calibration, CalibrationStruct, CalibrationStructBL2, BENCHLAB_BL2_PRODUCT_ID,
+        )
+
+        # Select the struct type matching the connected device's variant --
+        # BL2 has 8 temp sensors vs Original's 4, so the struct sizes and
+        # array lengths differ. Mirrors benchlab_pycore.core.read_calibration's
+        # own product_id -> struct_type selection.
+        struct_type = CalibrationStructBL2 if self.product_id == BENCHLAB_BL2_PRODUCT_ID else CalibrationStruct
+
         # Reconstruct calibration struct from dict
         try:
-            cal = self._dict_to_struct(calibration, CalibrationStruct)
+            cal = self._dict_to_struct(calibration, struct_type)
         except Exception as e:
             logger.error(f"Failed to reconstruct calibration struct: {e}")
             return False
-        
+
         return write_calibration(self.ser, calibration=cal, product_id=self.product_id)
     
     def save_config(self) -> bool:
