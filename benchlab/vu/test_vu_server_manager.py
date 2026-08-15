@@ -10,6 +10,9 @@ dial is required:
   times out
 - check_vu_server sending the API key as the query parameter the vendored
   server actually reads, not an HTTP header it ignores
+- check_vu_server normalizing "localhost" to 127.0.0.1 so its stated
+  timeout is actually honored on Windows (dual-stack IPv4/IPv6 resolution
+  otherwise silently doubles the wait for a down server)
 """
 
 import subprocess
@@ -157,3 +160,39 @@ def test_check_vu_server_no_params_when_key_empty(monkeypatch):
     vsm.check_vu_server("http://localhost:5340")
 
     assert captured["params"] == {}
+
+
+def test_check_vu_server_normalizes_localhost_to_ipv4_loopback(monkeypatch):
+    """Regression test: 'localhost' resolves to both IPv4 and IPv6 on
+    Windows, and requests/urllib3 tries each in sequence, silently doubling
+    the effective timeout for a down server. Force 127.0.0.1 explicitly so
+    the requested timeout is actually honored."""
+    captured = {}
+
+    def fake_get(url, **kwargs):
+        captured["url"] = url
+        resp = MagicMock()
+        resp.status_code = 200
+        return resp
+
+    monkeypatch.setattr(vsm.requests, "get", fake_get)
+
+    vsm.check_vu_server("http://localhost:5340")
+
+    assert captured["url"] == "http://127.0.0.1:5340/api/v0/dial/list"
+
+
+def test_check_vu_server_leaves_custom_hostname_untouched(monkeypatch):
+    captured = {}
+
+    def fake_get(url, **kwargs):
+        captured["url"] = url
+        resp = MagicMock()
+        resp.status_code = 200
+        return resp
+
+    monkeypatch.setattr(vsm.requests, "get", fake_get)
+
+    vsm.check_vu_server("http://192.168.1.50:5340")
+
+    assert captured["url"] == "http://192.168.1.50:5340/api/v0/dial/list"

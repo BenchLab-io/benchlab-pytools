@@ -44,8 +44,15 @@ def check_vu_server(server_url: str, api_key: str = "") -> bool:
     "still running" case below.
     """
     try:
+        # "localhost" resolves to both an IPv4 and IPv6 address on Windows,
+        # and requests/urllib3 tries each in turn, each getting its own
+        # full timeout budget — a "nothing listening" check with
+        # timeout=1 can silently take ~2s instead of 1s. Force IPv4
+        # loopback for the common "localhost" case so the timeout below
+        # is actually honored; leave any other configured hostname alone.
+        probe_url = server_url.replace("://localhost", "://127.0.0.1", 1)
         params = {"key": api_key} if api_key else {}
-        r = requests.get(f"{server_url}/api/v0/dial/list", params=params, timeout=1)
+        r = requests.get(f"{probe_url}/api/v0/dial/list", params=params, timeout=1)
         # 403 (missing/invalid key) still means a real VU server answered —
         # that's enough to know we shouldn't auto-start a second one.
         return r.status_code in (200, 403)
