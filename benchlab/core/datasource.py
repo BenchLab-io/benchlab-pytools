@@ -698,6 +698,16 @@ def _normalise_cs_telemetry(sensors_raw: list) -> Dict[str, Any]:
         "HPWR2_P": "HPWR2_Power", "HPWR2_V": "HPWR2_Voltage",
         "HPWR2_I": "HPWR2_Current",
 
+        # BL2 12VHPWR per-pin sense lines (HPWR{1,2}_W{1..6}), shown on
+        # the TUI's 12VHPWR tab as HPWR{n}_W{m}_{Power,Current,Voltage}
+        **{
+            f"HPWR{n}_W{m}_{suffix}": f"HPWR{n}_W{m}_{tui_suffix}"
+            for n in (1, 2)
+            for m in range(1, 7)
+            for suffix, tui_suffix in (
+                ("P", "Power"), ("I", "Current"), ("V", "Voltage"))
+        },
+
         # Board voltages
         "VDD": "Vdd",
         "VREF": "Vref",
