@@ -740,22 +740,25 @@ def _normalise_cs_telemetry(sensors_raw: list) -> Dict[str, Any]:
 def _normalise_cs_device_info(d: Dict[str, Any]) -> Dict[str, Any]:
     """Normalise a C# service device dict into the shape the TUI expects.
 
-    The C# service's /devices and discovery-pipe responses use camelCase
-    keys (productId, vendorId, firmwareVersion). DirectDataSource and
-    FastAPIDataSource populate PascalCase keys (ProductId, VendorId,
-    FwVersion) plus a computed 'variant' — this adds those same keys
-    without discarding whatever the C# service already provided.
+    The C# service's /devices, /device/{uid}/info, and discovery-pipe
+    responses use camelCase keys (productId, vendorId, firmwareVersion —
+    confirmed against BenchlabSensorWorker.cs/HttpApiServer.cs in the
+    BENCHLAB_Service repo). Note the HTTP API's /devices and
+    /device/{uid}/info endpoints only send productId — no vendorId or
+    firmwareVersion — so those default to 0 there; only the named-pipe
+    discovery/GetServiceInfo responses include all three.
+    DirectDataSource/FastAPIDataSource populate PascalCase keys
+    (ProductId, VendorId, FwVersion) plus a computed 'variant' — this
+    adds those same keys without discarding what the C# service sent.
     """
     result = dict(d)
     product_id = d.get("ProductId", d.get("productId", 0))
     vendor_id = d.get("VendorId", d.get("vendorId", 0))
-    fw_version = d.get(
-        "FwVersion", d.get("firmwareVersion", d.get("fwVersion", 0)))
+    fw_version = d.get("FwVersion", d.get("firmwareVersion", 0))
     result["ProductId"] = product_id
     result["VendorId"] = vendor_id
     result["FwVersion"] = fw_version
-    result.setdefault(
-        "firmware", d.get("firmware", fw_version))
+    result.setdefault("firmware", d.get("firmware", fw_version))
     # 0x11 = BENCHLAB_BL2_PRODUCT_ID (see DirectDataSource/tui_core.py).
     result.setdefault(
         "variant", "BL2" if product_id == 0x11 else "ORIGINAL")
@@ -825,9 +828,11 @@ class NamedPipeDataSource(DataSource):
             self._pipe_names.clear()
             for d in devices:
                 uid = d.get("guid") or d.get("deviceName", "unknown")
+                # Field names confirmed against BenchlabSensorWorker.cs's
+                # ListDevices response in the BENCHLAB_Service repo.
                 product_id = d.get("productId", 0)
                 vendor_id = d.get("vendorId", 0)
-                fw_version = d.get("firmwareVersion", d.get("fwVersion", 0))
+                fw_version = d.get("firmwareVersion", 0)
                 # 0x11 = BENCHLAB_BL2_PRODUCT_ID (see
                 # DirectDataSource/tui_core.py); hardcoded rather than
                 # importing benchlab_pycore, which named_pipe consumers
