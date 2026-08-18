@@ -4,6 +4,30 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.0.3] - 2026-08-18
+
+### Fixed
+- TUI: the 12VHPWR tab's Voltage section was cut off with no way to
+  scroll, since `MIN_TERMINAL_ROWS` (35) was well under the ~48 rows
+  the stacked Power/Current/Voltage layout plus status bar actually
+  needs. Raised to 48.
+- `mqtt`, `service_http`, and `named_pipe` data sources never surfaced
+  `vendor_id`/`product_id`/`firmware_version`, so the Fleet TUI's
+  Model column (BL1 vs BL2 detection) was always wrong for these
+  sources:
+  - `mqtt`: the publisher's retained info payload only sent
+    `uid`/`com_port`/`firmware`; it now also reads
+    `ProductId`/`VendorId`/`FwVersion` via `read_device()` and
+    computes `variant`.
+  - `named_pipe`: the C# service's camelCase `productId` is now
+    mapped to the PascalCase keys the TUI expects
+    (`vendorId`/`firmwareVersion` also mapped), with `variant`
+    computed — field names verified against the
+    `BENCHLAB.BENCHLAB_Service` source.
+  - `service_http`: added a device-info normalization step (the C#
+    HTTP API only ever sends `productId`, confirmed against source —
+    vendor/firmware are unavailable there and default to unknown).
+
 ## [3.0.2] - 2026-08-18
 
 ### Fixed
@@ -67,6 +91,7 @@ export, MQTT publisher, VU dials, WigiDash, and config import/export tools,
 sharing a common data-source layer (direct serial, FastAPI, MQTT, named
 pipe, service HTTP).
 
+[3.0.3]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.0.2...v3.0.3
 [3.0.2]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/BenchLab-io/benchlab-pytools/compare/v0.8.2...v3.0.0
