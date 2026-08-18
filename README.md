@@ -21,8 +21,18 @@ All tools share a common data-source layer, so the same telemetry can be read di
 
 Requires Python 3.10+.
 
+### From PyPI
+
 ```bash
-pip install -r requirements.txt
+pip install benchlab-pytools
+```
+
+This installs a `benchlab` console command on your PATH (see [Command-Line Flags](#command-line-flags) below). Install with extras for the tools you need, e.g. `pip install "benchlab-pytools[tui]"`.
+
+### From source
+
+```bash
+pip install -r benchlab/requirements.txt
 ```
 
 Each tool has its own `requirements.txt` (e.g. `benchlab/graph/requirements.txt`, `benchlab/vu/requirements.txt`). The launcher installs a tool's requirements automatically the first time it's run — you generally don't need to install them by hand.
@@ -45,11 +55,17 @@ or equivalently:
 python -m benchlab
 ```
 
+If installed from PyPI, use the `benchlab` command instead:
+
+```bash
+benchlab
+```
+
 The interactive menu (prompt_toolkit-based, with a plain-input fallback if `prompt_toolkit` isn't installed) lets you pick a data source and one or more tools, then launches them — installing any missing per-tool dependencies along the way.
 
 ### Command-Line Flags
 
-Each tool can also be launched directly with a flag:
+Each tool can also be launched directly with a flag. If installed from PyPI, replace `python -m benchlab` with `benchlab` in the examples below (e.g. `benchlab -tui`).
 
 ```bash
 python -m benchlab -tui         # Interactive terminal dashboard

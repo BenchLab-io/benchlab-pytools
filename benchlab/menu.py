@@ -23,7 +23,7 @@ import os
 import sys
 from typing import Dict, List, Optional, Tuple, Union
 
-from bootstrap import clear_screen
+from .bootstrap import clear_screen
 from .tools import CONSUMER_TOOLS
 from .sources import (
     check_and_setup_source,

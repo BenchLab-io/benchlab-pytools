@@ -33,6 +33,7 @@ dependencies = [
     "textual>=0.60,<9.0",
     "benchlab-pycore>=0.5.1",
     "windows-curses>=2.4.1; platform_system=='Windows'",
+    "pywin32>=306; platform_system=='Windows'",
 ]
 
 [project.optional-dependencies]

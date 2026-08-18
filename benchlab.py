@@ -22,13 +22,16 @@ if not logger.handlers:
 
 
 def main():
+    sys.path.insert(0, str(BASE_DIR))
+
     # Fast fail checks first
-    from bootstrap import check_python_version, install_core_requirements
+    from benchlab.bootstrap import (
+        check_python_version, install_core_requirements,
+    )
     check_python_version()
     install_core_requirements()
 
     # Delegate everything to main entry point
-    sys.path.insert(0, str(BASE_DIR))
     from benchlab.main import main
     main()
 

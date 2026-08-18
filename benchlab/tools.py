@@ -9,7 +9,7 @@ import importlib.util
 import logging
 from pathlib import Path
 
-from bootstrap import install_requirements_file
+from .bootstrap import install_requirements_file
 
 logger = logging.getLogger("benchlab.launcher")
 

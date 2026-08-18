@@ -149,7 +149,6 @@ def install_core_requirements():
     req_file = BASE_DIR / "requirements.txt"
 
     if not req_file.exists():
-        logger.warning("No global requirements.txt found")
         return
 
     install_requirements_file(str(req_file), "CORE")
