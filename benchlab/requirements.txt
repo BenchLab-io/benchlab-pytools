@@ -23,3 +23,6 @@ amqtt>=0.12.0,<0.13.0
 
 # Curses-based TUI
 windows-curses>=2.4.1; platform_system=="Windows"
+
+# Named Pipe Data Source (BL_Service)
+pywin32>=306; platform_system=="Windows"

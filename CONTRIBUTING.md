@@ -5,7 +5,7 @@
 ```bash
 git clone https://github.com/BenchLab-io/benchlab-pytools.git
 cd benchlab-pytools
-pip install -r requirements.txt
+pip install -r benchlab/requirements.txt
 pip install -r benchlab/csv_log/requirements.txt
 pip install -r benchlab/graph/requirements.txt
 pip install -r benchlab/wigidash/requirements.txt
