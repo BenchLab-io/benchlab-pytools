@@ -55,8 +55,7 @@ class ConfigManager:
             from benchlab_pycore.core import get_fleet_info
             devices = get_fleet_info()
             logger.info(
-                f"Discovered {
-                    len(devices)} device(s) via direct serial")
+                f"Discovered {len(devices)} device(s) via direct serial")
             return devices
         except Exception as e:
             logger.error(f"Failed to discover direct devices: {e}")
@@ -357,8 +356,8 @@ class ConfigManager:
                     device_config.selector.model_dump(), devices)
                 if not identifier:
                     logger.error(
-                        f"Device not found matching selector: {
-                            device_config.selector}")
+                        "Device not found matching selector: "
+                        f"{device_config.selector}")
                     continue
 
                 logger.info(f"Selected: {identifier}")
@@ -453,8 +452,8 @@ class ConfigManager:
                         if not client.write_fan_config(
                                 profile.profileId, fan_id, fan_dict):
                             logger.error(
-                                f"Failed to write fan config {
-                                    profile.profileId}/{fan_id}")
+                                "Failed to write fan config "
+                                f"{profile.profileId}/{fan_id}")
                             success = False
 
             # Apply RGB profiles

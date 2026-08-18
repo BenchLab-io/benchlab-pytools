@@ -202,10 +202,9 @@ class StatsFormatter:
         if min_val is None or max_val is None or avg_val is None:
             return ""
 
-        return f"{
-            min_val:.{decimals}f}-{
-            max_val:.{decimals}f} ~{
-            avg_val:.{decimals}f}{unit}"
+        return (
+            f"{min_val:.{decimals}f}-{max_val:.{decimals}f} "
+            f"~{avg_val:.{decimals}f}{unit}")
 
 
 # Convenience function for creating a stats callback

@@ -104,8 +104,8 @@ class BenchlabFleetSelect:
             if 50 <= x <= 966 and y0 <= y <= y1:
                 self.selected_port = dev["port"]
                 logger.info(
-                    f"Fleet selection done on {
-                        self.selected_port}, opening Overview.")
+                    f"Fleet selection done on {self.selected_port}, "
+                    "opening Overview.")
                 if self.manager and self.wigi:
                     self.manager.start_telemetry(self.selected_port, self.wigi)
 

@@ -104,8 +104,8 @@ class CircuitBreaker:
         if (self.config.circuit_breaker_enabled and
                 self.failure_count >= self.config.circuit_failure_threshold):
             self.logger.warning(
-                f"Circuit breaker: opening after {
-                    self.failure_count} failures")
+                "Circuit breaker: opening after "
+                f"{self.failure_count} failures")
             self.state = CircuitState.OPEN
 
 
@@ -144,9 +144,8 @@ class SmartRetryManager:
 
                 if attempt == self.config.max_retries:
                     self.logger.error(
-                        f"Max retries ({
-                            self.config.max_retries}) exceeded for {
-                            func.__name__}")
+                        f"Max retries ({self.config.max_retries}) "
+                        f"exceeded for {func.__name__}")
                     raise e
 
                 # Calculate delay
@@ -242,9 +241,8 @@ class AdaptiveRetryManager:
 
                 if attempt == self.config.max_retries:
                     self.logger.error(
-                        f"Max retries ({
-                            self.config.max_retries}) exceeded for {
-                            func.__name__}")
+                        f"Max retries ({self.config.max_retries}) "
+                        f"exceeded for {func.__name__}")
                     raise e
 
                 # Calculate adaptive delay

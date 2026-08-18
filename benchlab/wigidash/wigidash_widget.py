@@ -47,8 +47,7 @@ class WidgetConfig(Structure):
     @InvalidateFlag.setter
     def InvalidateFlag(self, value):
         logger.debug(
-            f"InvalidateFlag changed: {
-                self._InvalidateFlag} → {value}")
+            f"InvalidateFlag changed: {self._InvalidateFlag} → {value}")
         self._InvalidateFlag = value
 
     @property
@@ -58,8 +57,7 @@ class WidgetConfig(Structure):
     @UpdateFromCache.setter
     def UpdateFromCache(self, value):
         logger.debug(
-            f"UpdateFromCache changed: {
-                self._UpdateFromCache} → {value}")
+            f"UpdateFromCache changed: {self._UpdateFromCache} → {value}")
         self._UpdateFromCache = value
 
     @classmethod

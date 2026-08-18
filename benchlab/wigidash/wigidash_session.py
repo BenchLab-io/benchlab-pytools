@@ -131,8 +131,7 @@ class BenchlabWigiSession:
     def connect_wigidash(self):
         """Initialize the Wigidash device and UI."""
         logger.info(
-            f"Initializing Wigidash device {
-                self.usb_device.serial} ...")
+            f"Initializing Wigidash device {self.usb_device.serial} ...")
         try:
             self.usb_device.connect()
             self.wigidash = WigidashDevice(self.usb_device)
@@ -148,13 +147,12 @@ class BenchlabWigiSession:
             self.keepalive_manager.start()
 
             logger.info(
-                f"Wigidash device {
-                    self.usb_device.serial} initialized successfully.")
+                f"Wigidash device {self.usb_device.serial} "
+                "initialized successfully.")
             return True
         except Exception as e:
             logger.error(
-                f"Failed to initialize Wigidash {
-                    self.usb_device.serial}: {e}")
+                f"Failed to initialize Wigidash {self.usb_device.serial}: {e}")
             try:
                 self.usb_device.disconnect()
             except Exception:
@@ -201,9 +199,8 @@ class BenchlabWigiSession:
     def run(self):
         """Run UI loop for Wigidash pages."""
         logger.info(
-            f"Session {
-                self.usb_device.serial} started with manager={
-                self.manager}")
+            f"Session {self.usb_device.serial} started with "
+            f"manager={self.manager}")
         if not self.connect_wigidash():
             return
 
@@ -229,8 +226,7 @@ class BenchlabWigiSession:
                     )
                     self.fleet_page.start()
                     logger.info(
-                        f"Fleet page started for {
-                            self.usb_device.serial}.")
+                        f"Fleet page started for {self.usb_device.serial}.")
 
                 self.fleet_page.check_touch(touch)
                 self.fleet_page.render_and_display()
@@ -258,8 +254,8 @@ class BenchlabWigiSession:
                     self.next_page = "overview"
                     self.fleet_page = None
                     logger.info(
-                        f"Fleet selection done on {
-                            self.usb_device.serial}, opening Overview.")
+                        f"Fleet selection done on "
+                        f"{self.usb_device.serial}, opening Overview.")
 
             # --- Overview Page ---
             elif self.next_page == "overview":
@@ -276,8 +272,8 @@ class BenchlabWigiSession:
                             self.graph_metrics = requested_metrics
                             self.next_page = "graph"
                             logger.info(
-                                f"Overview requested graph metrics: {
-                                    self.graph_metrics}")
+                                "Overview requested graph metrics: "
+                                f"{self.graph_metrics}")
                         else:
                             self.next_page = "fleet"
 
@@ -294,9 +290,8 @@ class BenchlabWigiSession:
                     )
                     self.graph_page.start()
                     logger.info(
-                        f"Graph page started for {
-                            self.usb_device.serial} with metrics {
-                            self.graph_metrics}.")
+                        f"Graph page started for {self.usb_device.serial} "
+                        f"with metrics {self.graph_metrics}.")
 
                 self.graph_page.check_touch(touch)
                 self.graph_page.render_and_display()
@@ -305,8 +300,8 @@ class BenchlabWigiSession:
                     self.graph_page = None
                     self.next_page = "overview"
                     logger.info(
-                        f"Graph page exited for {
-                            self.usb_device.serial}, returning to Overview.")
+                        f"Graph page exited for {self.usb_device.serial}, "
+                        "returning to Overview.")
 
             time.sleep(0.05)
 
@@ -341,8 +336,7 @@ class BenchlabWigiSession:
                 barrier.wait()
             except threading.BrokenBarrierError:
                 logger.warning(
-                    f"Shutdown barrier broken for {
-                        self.usb_device.serial}")
+                    f"Shutdown barrier broken for {self.usb_device.serial}")
 
         # Show splash
         if self.wigidash:

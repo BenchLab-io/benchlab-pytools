@@ -80,9 +80,8 @@ class InfrastructureManager:
                 return True
 
             logger.info(
-                f"Starting FastAPI server on {
-                    self.fastapi_host}:{
-                    self.fastapi_port}")
+                f"Starting FastAPI server on "
+                f"{self.fastapi_host}:{self.fastapi_port}")
 
             try:
                 # Start FastAPI server as subprocess
@@ -107,8 +106,8 @@ class InfrastructureManager:
                     if self._wait_for_port(
                             self.fastapi_host, self.fastapi_port, timeout):
                         logger.info(
-                            f"FastAPI server started on port {
-                                self.fastapi_port}")
+                            "FastAPI server started on port "
+                            f"{self.fastapi_port}")
                         return True
                     else:
                         logger.error("FastAPI server failed to start")
@@ -171,9 +170,8 @@ class InfrastructureManager:
                 return True
 
             logger.info(
-                f"Starting MQTT publisher to {
-                    self.mqtt_broker}:{
-                    self.mqtt_port}")
+                f"Starting MQTT publisher to "
+                f"{self.mqtt_broker}:{self.mqtt_port}")
 
             try:
                 self._stop_event.clear()

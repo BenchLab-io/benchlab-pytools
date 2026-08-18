@@ -248,8 +248,7 @@ class ProcessManager:
                             os.path.abspath(__file__)),
                         "..",
                         "logs",
-                        f"svc_{
-                            mp.name}")
+                        f"svc_{mp.name}")
                     with open(f"{log_base}_stderr.log", "r",
                               encoding="utf-8") as f:
                         mp.stderr_log = f.read()

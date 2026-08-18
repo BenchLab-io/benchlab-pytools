@@ -147,9 +147,9 @@ def scan_wigidash(vendor_id=0x28DA, product_id=0xEF01):
             usb_dev = USBDevice(vendor_id, product_id, serial=serial)
             usb_dev.dev = dev
             logger.info(
-                f"Wigidash device found and configured: VID:0x{
-                    vendor_id:04X}, PID:0x{
-                    product_id:04X}, Serial: {serial}")
+                "Wigidash device found and configured: "
+                f"VID:0x{vendor_id:04X}, PID:0x{product_id:04X}, "
+                f"Serial: {serial}")
             devices.append(usb_dev)
         except usb.core.USBError as e:
             if is_linux and _is_permission_error(e):
@@ -175,8 +175,7 @@ class USBDevice:
         try:
             self.dev.set_configuration()
             logger.info(
-                f"USB device configured successfully, serial: {
-                    self.serial}")
+                f"USB device configured successfully, serial: {self.serial}")
         except usb.core.USBError as e:
             if is_linux and _is_permission_error(e):
                 logger.warning(
@@ -205,8 +204,7 @@ class USBDevice:
             data = self.dev.ctrl_transfer(
                 0x80 | 0x21, cmd, wValue, wIndex, length, timeout=timeout)
             logger.debug(
-                f"IN transfer cmd=0x{
-                    cmd:02X}, length={length} → {data}")
+                f"IN transfer cmd=0x{cmd:02X}, length={length} → {data}")
             return data
         except usb.core.USBError as e:
             logger.error(f"IN transfer failed: {e}")
@@ -238,9 +236,7 @@ class USBDevice:
         try:
             written = self.dev.write(endpoint, data, timeout=timeout)
             logger.debug(
-                f"Bulk write to ep=0x{
-                    endpoint:02X}, len={
-                    len(data)} bytes")
+                f"Bulk write to ep=0x{endpoint:02X}, len={len(data)} bytes")
             return written
         except usb.core.USBError as e:
             logger.error(f"Bulk write failed: {e}")

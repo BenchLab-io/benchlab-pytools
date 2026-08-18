@@ -109,14 +109,14 @@ class DataSourceManager:
             self._datasource = create_datasource(self.source_type, **kwargs)
 
             if not self._datasource.connect():
-                self._last_error = f"Failed to connect to {
-                    self.source_type} datasource"
+                self._last_error = (
+                    f"Failed to connect to {self.source_type} datasource")
                 return False
 
             devices = self._datasource.list_devices()
             if not devices:
-                self._last_error = f"No devices available via {
-                    self.source_type}"
+                self._last_error = (
+                    f"No devices available via {self.source_type}")
                 return False
 
             if uid and any(d.get('uid') == uid for d in devices):
@@ -153,9 +153,8 @@ class DataSourceManager:
             self._worker_thread.start()
 
             logger.info(
-                f"Connected to {
-                    self.source_type} datasource, selected device: {
-                    self._selected_uid}")
+                f"Connected to {self.source_type} datasource, "
+                f"selected device: {self._selected_uid}")
             return True
 
         except Exception as e:

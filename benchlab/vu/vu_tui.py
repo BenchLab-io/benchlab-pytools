@@ -133,15 +133,11 @@ class VUTUI:
                 if hasattr(b, "close") and callable(b.close):
                     b.close()
                     logger.info(
-                        f"Closed serial port for benchlab {
-                            b.get(
-                                'port', '?')}")
+                        "Closed serial port for benchlab "
+                        f"{b.get('port', '?')}")
             except Exception as e:
                 logger.warning(
-                    f"Failed to close port {
-                        b.get(
-                            'port',
-                            '?')}: {e}")
+                    f"Failed to close port {b.get('port', '?')}: {e}")
 
         logger.info("Cleanup complete.")
 
@@ -213,10 +209,9 @@ class VUTUI:
                 })
 
     def update_dial_name_on_server(self, dial_uid, new_name):
-        url = f"{
-            self.server_cfg.get(
-                'vu_server_url',
-                'http://localhost:5340')}/api/v0/dial/{dial_uid}/name"
+        server_url = self.server_cfg.get(
+            'vu_server_url', 'http://localhost:5340')
+        url = f"{server_url}/api/v0/dial/{dial_uid}/name"
         params = {
             "key": self.server_cfg.get("api_key", ""),
             "name": new_name
@@ -227,9 +222,8 @@ class VUTUI:
                 return True
             else:
                 logger.warning(
-                    f"Failed to update dial {dial_uid} name on server: {
-                        resp.status_code} {
-                        resp.text}")
+                    f"Failed to update dial {dial_uid} name on server: "
+                    f"{resp.status_code} {resp.text}")
         except Exception as e:
             logger.warning(
                 f"Exception updating dial {dial_uid} name on server: {e}")
@@ -555,23 +549,22 @@ class VUTUI:
         col_min_width = 5
         col_max_width = 5
 
-        self.stdscr.addstr(
-            y, 2, f"{
-                'Dial UID':<{col_uid_width}} {
-                'Dial Name':<{col_name_width}} " f"{
-                'Benchlab':<{col_port_width}} {
-                    'Min':<{col_min_width}} " f"{
-                        'Max':<{col_max_width}} Sensor", curses.A_UNDERLINE)
+        header_line = (
+            f"{'Dial UID':<{col_uid_width}} "
+            f"{'Dial Name':<{col_name_width}} "
+            f"{'Benchlab':<{col_port_width}} "
+            f"{'Min':<{col_min_width}} "
+            f"{'Max':<{col_max_width}} Sensor")
+        self.stdscr.addstr(y, 2, header_line, curses.A_UNDERLINE)
         y += 1
 
         for idx, dial in enumerate(self.all_dials):
-            line = f"{
-                dial['uid']:<{col_uid_width}} {
-                dial['name']:<{col_name_width}} " f"{
-                dial['benchlab_port']:<{col_port_width}} {
-                dial['min']:<{col_min_width}} " f"{
-                    dial['max']:<{col_max_width}} {
-                        dial['sensor']}"
+            line = (
+                f"{dial['uid']:<{col_uid_width}} "
+                f"{dial['name']:<{col_name_width}} "
+                f"{dial['benchlab_port']:<{col_port_width}} "
+                f"{dial['min']:<{col_min_width}} "
+                f"{dial['max']:<{col_max_width}} {dial['sensor']}")
             self.stdscr.addstr(
                 y + idx,
                 2,
@@ -717,8 +710,8 @@ class VUTUI:
                 self.stdscr.addstr(h - num_rows - 3 + row,
                                    x, s_str[:col_width - 1])
 
-            prompt = f"Select sensor number for {
-                dial['name']} or 'q' to skip: "
+            prompt = (
+                f"Select sensor number for {dial['name']} or 'q' to skip: ")
             self.stdscr.move(h - 4, 0)
             self.stdscr.clrtoeol()
             self.stdscr.addstr(h - 3, 0, prompt[:w - 1])
@@ -900,8 +893,8 @@ def launch_vu_config(args=None):
         datasource = DataSourceManager(source_type=args.source, **ds_kwargs)
         if not datasource.connect():
             logger.warning(
-                f"Could not connect to {
-                    args.source} datasource — sensor list may be empty")
+                f"Could not connect to {args.source} datasource — "
+                "sensor list may be empty")
     except Exception:
         # run_vu_tui's own cleanup (which terminates server_proc) never runs
         # if we fail before reaching curses.wrapper below, so terminate it
