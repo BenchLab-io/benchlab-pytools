@@ -595,7 +595,15 @@ class MQTTDataSource(DataSource):
 
         with self._lock:
             return [
-                {'uid': uid, 'port': info.get('com_port', 'unknown')}
+                {
+                    'uid': uid,
+                    'port': info.get('com_port', 'unknown'),
+                    'firmware': info.get('firmware', '?'),
+                    'variant': info.get('variant'),
+                    'VendorId': info.get('VendorId', 0),
+                    'ProductId': info.get('ProductId', 0),
+                    'FwVersion': info.get('FwVersion', 0),
+                }
                 for uid, info in self._device_info.items()
             ]
 
@@ -729,6 +737,34 @@ def _normalise_cs_telemetry(sensors_raw: list) -> Dict[str, Any]:
     return result
 
 
+def _normalise_cs_device_info(d: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalise a C# service device dict into the shape the TUI expects.
+
+    The C# service's /devices, /device/{uid}/info, and discovery-pipe
+    responses use camelCase keys (productId, vendorId, firmwareVersion —
+    confirmed against BenchlabSensorWorker.cs/HttpApiServer.cs in the
+    BENCHLAB_Service repo). Note the HTTP API's /devices and
+    /device/{uid}/info endpoints only send productId — no vendorId or
+    firmwareVersion — so those default to 0 there; only the named-pipe
+    discovery/GetServiceInfo responses include all three.
+    DirectDataSource/FastAPIDataSource populate PascalCase keys
+    (ProductId, VendorId, FwVersion) plus a computed 'variant' — this
+    adds those same keys without discarding what the C# service sent.
+    """
+    result = dict(d)
+    product_id = d.get("ProductId", d.get("productId", 0))
+    vendor_id = d.get("VendorId", d.get("vendorId", 0))
+    fw_version = d.get("FwVersion", d.get("firmwareVersion", 0))
+    result["ProductId"] = product_id
+    result["VendorId"] = vendor_id
+    result["FwVersion"] = fw_version
+    result.setdefault("firmware", d.get("firmware", fw_version))
+    # 0x11 = BENCHLAB_BL2_PRODUCT_ID (see DirectDataSource/tui_core.py).
+    result.setdefault(
+        "variant", "BL2" if product_id == 0x11 else "ORIGINAL")
+    return result
+
+
 class NamedPipeDataSource(DataSource):
     """Data source that connects to the C# BenchLab Windows service via
     named pipes.
@@ -792,14 +828,31 @@ class NamedPipeDataSource(DataSource):
             self._pipe_names.clear()
             for d in devices:
                 uid = d.get("guid") or d.get("deviceName", "unknown")
+                # Field names confirmed against BenchlabSensorWorker.cs's
+                # ListDevices response in the BENCHLAB_Service repo.
+                product_id = d.get("productId", 0)
+                vendor_id = d.get("vendorId", 0)
+                fw_version = d.get("firmwareVersion", 0)
+                # 0x11 = BENCHLAB_BL2_PRODUCT_ID (see
+                # DirectDataSource/tui_core.py); hardcoded rather than
+                # importing benchlab_pycore, which named_pipe consumers
+                # of the C# service don't necessarily have installed.
+                variant = "BL2" if product_id == 0x11 else "ORIGINAL"
                 self._devices[uid] = {
                     "uid": uid,
                     "port": d.get("port", "unknown"),
                     "name": d.get("deviceName", "unknown"),
-                    "productId": d.get("productId", 0),
+                    "productId": product_id,
                     "status": d.get("status", "unknown"),
                     "sensorCount": d.get("sensorCount", 0),
                     "pipeName": d.get("pipeName", ""),
+                    # PascalCase aliases matching DirectDataSource's shape,
+                    # so consumers (e.g. the TUI) can detect BL1/BL2.
+                    "firmware": fw_version,
+                    "variant": variant,
+                    "VendorId": vendor_id,
+                    "ProductId": product_id,
+                    "FwVersion": fw_version,
                 }
                 self._pipe_names[uid] = d.get("pipeName", "")
 
@@ -1041,7 +1094,7 @@ class ServiceHttpDataSource(DataSource):
                 for d in devices:
                     uid = d.get("uid", "")
                     if uid:
-                        self._devices[uid] = d
+                        self._devices[uid] = _normalise_cs_device_info(d)
 
         self._connected = True
         self._stop_event.clear()
@@ -1146,7 +1199,8 @@ class ServiceHttpDataSource(DataSource):
                         for d in devices:
                             uid = d.get("uid", "")
                             if uid:
-                                self._devices[uid] = d
+                                self._devices[uid] = (
+                                    _normalise_cs_device_info(d))
 
                 # Poll telemetry for each device
                 with self._lock:

@@ -17,6 +17,11 @@ from benchlab_pycore.core import (
     read_device,
     BENCHLAB_ORIGINAL_PRODUCT_ID,
 )
+try:
+    from benchlab_pycore.core import BENCHLAB_BL2_PRODUCT_ID
+except ImportError:
+    from benchlab_pycore.core import (
+        BENCHLAB_CFE_PRODUCT_ID as BENCHLAB_BL2_PRODUCT_ID)
 from benchlab_pycore.core.serial_io import get_fleet_info
 
 # Import DeviceRegistry so the MQTT publisher publishes device lifecycle events
@@ -340,12 +345,36 @@ def device_thread(device, cfg, publish_interval=1):
                     time.sleep(1)
                     continue
 
+                # Read device info (ProductId/VendorId/FwVersion) so the
+                # info payload lets consumers (e.g. the TUI) detect the
+                # BL1/BL2 variant, matching DirectDataSource's shape.
+                vendor_id = 0
+                product_id = BENCHLAB_ORIGINAL_PRODUCT_ID
+                fw_version = device.get("firmware")
+                try:
+                    dev_info = read_device(ser)
+                    if dev_info:
+                        vendor_id = dev_info.get('VendorId', 0)
+                        product_id = dev_info.get(
+                            'ProductId', BENCHLAB_ORIGINAL_PRODUCT_ID)
+                        fw_version = dev_info.get('FwVersion', fw_version)
+                except Exception:
+                    pass
+                variant = (
+                    "BL2" if product_id == BENCHLAB_BL2_PRODUCT_ID
+                    else "ORIGINAL")
+
                 # Send initial info payload (retain=True so late subscribers
                 # like the TUI can discover this device)
                 info_payload = {
                     "uid": uid,
                     "com_port": port,
-                    "firmware": device.get("firmware")}
+                    "firmware": device.get("firmware"),
+                    "VendorId": vendor_id,
+                    "ProductId": product_id,
+                    "FwVersion": fw_version,
+                    "variant": variant,
+                }
                 topic_info = f"{cfg['topic_prefix']}/{uid}/info"
                 mqtt_publish(
                     client,
