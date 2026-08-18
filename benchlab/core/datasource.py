@@ -372,8 +372,7 @@ class FastAPIDataSource(DataSource):
                 return True
             else:
                 logger.error(
-                    f"FastAPI health check returned {
-                        response.status_code}")
+                    f"FastAPI health check returned {response.status_code}")
         except Exception as e:
             logger.error(f"Failed to connect to FastAPI server: {e}")
 
@@ -1025,9 +1024,8 @@ class ServiceHttpDataSource(DataSource):
 
         if resp.status_code != 200:
             logger.error(
-                f"BenchLab service health check failed (HTTP {
-                    resp.status_code}) " f"at {
-                    self.base_url}/health")
+                f"BenchLab service health check failed "
+                f"(HTTP {resp.status_code}) at {self.base_url}/health")
             return False
 
         # Fetch initial device list
@@ -1051,8 +1049,7 @@ class ServiceHttpDataSource(DataSource):
             target=self._worker_loop, daemon=True)
         self._worker_thread.start()
         logger.info(
-            f"Connected to BenchLab service HTTP API at {
-                self.base_url}")
+            f"Connected to BenchLab service HTTP API at {self.base_url}")
         return True
 
     def disconnect(self) -> None:

@@ -189,8 +189,8 @@ class WigidashDevice:
         wValue = (page << 8) | widget_id
         widget_bytes = bytes(widget_config)
         logger.debug(
-            f"Adding widget page={page}, id={widget_id}, size={
-                len(widget_bytes)} bytes")
+            f"Adding widget page={page}, id={widget_id}, "
+            f"size={len(widget_bytes)} bytes")
         self.usb.ctrl_transfer_out(
             cmd=self.CMD_SCREENCFG_WIDGET_ADD,
             wValue=wValue,

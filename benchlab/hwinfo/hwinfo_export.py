@@ -71,8 +71,7 @@ def write_hwinfo_sensor(device_name, sensor_type, idx, name, value, unit=None):
             # Write Value
             if isinstance(value, float):
                 winreg.SetValueEx(
-                    key, "Value", 0, winreg.REG_SZ, f"{
-                        value:.3f}")
+                    key, "Value", 0, winreg.REG_SZ, f"{value:.3f}")
             else:
                 winreg.SetValueEx(key, "Value", 0, winreg.REG_SZ, str(value))
 
@@ -156,8 +155,7 @@ def _export_grouped(device_name: str, grouped_sensors: dict):
             write_hwinfo_sensor(device_name, group, idx, key, value, unit)
 
     summary = ", ".join(
-        f"{k}: {
-            len(v)}" for k,
+        f"{k}: {len(v)}" for k,
         v in grouped_sensors.items() if v)
     logger.debug("Device %s export summary: %s", device_name, summary)
 
@@ -308,8 +306,8 @@ def export_all_devices(update_interval=1, datasource=None):
             "HWiNFO export is only supported on Windows. "
             "Please run on a Windows system.")
         raise RuntimeError(
-            f"HWiNFO export requires Windows. Current platform: {
-                sys.platform}")
+            "HWiNFO export requires Windows. "
+            f"Current platform: {sys.platform}")
 
     # Remove only old BenchLab entries, not user-created sensors
     try:

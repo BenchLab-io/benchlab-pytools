@@ -141,10 +141,8 @@ class EnhancedCSVLogger:
         print("\n--- Available Devices ---")
         for i, dev in enumerate(devices, 1):
             print(
-                f"  {i}: Port: {
-                    dev.port:<12} UID: {
-                    dev.uid}  FW: {
-                    dev.firmware}")
+                f"  {i}: Port: {dev.port:<12} UID: {dev.uid}  "
+                f"FW: {dev.firmware}")
 
         selection = input(
             "\nEnter device numbers (comma-separated), 'all', "

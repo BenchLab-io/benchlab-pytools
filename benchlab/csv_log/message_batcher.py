@@ -95,9 +95,7 @@ class MessageBatcher:
                     (self.metrics.avg_flush_time * (n - 1) + elapsed) / n
                 )
             self.logger.debug(
-                f"Flushed {
-                    len(messages_to_flush)} messages in {
-                    elapsed:.3f}s")
+                f"Flushed {len(messages_to_flush)} messages in {elapsed:.3f}s")
             return True
 
         except Exception as e:
@@ -222,8 +220,7 @@ class CSVBatchWriter:
                 elif self.format == "json":
                     self._write_json_batch(file_info, messages_to_write)
                 self.logger.debug(
-                    f"Wrote {
-                        len(messages_to_write)} rows for {uid}")
+                    f"Wrote {len(messages_to_write)} rows for {uid}")
             except Exception as e:
                 self.logger.error(f"Failed to write batch for {uid}: {e}")
                 buf.extend(messages_to_write)  # restore on failure

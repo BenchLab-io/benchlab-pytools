@@ -76,9 +76,8 @@ class WigidashManager:
         if log_info:
             count = len(all_devices)
             if count:
-                logger.info(
-                    f"{count} available Benchlab device{
-                        's' if count > 1 else ''}:")
+                plural = 's' if count > 1 else ''
+                logger.info(f"{count} available Benchlab device{plural}:")
                 for dev in all_devices:
                     logger.info(f"  {dev['port']}: UID {dev['uid']}")
             else:
@@ -309,9 +308,7 @@ def main(args=None):
         ds_kwargs["broker"] = args.mqtt_broker
         ds_kwargs["port"] = args.mqtt_port
         logger.info(
-            f"Using MQTT datasource: {
-                args.mqtt_broker}:{
-                args.mqtt_port}")
+            f"Using MQTT datasource: {args.mqtt_broker}:{args.mqtt_port}")
     else:
         logger.info("Using direct datasource")
 

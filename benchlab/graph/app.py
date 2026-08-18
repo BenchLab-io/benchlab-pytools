@@ -263,12 +263,15 @@ class GraphApp:
                                             min_y - margin, max_y + margin)
 
                     s = self.session_stats
-                    min_text = f"Min: {
-                        s['min']:.2f}" if s["min"] is not None else "Min: --"
-                    max_text = f"Max: {
-                        s['max']:.2f}" if s["max"] is not None else "Max: --"
-                    avg_text = f"Avg: {
-                        s['avg']:.2f}" if s["avg"] is not None else "Avg: --"
+                    min_text = (
+                        f"Min: {s['min']:.2f}"
+                        if s["min"] is not None else "Min: --")
+                    max_text = (
+                        f"Max: {s['max']:.2f}"
+                        if s["max"] is not None else "Max: --")
+                    avg_text = (
+                        f"Avg: {s['avg']:.2f}"
+                        if s["avg"] is not None else "Avg: --")
                     for tag, text in (
                             ("graph_min", min_text),
                             ("graph_min_float", min_text),

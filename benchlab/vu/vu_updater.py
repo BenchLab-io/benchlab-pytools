@@ -167,9 +167,9 @@ class VUClient:
 
     def get_dial_image_crc(self, dial_uid: str) -> str:
         try:
-            headers = {
-                "Authorization": f"Bearer {
-                    self.api_key}"} if self.api_key else {}
+            headers = (
+                {"Authorization": f"Bearer {self.api_key}"}
+                if self.api_key else {})
             r = requests.get(
                 f"{self.server_url}/api/v0/dial/{dial_uid}/image/crc",
                 headers=headers, timeout=10)

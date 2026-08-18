@@ -147,8 +147,7 @@ def start_vu_server() -> subprocess.Popen | None:
         time.sleep(1)
         if check_vu_server(new_cfg["vu_server_url"], new_cfg["api_key"]):
             logger.info(
-                f"VU server is now running at {
-                    new_cfg['vu_server_url']}")
+                f"VU server is now running at {new_cfg['vu_server_url']}")
             break
     else:
         logger.error("Failed to verify VU server after startup.")
@@ -159,8 +158,7 @@ def start_vu_server() -> subprocess.Popen | None:
     try:
         VU_SERVER_CONFIG.write_text(json.dumps(new_cfg, indent=2))
         logger.info(
-            f"Updated {VU_SERVER_CONFIG} with {
-                new_cfg['vu_server_url']}")
+            f"Updated {VU_SERVER_CONFIG} with {new_cfg['vu_server_url']}")
     except Exception as e:
         logger.warning(f"Failed to write {VU_SERVER_CONFIG}: {e}")
 

@@ -67,8 +67,7 @@ class BenchlabGraph:
     def start(self):
         self.running = True
         logger.info(
-            f"Graph page started with metrics: {
-                self.selected_metrics}")
+            f"Graph page started with metrics: {self.selected_metrics}")
 
     def return_to_overview(self):
         logger.info("Returning to Overview page")
@@ -163,8 +162,8 @@ class BenchlabGraph:
                    if f"{r}_{key_suffix}" in self.wigi.sensor_data]
         self.plot_metrics = metrics
         logger.info(
-            f"Graph metrics updated for section '{key_suffix}': {
-                self.plot_metrics}")
+            f"Graph metrics updated for section '{key_suffix}': "
+            f"{self.plot_metrics}")
 
     # -------------------------------
     # Rendering

@@ -217,8 +217,7 @@ class CloudMQTTClient:
                 time.sleep(0.1)
             if not self._connected:
                 logger.error(
-                    f"Timed out connecting to {host}:{
-                        self.cfg['port']}")
+                    f"Timed out connecting to {host}:{self.cfg['port']}")
                 return False
             logger.info(f"Connected to cloud broker {host}:{self.cfg['port']}")
             return True
@@ -229,9 +228,8 @@ class CloudMQTTClient:
     def reconnect(self) -> bool:
         """Attempt to reconnect using a fresh client."""
         logger.info(
-            f"Reconnecting to cloud broker {
-                self.cfg['host']}:{
-                self.cfg['port']}...")
+            f"Reconnecting to cloud broker "
+            f"{self.cfg['host']}:{self.cfg['port']}...")
         try:
             self._client.loop_stop()
         except Exception:

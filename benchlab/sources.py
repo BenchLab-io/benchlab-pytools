@@ -145,12 +145,7 @@ import asyncio
 from amqtt.broker import Broker
 
 config = {{
-    "listeners": {{
-        "default": {{
-            "type": "tcp",
-            "bind": "0.0.0.0:{port}",
-        }},
-    }},
+    "listeners": {{"default": {{"type": "tcp", "bind": "0.0.0.0:{port}"}}}},
     "auth": {{"allow-anonymous": True}},
     "topic-check": {{"enabled": False}},
 }}

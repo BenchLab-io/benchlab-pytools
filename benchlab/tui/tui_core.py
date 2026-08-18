@@ -210,9 +210,9 @@ class TUICore:
 
     def _render_size_warning(self, width: int, height: int):
         msg = (
-            f" Terminal too small ({width}x{height})" f" — resize to {
-                Config.MIN_TERMINAL_COLS}x{
-                Config.MIN_TERMINAL_ROWS} ")
+            f" Terminal too small ({width}x{height})"
+            f" — resize to "
+            f"{Config.MIN_TERMINAL_COLS}x{Config.MIN_TERMINAL_ROWS} ")
         try:
             self.stdscr.addstr(
                 0, 0, msg[:width],   # ← truncate, don't center
@@ -428,25 +428,17 @@ class TUICore:
         try:
             self.stdscr.addstr(6, cols['SEL'], f"{'':2}", hdr_attr)
             self.stdscr.addstr(
-                6, cols['MODEL'], f"{
-                    'Model':<{
-                        widths['MODEL']}}", hdr_attr)
+                6, cols['MODEL'],
+                f"{'Model':<{widths['MODEL']}}", hdr_attr)
             self.stdscr.addstr(
-                6, cols['PORT'], f"{
-                    'Port':<{
-                        widths['PORT']}}", hdr_attr)
+                6, cols['PORT'], f"{'Port':<{widths['PORT']}}", hdr_attr)
             self.stdscr.addstr(
-                6, cols['FW'], f"{
-                    'Firmware':<{
-                        widths['FW']}}", hdr_attr)
+                6, cols['FW'], f"{'Firmware':<{widths['FW']}}", hdr_attr)
             self.stdscr.addstr(
-                6, cols['UID'], f"{
-                    'UID':<{
-                        widths['UID']}}", hdr_attr)
+                6, cols['UID'], f"{'UID':<{widths['UID']}}", hdr_attr)
             self.stdscr.addstr(
-                6, cols['STATUS'], f"{
-                    'Status':<{
-                        widths['STATUS']}}", hdr_attr)
+                6, cols['STATUS'],
+                f"{'Status':<{widths['STATUS']}}", hdr_attr)
             self.stdscr.addstr(6, cols['ACTIVE'], "Active", hdr_attr)
         except curses.error:
             pass
@@ -490,21 +482,19 @@ class TUICore:
             try:
                 self.stdscr.addstr(row, cols['SEL'], cursor, row_color)
                 self.stdscr.addstr(
-                    row, cols['MODEL'], f"{
-                        model_str:<{
-                            widths['MODEL']}}", row_color)
+                    row, cols['MODEL'],
+                    f"{model_str:<{widths['MODEL']}}", row_color)
                 self.stdscr.addstr(
-                    row, cols['PORT'], f"{
-                        port:<{
-                            widths['PORT']}}", row_color)
+                    row, cols['PORT'],
+                    f"{port:<{widths['PORT']}}", row_color)
 
                 if is_busy:
                     self.stdscr.addstr(
-                        row, cols['FW'], f"{'N/A':<{widths['FW']}}", row_color)
+                        row, cols['FW'],
+                        f"{'N/A':<{widths['FW']}}", row_color)
                     self.stdscr.addstr(
-                        row, cols['UID'], f"{
-                            dev_uid:<{
-                                widths['UID']}}", curses.color_pair(
+                        row, cols['UID'], f"{dev_uid:<{widths['UID']}}",
+                        curses.color_pair(
                             Config.COLOR_PAIRS['caution']) | curses.A_BOLD)
                 else:
                     try:
@@ -513,18 +503,15 @@ class TUICore:
                     except (TypeError, ValueError):
                         fw_str = "0x????????"
                     self.stdscr.addstr(
-                        row, cols['FW'], f"{
-                            fw_str:<{
-                                widths['FW']}}", row_color)
+                        row, cols['FW'],
+                        f"{fw_str:<{widths['FW']}}", row_color)
                     self.stdscr.addstr(
-                        row, cols['UID'], f"{
-                            dev_uid:<{
-                                widths['UID']}}", row_color)
+                        row, cols['UID'],
+                        f"{dev_uid:<{widths['UID']}}", row_color)
 
                 self.stdscr.addstr(
-                    row, cols['STATUS'], f"{
-                        status:<{
-                            widths['STATUS']}}", status_color)
+                    row, cols['STATUS'],
+                    f"{status:<{widths['STATUS']}}", status_color)
 
                 if is_active:
                     self.stdscr.addstr(
@@ -616,8 +603,7 @@ class TUICore:
 
             self._draw_section(16, 2, "TUI")
             self.stdscr.addstr(
-                17, 4, f"{
-                    'Refresh Interval':<22} {refresh_interval} s")
+                17, 4, f"{'Refresh Interval':<22} {refresh_interval} s")
 
         except curses.error:
             pass
@@ -1145,8 +1131,7 @@ class TUICore:
                 self.stdscr.addstr(
                     row,
                     cols['NAME'] + 2,
-                    f"Fan{
-                        i:<5}",
+                    f"Fan{i:<5}",
                     fan_color)
                 self.stdscr.addstr(
                     row, cols['DUTY'] + 2, f"{duty:>5}%", fan_color)
@@ -1282,9 +1267,7 @@ class TUICore:
 
         try:
             self.stdscr.addstr(
-                y, x, f"{
-                    label:<14} {val_str} {
-                    unit:<3} ", color)
+                y, x, f"{label:<14} {val_str} {unit:<3} ", color)
             self.stdscr.addstr(bar, color)
 
             if stat and stat[0] is not None:

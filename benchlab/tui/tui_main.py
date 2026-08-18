@@ -118,8 +118,8 @@ class TUIApplication:
 
         if self.source_type == 'fastapi':
             if hasattr(args, 'api_port'):
-                datasource_kwargs['base_url'] = f"http://127.0.0.1:{
-                    args.api_port}"
+                datasource_kwargs['base_url'] = (
+                    f"http://127.0.0.1:{args.api_port}")
             else:
                 datasource_kwargs['base_url'] = "http://127.0.0.1:8000"
             datasource_kwargs['timeout'] = 5.0
@@ -234,26 +234,22 @@ class TUIApplication:
             if self.datasource_manager.connect():
                 uid = self.datasource_manager.get_selected_uid()
                 self.tui_core.set_status(
-                    f"Connected via {
-                        self.source_type.upper()}")
+                    f"Connected via {self.source_type.upper()}")
                 logger.info(
-                    f"Connected to {
-                        self.source_type} datasource, selected: {uid}")
+                    f"Connected to {self.source_type} datasource, "
+                    f"selected: {uid}")
             else:
                 snapshot = self.datasource_manager.snapshot()
                 error_msg = snapshot.get(
-                    'last_error', f"Failed to connect to {
-                        self.source_type}")
+                    'last_error', f"Failed to connect to {self.source_type}")
                 self.tui_core.set_status(
                     f"Connection failed: {error_msg}", 5.0)
                 logger.error(
-                    f"Failed to connect to {
-                        self.source_type}: {error_msg}")
+                    f"Failed to connect to {self.source_type}: {error_msg}")
         except Exception as e:
             self.tui_core.set_status(f"Connection error: {str(e)}", 5.0)
             logger.error(
-                f"Exception during {
-                    self.source_type} connection: {e}")
+                f"Exception during {self.source_type} connection: {e}")
 
     def _connect_to_device(self, device: Dict[str, Any]):
         port = device.get('port')
@@ -280,8 +276,7 @@ class TUIApplication:
                 if self.datasource_manager.select_device(uid):
                     self.tui_core.set_status(f"Selected device {uid}")
                     logger.info(
-                        f"Selected device {uid} via {
-                            self.source_type}")
+                        f"Selected device {uid} via {self.source_type}")
                 else:
                     self.tui_core.set_status("Failed to select device", 3.0)
                     logger.warning(f"Failed to select device {uid}")

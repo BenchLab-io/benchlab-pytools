@@ -177,8 +177,8 @@ class DirectConfigClient(ConfigClient):
 
         self.product_id = info.get('ProductId')
         logger.info(
-            f"Connected to device on {port}, Product ID: 0x{
-                self.product_id:02X}")
+            f"Connected to device on {port}, "
+            f"Product ID: 0x{self.product_id:02X}")
 
     def get_device_info(self) -> Optional[Dict[str, Any]]:
         """Get device information."""
@@ -465,8 +465,7 @@ class NamedPipeConfigClient(ConfigClient):
             win32pipe.WaitNamedPipe(path, 5000)
         except pywintypes.error as e:
             raise ConnectionError(
-                f"Pipe '{
-                    self.pipe_name}' not available: {e}") from e
+                f"Pipe '{self.pipe_name}' not available: {e}") from e
 
         self.handle = win32file.CreateFile(
             path,

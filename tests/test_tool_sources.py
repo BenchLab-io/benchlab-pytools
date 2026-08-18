@@ -223,12 +223,8 @@ def device():
             "No BenchLab device found – skipping tool integration tests")
     dev = devices[0]
     _ok(
-        f"Found device: uid={
-            dev['uid']}  port={
-            dev['port']}  fw={
-                dev.get(
-                    'fw',
-                    '?')}")
+        f"Found device: uid={dev['uid']}  port={dev['port']}  "
+        f"fw={dev.get('fw', '?')}")
     return dev
 
 
