@@ -4,6 +4,20 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.0.1] - 2026-08-18
+
+### Fixed
+- PyPI install was broken: `bootstrap.py` and the core `requirements.txt`
+  lived at the repo root and were never included in the wheel (only
+  `benchlab/` is packaged), so `pip install benchlab-pytools` followed by
+  `benchlab ...` failed with `ModuleNotFoundError: No module named
+  'bootstrap'`. Both files moved into `benchlab/`, with internal imports
+  updated to relative imports.
+- `pywin32` was missing from `pyproject.toml`'s core dependencies, so
+  PyPI installs on Windows did not pull it in despite the `named_pipe`
+  data source depending on it. Added `pywin32>=306; platform_system ==
+  'Windows'` alongside the existing `windows-curses` entry.
+
 ## [3.0.0] - 2026-08-15
 
 ### Added
@@ -41,4 +55,5 @@ export, MQTT publisher, VU dials, WigiDash, and config import/export tools,
 sharing a common data-source layer (direct serial, FastAPI, MQTT, named
 pipe, service HTTP).
 
+[3.0.1]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/BenchLab-io/benchlab-pytools/compare/v0.8.2...v3.0.0
