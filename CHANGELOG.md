@@ -4,6 +4,17 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.0.4] - 2026-08-18
+
+### Fixed
+- 12VHPWR tab per-pin sense lines (`HPWR{1,2}_W{1..6}`) read 0.0 over
+  `service_http`/`named_pipe`, even though other apps using the same
+  `service_http` API showed correct values. The C# service's telemetry
+  normalization mapped the HPWR1/HPWR2 rail summaries but never mapped
+  the 12 individual per-pin sense-line sensors, so their C#
+  `ShortName`s (`HPWR{n}_W{m}_{P,I,V}`) passed through unmapped instead
+  of becoming the `..._{Power,Current,Voltage}` keys the TUI reads.
+
 ## [3.0.3] - 2026-08-18
 
 ### Fixed
@@ -91,6 +102,7 @@ export, MQTT publisher, VU dials, WigiDash, and config import/export tools,
 sharing a common data-source layer (direct serial, FastAPI, MQTT, named
 pipe, service HTTP).
 
+[3.0.4]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.0.3...v3.0.4
 [3.0.3]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.0.2...v3.0.3
 [3.0.2]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.0.0...v3.0.1
