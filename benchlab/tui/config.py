@@ -14,7 +14,10 @@ from typing import Tuple
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Minimum terminal size requirements
-MIN_TERMINAL_ROWS = 35
+# The 12VHPWR tab's stacked Power/Current/Voltage sections (12 channels
+# each) need rows through ~45 for the last Voltage bar, plus 2 rows for
+# the status bar at the bottom (drawn at height-2/height-1).
+MIN_TERMINAL_ROWS = 48
 MIN_TERMINAL_COLS = 100
 
 # Tab configuration
