@@ -25,7 +25,9 @@ def main():
     sys.path.insert(0, str(BASE_DIR))
 
     # Fast fail checks first
-    from benchlab.bootstrap import check_python_version, install_core_requirements
+    from benchlab.bootstrap import (
+        check_python_version, install_core_requirements,
+    )
     check_python_version()
     install_core_requirements()
 
