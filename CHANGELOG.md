@@ -4,6 +4,18 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.0.2] - 2026-08-18
+
+### Fixed
+- Several f-strings had their `{...}` expression split across a line
+  break, which is [PEP 701](https://peps.python.org/pep-0701/) syntax
+  only valid on Python 3.12+. Despite `requires-python = ">=3.10"`, this
+  raised `SyntaxError` immediately on 3.10/3.11 (e.g. `benchlab -tui`
+  failing with `SyntaxError: unterminated string literal` in
+  `benchlab/core/datasource.py`) — invisible in CI since every workflow
+  pins Python 3.13. Collapsed all such f-strings back onto single lines
+  across 27 files.
+
 ## [3.0.1] - 2026-08-18
 
 ### Fixed
@@ -55,5 +67,6 @@ export, MQTT publisher, VU dials, WigiDash, and config import/export tools,
 sharing a common data-source layer (direct serial, FastAPI, MQTT, named
 pipe, service HTTP).
 
+[3.0.2]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/BenchLab-io/benchlab-pytools/compare/v0.8.2...v3.0.0
