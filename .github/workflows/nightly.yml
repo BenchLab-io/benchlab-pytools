@@ -1,0 +1,114 @@
+name: nightly
+
+# Builds a nightly prerelease from main, but only when main has moved since
+# the last nightly. Keeps a single rolling "nightly" tag/release — the
+# previous one is deleted before the new one is created, so storage doesn't
+# accumulate. Actual releases are only ever cut from v*.*.* tags (release.yml).
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    name: Check for new commits
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compare main HEAD to existing nightly tag
+        id: check
+        run: |
+          HEAD_SHA=$(git rev-parse main)
+          if git rev-parse refs/tags/nightly >/dev/null 2>&1; then
+            NIGHTLY_SHA=$(git rev-parse refs/tags/nightly^{commit})
+          else
+            NIGHTLY_SHA=""
+          fi
+          echo "main HEAD: $HEAD_SHA"
+          echo "nightly tag: $NIGHTLY_SHA"
+          if [ "$HEAD_SHA" == "$NIGHTLY_SHA" ]; then
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build and verify
+    needs: check
+    if: needs.check.outputs.should_build == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          pip install -r benchlab/requirements.txt
+          pip install -r benchlab/csv_log/requirements.txt
+          pip install -r benchlab/graph/requirements.txt
+          pip install -r benchlab/wigidash/requirements.txt
+          pip install -r benchlab/vu/requirements.txt
+          pip install pytest build
+
+      - name: Run test suite
+        run: pytest
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Build source zip for non-pip customers
+        shell: bash
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          git archive --format=zip --prefix=benchlab-pytools-nightly-${SHORT_SHA}/ -o dist/benchlab-pytools-nightly-${SHORT_SHA}-source.zip HEAD
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish-nightly:
+    name: Publish nightly release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Replace previous nightly tag/release
+        id: prep
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete nightly --yes --cleanup-tag || true
+          git tag -f nightly main
+          git push origin nightly --force
+          echo "release_name=Nightly ($(date -u +%Y-%m-%d) $(git rev-parse --short main))" >> "$GITHUB_OUTPUT"
+
+      - name: Create nightly release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: ${{ steps.prep.outputs.release_name }}
+          prerelease: true
+          generate_release_notes: true
+          files: dist/*
