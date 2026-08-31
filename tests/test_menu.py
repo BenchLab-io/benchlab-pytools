@@ -353,7 +353,8 @@ def test_picker_screen_source_list_filters_when_tool_selected():
     from benchlab.menu import _build_launcher_app, _available_sources
     from textual.widgets import SelectionList
 
-    full_count = len(_available_sources(is_multi=False, supported_sources=None))
+    full_count = len(
+        _available_sources(is_multi=False, supported_sources=None))
     config_sources = {
         s for s, _ in _available_sources(
             is_multi=False, supported_sources=["direct", "named_pipe"])}
@@ -379,7 +380,8 @@ def test_picker_screen_deselecting_tool_restores_full_source_list():
     from benchlab.menu import _build_launcher_app, _available_sources
     from textual.widgets import SelectionList
 
-    full_count = len(_available_sources(is_multi=False, supported_sources=None))
+    full_count = len(
+        _available_sources(is_multi=False, supported_sources=None))
 
     async def scenario():
         app = _build_launcher_app([], None)
