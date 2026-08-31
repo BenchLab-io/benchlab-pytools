@@ -2,6 +2,9 @@ name: pycore compatibility
 
 # Catches drift between pytools and benchlab-pycore's published PyPI API.
 # See issue #9 — issues #6/#7/#8 were caused by silent drift like this.
+#
+# Runs the non-hardware import + test suite on Windows and Linux (issue #15),
+# each against both the pinned pycore and the latest PyPI release.
 on:
   push:
     branches: [dev-pycore, main]
@@ -12,9 +15,14 @@ on:
   workflow_dispatch:
 
 jobs:
-  pinned:
-    name: Import + test against pinned pycore
-    runs-on: windows-latest
+  compat:
+    name: ${{ matrix.pycore }} pycore / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        pycore: [pinned, latest]
     steps:
       - uses: actions/checkout@v4
 
@@ -22,7 +30,7 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install dependencies (pinned)
+      - name: Install dependencies
         run: |
           pip install -r benchlab/requirements.txt
           pip install -r benchlab/csv_log/requirements.txt
@@ -31,104 +39,16 @@ jobs:
           pip install -r benchlab/vu/requirements.txt
           pip install pytest
 
-      - name: Import smoke test
-        run: >
-          python -c "import benchlab.core, benchlab.core.discovery,
-          benchlab.core.datasource, benchlab.core.shared_serial,
-          benchlab.main, benchlab.launcher, benchlab.menu, benchlab.menu_classic,
-          benchlab.tools, benchlab.sources, benchlab.prefs,
-          benchlab.config.config_client, benchlab.config.config_manager,
-          benchlab.config.diff, benchlab.restapi.telemetry_api,
-          benchlab.mqtt.mqtt_publisher, benchlab.hwinfo.hwinfo_export,
-          benchlab.tui.config, benchlab.tui.tui_core, benchlab.tui.tui_main,
-          benchlab.graph.app, benchlab.graph.ui,
-          benchlab.wigidash.wigidash_manager, benchlab.wigidash.wigidash_usb,
-          benchlab.wigidash.wigidash_device, benchlab.wigidash.wigidash_session,
-          benchlab.wigidash.benchlab_telemetry, benchlab.wigidash.benchlab_fleet,
-          benchlab.wigidash.benchlab_overview, benchlab.wigidash.benchlab_graph,
-          benchlab.vu.vu_server_manager, benchlab.vu.vu_server_config,
-          benchlab.vu.devices, benchlab.vu.vu_tui, benchlab.vu.vu_updater,
-          benchlab.link.link_main"
+      # libusb-package is Windows-only (see wigidash/requirements.txt); on Linux
+      # benchlab.wigidash.wigidash_usb imports pyusb directly and relies on the
+      # runner's system libusb-1.0 for backend discovery.
+      - name: Install pyusb (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: pip install pyusb
 
-      - name: Test - core data sources
-        run: pytest tests/test_data_sources.py -v -k "not mqtt"
-
-      - name: Test - csv_log
-        run: pytest tests/test_csv_log.py -v -k "not mqtt"
-
-      - name: Test - REST API server
-        run: pytest benchlab/restapi/test_server.py -v -k "not mqtt"
-
-      - name: Test - TUI rendering
-        run: pytest benchlab/tui/test_tui_core.py -v -k "not mqtt"
-
-      - name: Test - TUI application logic
-        run: pytest benchlab/tui/test_tui_main.py -v -k "not mqtt"
-
-      - name: Test - graph application logic
-        run: pytest benchlab/graph/test_graph.py -v -k "not mqtt"
-
-      - name: Test - hwinfo export
-        run: pytest benchlab/hwinfo/test_hwinfo_export.py -v -k "not mqtt"
-
-      - name: Test - wigidash
-        run: pytest benchlab/wigidash/test_wigidash.py -v -k "not mqtt"
-
-      - name: Test - mqtt publisher
-        run: pytest benchlab/mqtt/test_mqtt_publisher.py -v
-
-      - name: Test - mqtt datasource
-        run: pytest tests/test_mqtt_datasource.py -v
-
-      - name: Test - vu server manager
-        run: pytest benchlab/vu/test_vu_server_manager.py -v
-
-      - name: Test - vu server config
-        run: pytest benchlab/vu/test_vu_server_config.py -v
-
-      - name: Test - vu devices config loading
-        run: pytest benchlab/vu/test_devices.py -v
-
-      - name: Test - vu tui logic
-        run: pytest benchlab/vu/test_vu_tui.py -v
-
-      - name: Test - config diff logic
-        run: pytest benchlab/config/test_diff.py -v
-
-      - name: Test - config manager
-        run: pytest benchlab/config/test_config_manager.py -v
-
-      - name: Test - config client (calibration struct selection)
-        run: pytest benchlab/config/test_config_client.py -v
-
-      - name: Test - launcher bug sweep
-        run: pytest tests/test_launcher.py -v
-
-      - name: Test - interactive menu
-        run: pytest tests/test_menu.py -v
-
-      - name: Test - link
-        run: pytest benchlab/link/test_link_main.py -v
-
-  latest:
-    name: Import + test against latest pycore (PyPI)
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
-      - name: Install dependencies (latest pycore)
-        run: |
-          pip install -r benchlab/requirements.txt
-          pip install -r benchlab/csv_log/requirements.txt
-          pip install -r benchlab/graph/requirements.txt
-          pip install -r benchlab/wigidash/requirements.txt
-          pip install -r benchlab/vu/requirements.txt
-          pip install pytest
-          pip install --upgrade benchlab-pycore
+      - name: Upgrade to latest pycore (PyPI)
+        if: matrix.pycore == 'latest'
+        run: pip install --upgrade benchlab-pycore
 
       - name: Import smoke test
         run: >

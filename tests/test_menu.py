@@ -349,15 +349,21 @@ def test_picker_screen_source_list_filters_when_tool_selected():
     """Regression: the Data Source column must live-update to only the
     sources compatible with the current Tools selection -- config only
     supports direct/named_pipe, so selecting it must narrow the source
-    list from the full 7 down to those 2."""
-    from benchlab.menu import _build_launcher_app
+    list to those (named_pipe is Windows-only, so just direct off Windows)."""
+    from benchlab.menu import _build_launcher_app, _available_sources
     from textual.widgets import SelectionList
+
+    full_count = len(
+        _available_sources(is_multi=False, supported_sources=None))
+    config_sources = {
+        s for s, _ in _available_sources(
+            is_multi=False, supported_sources=["direct", "named_pipe"])}
 
     async def scenario():
         app = _build_launcher_app([], None)
         async with app.run_test() as pilot:
             await pilot.pause()
-            assert len(app._source_ids) == 7  # unrestricted
+            assert len(app._source_ids) == full_count  # unrestricted
 
             tools = app.query_one("#tools", SelectionList)
             config_option = next(
@@ -365,14 +371,17 @@ def test_picker_screen_source_list_filters_when_tool_selected():
             tools.select(config_option)
             await pilot.pause()
 
-            assert set(app._source_ids) == {"direct", "named_pipe"}
+            assert set(app._source_ids) == config_sources
 
     _run_async(scenario())
 
 
 def test_picker_screen_deselecting_tool_restores_full_source_list():
-    from benchlab.menu import _build_launcher_app
+    from benchlab.menu import _build_launcher_app, _available_sources
     from textual.widgets import SelectionList
+
+    full_count = len(
+        _available_sources(is_multi=False, supported_sources=None))
 
     async def scenario():
         app = _build_launcher_app([], None)
@@ -386,7 +395,7 @@ def test_picker_screen_deselecting_tool_restores_full_source_list():
             tools.deselect(config_option)
             await pilot.pause()
 
-            assert len(app._source_ids) == 7
+            assert len(app._source_ids) == full_count
 
     _run_async(scenario())
 
