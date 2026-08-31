@@ -1,6 +1,6 @@
 # Core dependencies with version pins (DEP-1)
 packaging>=23.0,<26.0
-python-dotenv>=1.0.0,<2.0
+python-dotenv>=1.2.2,<2.0
 textual>=0.60,<9.0
 
 # BENCHLAB Serial Handler
@@ -9,8 +9,7 @@ benchlab-pycore>=0.5.1
 # FastAPI Data Source
 fastapi==0.111.1
 uvicorn[standard]==0.24.0
-python-dotenv==1.1.1
-pydantic>=2.0.0  
+pydantic>=2.0.0
 requests>=2.33.1
 
 # MQTT Data Source
