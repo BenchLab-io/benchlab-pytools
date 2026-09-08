@@ -95,17 +95,25 @@ Most tools accept `--source` to choose where telemetry comes from:
 | `mqtt` | Local MQTT broker + publisher, started automatically if needed |
 | `mqtt_custom` | Remote/existing MQTT broker — requires `--mqtt-broker`/`--mqtt-port` |
 | `named_pipe` | Windows BENCHLAB service (`BL_Service`) via named pipes — Windows only |
-| `service_http` | Windows BENCHLAB service HTTP API — requires `--service-url` (default `http://localhost:8585`) |
+| `service_http` | BENCHLAB service HTTP API (polling) — requires `--service-url` (default `http://localhost:8585`) |
+| `service_ws` | BENCHLAB service WebSocket event stream (`/events`, push) — requires `--service-ws-url` (default `ws://localhost:8585/events`); needs the `service_ws` extra |
+
+`service_ws` consumes the same BENCHLAB service as `service_http` but over its
+`/events` WebSocket: telemetry is pushed at the service's own cadence instead of
+polled, and device connect/disconnect is reflected without a manual rescan.
+Install its dependency with `pip install "benchlab-pytools[service_ws]"`.
 
 Common connection flags:
 
 ```
---source SOURCE          direct | fastapi | fastapi_custom | mqtt | mqtt_custom | named_pipe | service_http
+--source SOURCE          direct | fastapi | fastapi_custom | mqtt | mqtt_custom | named_pipe | service_http | service_ws
 --api-url URL             FastAPI base URL (default: http://127.0.0.1:8000)
 --api-port PORT           FastAPI port (default: 8000)
 --mqtt-broker HOST         MQTT broker host (default: localhost)
 --mqtt-port PORT           MQTT broker port (default: 1883)
---service-url URL          BENCHLAB Windows service HTTP API URL (default: http://localhost:8585)
+--service-url URL          BENCHLAB service HTTP API URL (default: http://localhost:8585)
+--service-ws-url URL       BENCHLAB service WebSocket event stream URL (default: ws://localhost:8585/events)
+--service-token TOKEN      X-Benchlab-Token for the BENCHLAB service (only if token auth is enabled)
 -i, --interval SECONDS     Refresh interval (default: 1.0)
 ```
 

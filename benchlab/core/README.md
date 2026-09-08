@@ -27,8 +27,9 @@ A **DataSource abstraction layer** (`datasource.py`) with multiple implementatio
 | `MQTTDataSource` | `mqtt` / `mqtt_custom` | Subscribes to `<topic_prefix>/+/telemetry` and `<topic_prefix>/+/info` on an MQTT broker via `paho-mqtt`. Resolves `MQTT_PROTOCOL` (v3.1 / v3.1.1 / v5) via the module-level `resolve_mqtt_protocol()` helper. |
 | `NamedPipeDataSource` | `named_pipe` | Windows-only. Talks to the C# BENCHLAB Windows service over named pipes (`BenchlabDiscovery` for device listing, per-device `BenchlabSensorPipe_XX_YYY` pipes for telemetry). Normalizes the C# service's `ShortName`-keyed sensor payloads into the same flat key names Python tools expect, via the module-level `_normalise_cs_telemetry()` helper. |
 | `ServiceHttpDataSource` | `service_http` | REST client for the C# BENCHLAB service's HTTP API (default `http://localhost:8585`). Thin client only — does not start/manage the service. Same telemetry normalization as `NamedPipeDataSource`. |
+| `ServiceWsDataSource` | `service_ws` | Client for the C# BENCHLAB service's `/events` WebSocket stream (default `ws://localhost:8585/events`). Runs an asyncio event loop on a background daemon thread; consumes pushed `hello` / `telemetry` / `device` frames (no poll loop). Same telemetry normalization as `ServiceHttpDataSource` (shared `CS_SHORT_NAME_MAP` / `_normalise_cs_v()`). Requires the `websockets` package (`benchlab-pytools[service_ws]`). |
 
-Each implementation validates its constructor kwargs through a Pydantic model in `config.py` (`SerialConfig`, `FastAPIConfig`, `MQTTConfig`, `NamedPipeConfig`, `ServiceHttpConfig`).
+Each implementation validates its constructor kwargs through a Pydantic model in `config.py` (`SerialConfig`, `FastAPIConfig`, `MQTTConfig`, `NamedPipeConfig`, `ServiceHttpConfig`, `ServiceWsConfig`).
 
 The `create_datasource(source_type, **kwargs)` factory function builds the right class:
 
@@ -109,7 +110,7 @@ Also provides `SharedSerialManager`, a singleton connection pool keyed by port w
 
 ### 10. Config models (`config.py`)
 
-Pydantic models validating each DataSource's constructor kwargs: `SerialConfig`, `FastAPIConfig` (normalizes `base_url` to include a scheme and strips trailing slash), `MQTTConfig`, `NamedPipeConfig`, `ServiceHttpConfig`.
+Pydantic models validating each DataSource's constructor kwargs: `SerialConfig`, `FastAPIConfig` (normalizes `base_url` to include a scheme and strips trailing slash), `MQTTConfig`, `NamedPipeConfig`, `ServiceHttpConfig`, `ServiceWsConfig` (normalizes `url` to a `ws://`/`wss://` scheme ending in `/events`).
 
 ## Package exports (`benchlab/core/__init__.py`)
 
@@ -124,7 +125,7 @@ from benchlab.core import (
 )
 ```
 
-`NamedPipeDataSource` and `ServiceHttpDataSource` live in `datasource.py` but aren't re-exported from `__init__.py`; import them directly from `benchlab.core.datasource` if needed. `BENCHLAB_ORIGINAL_PRODUCT_ID` / `BENCHLAB_BL2_PRODUCT_ID` are re-exported from `benchlab_pycore` (with a fallback to hardcoded `0x10`/`0x11` if pycore isn't installed) so tools can detect device variant without importing pycore directly.
+`NamedPipeDataSource`, `ServiceHttpDataSource`, and `ServiceWsDataSource` live in `datasource.py` but aren't re-exported from `__init__.py`; import them directly from `benchlab.core.datasource` if needed. `BENCHLAB_ORIGINAL_PRODUCT_ID` / `BENCHLAB_BL2_PRODUCT_ID` are re-exported from `benchlab_pycore` (with a fallback to hardcoded `0x10`/`0x11` if pycore isn't installed) so tools can detect device variant without importing pycore directly.
 
 ## How tools use this
 
@@ -144,6 +145,7 @@ from benchlab.core import (
 | `mqtt` / `mqtt_custom` | Distributed/IoT integration | Pub/sub, works with existing MQTT infra | Requires a broker, more moving parts |
 | `named_pipe` | Windows, alongside the C# BENCHLAB service | Multiple tools, no direct serial management | Windows only, requires the service + pywin32 |
 | `service_http` | Windows, alongside the C# BENCHLAB service | HTTP-based, multi-client | Windows-oriented, requires the service running |
+| `service_ws` | Alongside the C# BENCHLAB service, low-latency updates | Push-based (no poll loop), device connect/disconnect events, multi-client | Requires the service running + `websockets` |
 
 ## See Also
 

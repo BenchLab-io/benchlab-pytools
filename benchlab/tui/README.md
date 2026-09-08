@@ -158,10 +158,12 @@ Running `python -m benchlab` with no flags at all also launches the interactive 
 ### Configuration
 
 - `-i`, `--interval` - Telemetry refresh interval in seconds (default: `1.0`)
-- `--source` - Data source to read telemetry from: `direct` (serial, default), `fastapi`, `fastapi_custom`, `mqtt`, `named_pipe`, or `service_http`
+- `--source` - Data source to read telemetry from: `direct` (serial, default), `fastapi`, `fastapi_custom`, `mqtt`, `named_pipe`, `service_http`, or `service_ws`
 - `--api-port` - FastAPI server port, used when `--source fastapi` (default: `8000`)
 - `--mqtt-broker`, `--mqtt-port` - MQTT broker host/port, used when `--source mqtt` (defaults: `localhost` / `1883`)
 - `--service-url` - C# BenchLab service HTTP API URL, used when `--source service_http` (default: `http://localhost:8585`)
+- `--service-ws-url` - C# BenchLab service WebSocket event stream URL, used when `--source service_ws` (default: `ws://localhost:8585/events`)
+- `--service-token` - `X-Benchlab-Token` for the C# BenchLab service, if token auth is enabled
 
 Example:
 

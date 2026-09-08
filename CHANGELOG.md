@@ -4,6 +4,18 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- `service_ws` data source: consumes the BENCHLAB service `/events`
+  WebSocket event stream (added in the C# service's PR #76). Telemetry is
+  pushed at the service's own poll cadence rather than polled, and device
+  connect/disconnect is reflected without a manual rescan. Output is
+  normalized to the same shape as `service_http`. New CLI flags
+  `--service-ws-url` (default `ws://localhost:8585/events`) and
+  `--service-token`; new optional-dependency group
+  `benchlab-pytools[service_ws]` (`websockets`).
+
 ## [3.0.4] - 2026-08-18
 
 ### Fixed

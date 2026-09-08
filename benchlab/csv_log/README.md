@@ -89,7 +89,7 @@ python -m benchlab -logfleet
 # Custom interval
 python -m benchlab -logfleet -i 0.5
 
-# Choose a data source (direct | fastapi | fastapi_custom | mqtt | mqtt_custom | named_pipe | service_http)
+# Choose a data source (direct | fastapi | fastapi_custom | mqtt | mqtt_custom | named_pipe | service_http | service_ws)
 python -m benchlab -logfleet --source fastapi --api-url http://127.0.0.1:8000
 python -m benchlab -logfleet --source mqtt --mqtt-broker localhost --mqtt-port 1883
 ```
