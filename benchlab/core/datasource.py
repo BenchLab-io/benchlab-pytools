@@ -1312,6 +1312,7 @@ class ServiceWsDataSource(DataSource):
 
         self._loop_thread: Optional[threading.Thread] = None
         self._loop: Optional[Any] = None
+        self._main_task: Optional[Any] = None
         self._stop_event = threading.Event()
         self._hello_event = threading.Event()
 
@@ -1353,15 +1354,17 @@ class ServiceWsDataSource(DataSource):
     def disconnect(self) -> None:
         self._stop_event.set()
         loop = self._loop
-        if loop is not None:
+        task = self._main_task
+        if loop is not None and task is not None:
             try:
-                loop.call_soon_threadsafe(loop.stop)
+                loop.call_soon_threadsafe(task.cancel)
             except Exception:
                 pass
         if self._loop_thread and self._loop_thread.is_alive():
-            self._loop_thread.join(timeout=3.0)
+            self._loop_thread.join(timeout=5.0)
         self._loop_thread = None
         self._loop = None
+        self._main_task = None
         with self._lock:
             self._connected = False
             self._devices.clear()
@@ -1399,10 +1402,27 @@ class ServiceWsDataSource(DataSource):
         asyncio.set_event_loop(loop)
         self._loop = loop
         try:
-            loop.run_until_complete(self._main())
-        except Exception as e:  # loop.stop() from disconnect() lands here
+            task = loop.create_task(self._main())
+            self._main_task = task
+            try:
+                loop.run_until_complete(task)
+            except asyncio.CancelledError:
+                pass
+            # Let any lingering tasks (keepalive, recv) unwind cleanly so
+            # closing the loop does not emit "Event loop is closed".
+            pending = [t for t in asyncio.all_tasks(loop) if not t.done()]
+            for t in pending:
+                t.cancel()
+            if pending:
+                loop.run_until_complete(
+                    asyncio.gather(*pending, return_exceptions=True))
+        except Exception as e:
             logger.debug(f"ServiceWs loop ended: {e}")
         finally:
+            try:
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            except Exception:
+                pass
             try:
                 loop.close()
             except Exception:
@@ -1415,26 +1435,33 @@ class ServiceWsDataSource(DataSource):
         headers = (
             {"X-Benchlab-Token": self.token} if self.token else None)
         backoff = 1.0
-        while not self._stop_event.is_set():
-            try:
-                async with self._ws_connect(headers) as ws:
-                    backoff = 1.0
-                    self._connected = True
-                    async for raw in ws:
-                        if self._stop_event.is_set():
-                            break
-                        try:
-                            self._dispatch(json.loads(raw))
-                        except Exception as e:
-                            logger.debug(f"Bad service_ws frame: {e}")
-            except Exception as e:
-                logger.debug(f"service_ws connection error: {e}")
+        try:
+            while not self._stop_event.is_set():
+                try:
+                    async with self._ws_connect(headers) as ws:
+                        backoff = 1.0
+                        self._connected = True
+                        async for raw in ws:
+                            if self._stop_event.is_set():
+                                break
+                            try:
+                                self._dispatch(json.loads(raw))
+                            except Exception as e:
+                                logger.debug(f"Bad service_ws frame: {e}")
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    logger.debug(f"service_ws connection error: {e}")
 
+                self._connected = False
+                if self._stop_event.is_set():
+                    break
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 30.0)
+        except asyncio.CancelledError:
+            pass
+        finally:
             self._connected = False
-            if self._stop_event.is_set():
-                break
-            await asyncio.sleep(backoff)
-            backoff = min(backoff * 2, 30.0)
 
     def _ws_connect(self, headers):
         """Call websockets.connect with the header kwarg it supports.
