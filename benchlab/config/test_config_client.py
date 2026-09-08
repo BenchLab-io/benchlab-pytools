@@ -105,3 +105,62 @@ def test_write_calibration_bl2_data_no_longer_raises_indexerror():
     result = client._dict_to_struct(cal_dict, struct_type)
 
     assert len(result.Ts) == 8
+
+
+# ---------------------------------------------------------------------------
+# save_config / load_config / reset_config -- issue #68
+#
+# benchlab-pycore 0.6.0 removed config_io.save_config/load_config/reset_config
+# (they sent UART_CMD_NVM_CONFIG and friends, opcodes no released or
+# in-development firmware implements -- see benchlab-pycore#11). These three
+# methods now route through send_action(), which mirrors UART_CMD_ACTION
+# (opcode 2), the command firmware actually implements for save/load/reset.
+# ---------------------------------------------------------------------------
+
+def test_save_config_sends_the_save_action(monkeypatch):
+    client = _make_client(BENCHLAB_ORIGINAL_PRODUCT_ID)
+    captured = {}
+
+    def fake_send_action(ser, action):
+        captured["action"] = action
+        return True
+    monkeypatch.setattr("benchlab_pycore.core.send_action", fake_send_action)
+
+    assert client.save_config() is True
+    assert captured["action"] == 0  # CONFIG_ACTION_SAVE
+
+
+def test_load_config_sends_the_load_action(monkeypatch):
+    client = _make_client(BENCHLAB_ORIGINAL_PRODUCT_ID)
+    captured = {}
+
+    def fake_send_action(ser, action):
+        captured["action"] = action
+        return True
+    monkeypatch.setattr("benchlab_pycore.core.send_action", fake_send_action)
+
+    assert client.load_config() is True
+    assert captured["action"] == 1  # CONFIG_ACTION_LOAD
+
+
+def test_reset_config_sends_the_reset_action(monkeypatch):
+    client = _make_client(BENCHLAB_ORIGINAL_PRODUCT_ID)
+    captured = {}
+
+    def fake_send_action(ser, action):
+        captured["action"] = action
+        return True
+    monkeypatch.setattr("benchlab_pycore.core.send_action", fake_send_action)
+
+    assert client.reset_config() is True
+    assert captured["action"] == 2  # CONFIG_ACTION_RESET
+
+
+def test_save_config_propagates_a_failed_send(monkeypatch):
+    """send_action returning False (e.g. another action already pending on
+    the device) must surface as a failed save, not be swallowed."""
+    client = _make_client(BENCHLAB_ORIGINAL_PRODUCT_ID)
+    monkeypatch.setattr(
+        "benchlab_pycore.core.send_action", lambda ser, action: False)
+
+    assert client.save_config() is False
