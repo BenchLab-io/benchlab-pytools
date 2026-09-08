@@ -25,7 +25,8 @@ ALL_SOURCE_TYPES = (
     "mqtt",
     "mqtt_custom",
     "named_pipe",
-    "service_http")
+    "service_http",
+    "service_ws")
 
 
 class DataSourceManager:
@@ -277,6 +278,10 @@ class DataSourceManager:
             base_url = self.datasource_kwargs.get(
                 'base_url', 'http://localhost:8585')
             return f"BenchLab service HTTP API at {base_url}"
+        elif self.source_type == 'service_ws':
+            url = self.datasource_kwargs.get(
+                'url', 'ws://localhost:8585/events')
+            return f"BenchLab service events (WS) at {url}"
         else:
             return f"{self.source_type} datasource"
 
@@ -336,6 +341,14 @@ class DataSourceManager:
             # ServiceHttpDataSource accepts: base_url, timeout, poll_interval
             kwargs = {}
             for key in ('base_url', 'timeout', 'poll_interval'):
+                if key in self.datasource_kwargs:
+                    kwargs[key] = self.datasource_kwargs[key]
+            return kwargs
+
+        elif self.source_type == 'service_ws':
+            # ServiceWsDataSource accepts: url, token, timeout
+            kwargs = {}
+            for key in ('url', 'token', 'timeout'):
                 if key in self.datasource_kwargs:
                     kwargs[key] = self.datasource_kwargs[key]
             return kwargs

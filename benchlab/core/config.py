@@ -143,3 +143,52 @@ class ServiceHttpConfig(BaseModel):
     @classmethod
     def _strip_trailing_slash(cls, v: str) -> str:
         return v.rstrip('/')
+
+
+class ServiceWsConfig(BaseModel):
+    """Configuration for :class:`ServiceWsDataSource`.
+
+    Connects to the C# BenchLab service WebSocket event stream
+    (``ws://localhost:8585/events``). The service pushes a ``hello`` frame
+    on connect followed by ``telemetry`` and ``device`` frames.
+
+    Attributes
+    ----------
+    url: str
+        WebSocket URL of the C# BenchLab service event stream.
+    token: Optional[str]
+        Bearer token, sent as the ``X-Benchlab-Token`` header. Only needed
+        when the service has ``ApiSettings:Token`` configured. ``None``
+        (the loopback default) means no auth.
+    timeout: float
+        Seconds to wait for the connection to open and the first ``hello``
+        frame. Must be positive.
+    """
+
+    url: str = Field(
+        default="ws://localhost:8585/events",
+        description="WebSocket URL of the C# BenchLab service event stream",
+    )
+    token: Optional[str] = Field(
+        default=None,
+        description="Optional X-Benchlab-Token value")
+    timeout: float = Field(
+        default=5.0,
+        gt=0,
+        description="Connection / first-hello timeout in seconds")
+
+    @field_validator("url")
+    @classmethod
+    def _validate_url(cls, v: str) -> str:
+        """Normalise to a ws:// URL ending in /events."""
+        v = v.strip()
+        if v.startswith("https://"):
+            v = "wss://" + v[len("https://"):]
+        elif v.startswith("http://"):
+            v = "ws://" + v[len("http://"):]
+        elif not v.startswith(("ws://", "wss://")):
+            v = f"ws://{v}"
+        v = v.rstrip('/')
+        if not v.endswith("/events"):
+            v = f"{v}/events"
+        return v

@@ -93,7 +93,7 @@ python -m benchlab -hwinfo
 # Custom interval
 python -m benchlab -hwinfo -i 2
 
-# Choose a data source (direct | fastapi | fastapi_custom | mqtt | mqtt_custom | named_pipe | service_http)
+# Choose a data source (direct | fastapi | fastapi_custom | mqtt | mqtt_custom | named_pipe | service_http | service_ws)
 python -m benchlab -hwinfo --source fastapi --api-url http://127.0.0.1:8000
 python -m benchlab -hwinfo --source mqtt --mqtt-broker localhost --mqtt-port 1883
 ```

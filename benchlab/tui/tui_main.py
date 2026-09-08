@@ -146,6 +146,14 @@ class TUIApplication:
             datasource_kwargs['base_url'] = service_url
             datasource_kwargs['timeout'] = 5.0
 
+        elif self.source_type == 'service_ws':
+            datasource_kwargs['url'] = getattr(
+                args, 'service_ws_url', None) or 'ws://localhost:8585/events'
+            token = getattr(args, 'service_token', None)
+            if token:
+                datasource_kwargs['token'] = token
+            datasource_kwargs['timeout'] = 5.0
+
         self.datasource_manager = DataSourceManager(
             source_type=self.source_type,
             stats_callback=stats_callback,
@@ -381,9 +389,20 @@ if __name__ == "__main__":
             'fastapi_custom',
             'mqtt',
             'named_pipe',
-            'service_http'],
+            'service_http',
+            'service_ws'],
         default='direct',
         help='Data source type')
+    parser.add_argument(
+        '--service-ws-url',
+        default='ws://localhost:8585/events',
+        dest='service_ws_url',
+        help='C# BenchLab service WebSocket event stream URL')
+    parser.add_argument(
+        '--service-token',
+        default=None,
+        dest='service_token',
+        help='X-Benchlab-Token for the C# service (if token auth enabled)')
     parser.add_argument('--api-port', type=int, default=8000, dest='api_port',
                         help='FastAPI server port')
     parser.add_argument(

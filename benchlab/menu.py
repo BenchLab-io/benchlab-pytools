@@ -64,6 +64,10 @@ SOURCE_LABELS: Dict[str, str] = {
     "service_http": (
         f"BenchLab service - HTTP API (port {SERVICE_HTTP_DEFAULT_PORT})"
     ),
+    "service_ws": (
+        f"BenchLab service - WebSocket events "
+        f"(port {SERVICE_HTTP_DEFAULT_PORT})"
+    ),
 }
 
 SOURCE_ORDER = [
@@ -73,7 +77,8 @@ SOURCE_ORDER = [
     "mqtt",
     "mqtt_custom",
     "named_pipe",
-    "service_http"]
+    "service_http",
+    "service_ws"]
 
 PROVIDER_LABELS: Dict[str, str] = {
     "fastapi": "FastAPI Server - REST API + WebSocket on port 8000",
@@ -608,6 +613,15 @@ def _setup_source(source_type: str) -> bool:
         setup_kwargs = {"host": parsed.hostname or "localhost",
                         "port": parsed.port or SERVICE_HTTP_DEFAULT_PORT}
 
+    elif source_type == "service_ws":
+        import urllib.parse
+        ws_url = os.environ.get(
+            "BENCHLAB_SERVICE_WS_URL",
+            f"ws://localhost:{SERVICE_HTTP_DEFAULT_PORT}/events")
+        parsed = urllib.parse.urlparse(ws_url)
+        setup_kwargs = {"host": parsed.hostname or "localhost",
+                        "port": parsed.port or SERVICE_HTTP_DEFAULT_PORT}
+
     ready = check_and_setup_source(source_type, **setup_kwargs)
     _last_source_params[source_type] = remembered
     return ready
@@ -665,7 +679,7 @@ def _launch(tool_ids: List[str], source: str) -> None:
     _last_source_params.clear()
     if not _setup_source(source):
         print(f"\n  Could not set up '{source}' data source.")
-        if source in ("named_pipe", "service_http"):
+        if source in ("named_pipe", "service_http", "service_ws"):
             print(
                 "  Start the BenchLab Windows service (BL_Service.exe) "
                 "and try again.")
