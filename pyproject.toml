@@ -31,7 +31,7 @@ dependencies = [
     "packaging>=23.0,<26.0",
     "python-dotenv>=1.2.2,<2.0",
     "textual>=0.60,<9.0",
-    "benchlab-pycore>=0.5.1",
+    "benchlab-pycore>=0.6.0",
     "windows-curses>=2.4.1; platform_system=='Windows'",
     "pywin32>=306; platform_system=='Windows'",
 ]
@@ -42,7 +42,7 @@ tui = [
 ]
 csv_log = [
     "pyserial>=3.5",
-    "benchlab-pycore>=0.5.1",
+    "benchlab-pycore>=0.6.0",
 ]
 restapi = [
     "fastapi==0.111.1",

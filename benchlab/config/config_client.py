@@ -414,20 +414,29 @@ class DirectConfigClient(ConfigClient):
             calibration=cal,
             product_id=self.product_id)
 
+    # CONFIG_ACTION_* codes for UART_CMD_ACTION (opcode 2), the command firmware
+    # actually implements. pycore's old save_config/load_config/reset_config sent
+    # UART_CMD_NVM_CONFIG (opcode 17) and friends -- opcodes no released or
+    # in-development firmware handles -- and were removed in pycore 0.6.0. See
+    # https://github.com/BenchLab-io/benchlab-pycore/issues/11.
+    _CONFIG_ACTION_SAVE = 0
+    _CONFIG_ACTION_LOAD = 1
+    _CONFIG_ACTION_RESET = 2
+
     def save_config(self) -> bool:
         """Save configuration to device flash."""
-        from benchlab_pycore.core.config_io import save_config
-        return save_config(self.ser)
+        from benchlab_pycore.core import send_action
+        return send_action(self.ser, action=self._CONFIG_ACTION_SAVE)
 
     def load_config(self) -> bool:
         """Load configuration from device flash."""
-        from benchlab_pycore.core.config_io import load_config
-        return load_config(self.ser)
+        from benchlab_pycore.core import send_action
+        return send_action(self.ser, action=self._CONFIG_ACTION_LOAD)
 
     def reset_config(self) -> bool:
         """Reset configuration to factory defaults."""
-        from benchlab_pycore.core.config_io import reset_config
-        return reset_config(self.ser)
+        from benchlab_pycore.core import send_action
+        return send_action(self.ser, action=self._CONFIG_ACTION_RESET)
 
     def close(self):
         """Close serial connection."""
