@@ -340,6 +340,7 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
         'mqtt'         — MQTT broker + publisher
         'named_pipe'   — C# BenchLab service named pipes (Windows only)
         'service_http' — C# BenchLab service HTTP API
+        'service_ws'   — C# BenchLab service WebSocket event stream
     """
     if source_type == "direct":
         os.environ["BENCHLAB_DATA_SOURCE"] = "direct"
@@ -445,6 +446,32 @@ def check_and_setup_source(source_type: str, **kwargs) -> bool:
             f"http://{host}:{port} {devices_msg}")
         os.environ["BENCHLAB_DATA_SOURCE"] = "service_http"
         os.environ["BENCHLAB_SERVICE_URL"] = f"http://{host}:{port}"
+        return True
+
+    if source_type == "service_ws":
+        # The WebSocket endpoint lives in the same C# process as the REST
+        # API, so the plain HTTP /health probe is the readiness check.
+        port = kwargs.get("port", SERVICE_HTTP_DEFAULT_PORT)
+        host = kwargs.get("host", "localhost")
+
+        if not _service_http_health(host, port):
+            logger.error(
+                f"BenchLab service not detected at http://{host}:{port}.\n"
+                "  → Make sure the BenchLab Windows service (BL_Service) "
+                "is running.\n"
+                "  → The service (REST + WebSocket) listens on port 8585 "
+                "by default."
+            )
+            return False
+
+        devices_msg = "with device(s)" if _service_http_devices_available(
+            host, port) else "but no devices detected"
+        logger.info(
+            f"BenchLab service WebSocket ready at "
+            f"ws://{host}:{port}/events {devices_msg}")
+        os.environ["BENCHLAB_DATA_SOURCE"] = "service_ws"
+        os.environ["BENCHLAB_SERVICE_WS_URL"] = (
+            f"ws://{host}:{port}/events")
         return True
 
     if source_type == "fastapi_custom":

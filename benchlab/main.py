@@ -101,7 +101,7 @@ def get_parser() -> argparse.ArgumentParser:
         "--source",
         help=(
             "Data source: direct | fastapi | fastapi_custom | mqtt | "
-            "mqtt_custom | named_pipe | service_http"),
+            "mqtt_custom | named_pipe | service_http | service_ws"),
         choices=[
             "direct",
             "fastapi",
@@ -109,7 +109,8 @@ def get_parser() -> argparse.ArgumentParser:
             "mqtt",
             "mqtt_custom",
             "named_pipe",
-            "service_http"],
+            "service_http",
+            "service_ws"],
         default=None,
         metavar="SOURCE")
     parser.add_argument(
@@ -133,6 +134,18 @@ def get_parser() -> argparse.ArgumentParser:
         help=(
             "C# BenchLab service HTTP API URL "
             "(default: http://localhost:8585)"))
+    parser.add_argument(
+        "--service-ws-url",
+        default="ws://localhost:8585/events",
+        dest="service_ws_url",
+        help=(
+            "C# BenchLab service WebSocket event stream URL "
+            "(default: ws://localhost:8585/events)"))
+    parser.add_argument(
+        "--service-token",
+        default=None,
+        dest="service_token",
+        help="X-Benchlab-Token for the C# service (if token auth is enabled)")
     parser.add_argument("-vu", action="store_true",
                         help="Launch VU analog dials")
     parser.add_argument("-vuconfig", action="store_true",
@@ -233,6 +246,21 @@ def _setup_source_from_args(args) -> bool:
         parsed = urllib.parse.urlparse(service_url)
         ready = check_and_setup_source(
             "service_http",
+            host=parsed.hostname or "localhost",
+            port=parsed.port or 8585,
+        )
+
+    elif source == "service_ws":
+        ws_url = getattr(args, "service_ws_url", None) or os.environ.get(
+            "BENCHLAB_SERVICE_WS_URL", "ws://localhost:8585/events")
+        os.environ["BENCHLAB_SERVICE_WS_URL"] = ws_url
+        token = getattr(args, "service_token", None)
+        if token:
+            os.environ["BENCHLAB_SERVICE_TOKEN"] = token
+        import urllib.parse
+        parsed = urllib.parse.urlparse(ws_url)
+        ready = check_and_setup_source(
+            "service_ws",
             host=parsed.hostname or "localhost",
             port=parsed.port or 8585,
         )

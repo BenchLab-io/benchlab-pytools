@@ -56,6 +56,9 @@ mqtt = [
     "amqtt>=0.12.0,<0.13.0",
     "pyyaml>=6.0,<7.0",
 ]
+service_ws = [
+    "websockets>=13.0,<16.0",
+]
 graph = [
     "dearpygui>=2.1.1",
     "pyserial>=3.5",
@@ -82,7 +85,7 @@ wigidash = [
     "libusb-package>=1.0.26.1; sys_platform == 'win32'",
 ]
 all = [
-    "benchlab-pytools[tui,csv_log,restapi,mqtt,graph,hwinfo,vu,wigidash]",
+    "benchlab-pytools[tui,csv_log,restapi,mqtt,service_ws,graph,hwinfo,vu,wigidash]",
 ]
 
 [project.urls]

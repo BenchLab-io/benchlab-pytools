@@ -7,6 +7,7 @@ Provides a unified interface for tools to consume telemetry data from:
 - MQTT broker
 - Named pipe (Windows C# BenchLab service)
 - Service HTTP API (C# BenchLab service REST API)
+- Service WebSocket (C# BenchLab service /events event stream)
 """
 
 from .retry import retry, RetryPolicy
@@ -19,7 +20,8 @@ from datetime import datetime, UTC
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .config import SerialConfig, FastAPIConfig, MQTTConfig
+    from .config import (
+        SerialConfig, FastAPIConfig, MQTTConfig, ServiceWsConfig)
 
 logger = logging.getLogger("benchlab.core.datasource")
 
@@ -656,18 +658,10 @@ class MQTTDataSource(DataSource):
             logger.warning(f"MQTT disconnected unexpectedly (rc={rc})")
 
 
-def _normalise_cs_telemetry(sensors_raw: list) -> Dict[str, Any]:
-    """Normalise a C# SensorList into the flat dict shape the TUI expects.
-
-    The C# service serialises sensors with ShortName keys like 'SYS_P',
-    'T_CHIP', 'FAN1_T', 'V1' etc.  The TUI (and other Python tools) expect
-    keys like 'SYS_Power', 'Chip_Temp', 'Fan1_RPM', 'VIN_0' etc.
-
-    Any key not listed in the mapping is passed through unchanged so that
-    future sensors are visible even without an explicit mapping entry.
-    """
-    # Map C# ShortName → TUI key
-    SHORT_NAME_MAP: Dict[str, str] = {
+# Map C# ShortName → TUI key.  Shared by _normalise_cs_telemetry (C# service
+# REST / named-pipe SensorList) and _normalise_cs_v (C# service /events
+# WebSocket telemetry frames), which both carry the same ShortName keys.
+CS_SHORT_NAME_MAP: Dict[str, str] = {
         # Power summary
         "SYS_P": "SYS_Power",
         "CPU_P": "CPU_Power",
@@ -728,8 +722,24 @@ def _normalise_cs_telemetry(sensors_raw: list) -> Dict[str, Any]:
         **{f"FAN{i}_T": f"Fan{i}_RPM" for i in range(1, 10)},
         **{f"FAN{i}_D": f"Fan{i}_Duty" for i in range(1, 10)},
         "FAN_EXT": "FanExtDuty",
-    }
+}
 
+
+def _cs_sentinel(value: Any) -> bool:
+    """True if a C# sensor value is the invalid sentinel (double.MinValue)."""
+    return isinstance(value, float) and value < -1e300
+
+
+def _normalise_cs_telemetry(sensors_raw: list) -> Dict[str, Any]:
+    """Normalise a C# SensorList into the flat dict shape the TUI expects.
+
+    The C# service serialises sensors with ShortName keys like 'SYS_P',
+    'T_CHIP', 'FAN1_T', 'V1' etc.  The TUI (and other Python tools) expect
+    keys like 'SYS_Power', 'Chip_Temp', 'Fan1_RPM', 'VIN_0' etc.
+
+    Any key not listed in the mapping is passed through unchanged so that
+    future sensors are visible even without an explicit mapping entry.
+    """
     result: Dict[str, Any] = {}
     for s in sensors_raw:
         short = s.get("ShortName") or s.get("shortName", "")
@@ -738,12 +748,28 @@ def _normalise_cs_telemetry(sensors_raw: list) -> Dict[str, Any]:
 
         # Skip sentinel value (double.MinValue serialised as very large
         # negative)
-        if isinstance(value, float) and value < -1e300:
+        if _cs_sentinel(value):
             continue
 
-        tui_key = SHORT_NAME_MAP.get(short, short)
+        tui_key = CS_SHORT_NAME_MAP.get(short, short)
         result[tui_key] = value
 
+    return result
+
+
+def _normalise_cs_v(v: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalise a C# service /events ``telemetry`` frame's ``v`` object.
+
+    The WebSocket frame carries ``v`` as ``{shortName: number}`` — the same
+    ShortName keys as the REST SensorList, minus any invalid/NaN sensor
+    (the service omits those entirely).  Maps through the shared
+    :data:`CS_SHORT_NAME_MAP` so the output matches ``service_http``.
+    """
+    result: Dict[str, Any] = {}
+    for short, value in (v or {}).items():
+        if _cs_sentinel(value):
+            continue
+        result[CS_SHORT_NAME_MAP.get(short, short)] = value
     return result
 
 
@@ -1228,6 +1254,248 @@ class ServiceHttpDataSource(DataSource):
             self._stop_event.wait(self.poll_interval)
 
 
+class ServiceWsDataSource(DataSource):
+    """Data source that consumes the C# BenchLab service WebSocket stream.
+
+    Connects to ``ws://localhost:8585/events`` (the C# service default) and
+    receives pushed frames:
+
+    - ``hello``     — once on connect: service version, poll interval, and
+                      the full device list (== ``GET /devices``).
+    - ``telemetry`` — per connected device, every service poll.
+    - ``device``    — on device connect / disconnect / rename.
+
+    This is a thin client — it does not start or manage the service. If the
+    service is not running, :meth:`connect` fails fast.
+
+    Unlike :class:`ServiceHttpDataSource` there is no poll loop here: an
+    asyncio event loop runs on a background daemon thread and updates the
+    thread-safe telemetry / device caches as frames arrive. Telemetry and
+    device dicts are normalised to the same shape as ``service_http`` via
+    :func:`_normalise_cs_v` / :func:`_normalise_cs_device_info`.
+    """
+
+    DEFAULT_URL = "ws://localhost:8585/events"
+
+    def __init__(
+            self,
+            *,
+            config: Optional["ServiceWsConfig"] = None,
+            url: str = DEFAULT_URL,
+            token: Optional[str] = None,
+            timeout: float = 5.0):
+        """Initialize the service WebSocket data source.
+
+        Args:
+            config: Optional :class:`ServiceWsConfig`. When given, its
+                fields take precedence over the loose kwargs.
+            url: WebSocket URL of the C# service event stream.
+            token: Optional ``X-Benchlab-Token`` value (only needed when the
+                service has token auth configured).
+            timeout: Seconds to wait for the socket to open and the first
+                ``hello`` frame.
+        """
+        from .config import ServiceWsConfig
+
+        if config is None:
+            config = ServiceWsConfig(url=url, token=token, timeout=timeout)
+        self.url = config.url
+        self.token = config.token
+        self.timeout = config.timeout
+
+        self._connected = False
+        self._lock = threading.Lock()
+        self._devices: Dict[str, Dict[str, Any]] = {}
+        self._telemetry: Dict[str, Dict[str, Any]] = {}
+        self._service_version: Optional[str] = None
+        self._poll_interval_ms: Optional[int] = None
+
+        self._loop_thread: Optional[threading.Thread] = None
+        self._loop: Optional[Any] = None
+        self._stop_event = threading.Event()
+        self._hello_event = threading.Event()
+
+        try:
+            import websockets
+            self._websockets = websockets
+        except ImportError:
+            logger.error(
+                "websockets library not available — "
+                "pip install 'benchlab-pytools[service_ws]'")
+            self._websockets = None
+
+    def connect(self) -> bool:
+        """Open the WebSocket and wait for the first ``hello`` frame."""
+        if self._websockets is None:
+            return False
+
+        self._stop_event.clear()
+        self._hello_event.clear()
+        self._loop_thread = threading.Thread(
+            target=self._run_loop, daemon=True)
+        self._loop_thread.start()
+
+        if not self._hello_event.wait(timeout=self.timeout):
+            logger.error(
+                f"No 'hello' frame from BenchLab service at {self.url} "
+                f"within {self.timeout}s.\n"
+                "  Make sure the BenchLab Windows service is running and "
+                "its WebSocket endpoint is reachable."
+            )
+            self.disconnect()
+            return False
+
+        logger.info(
+            f"Connected to BenchLab service WebSocket at {self.url} "
+            f"(service {self._service_version})")
+        return True
+
+    def disconnect(self) -> None:
+        self._stop_event.set()
+        loop = self._loop
+        if loop is not None:
+            try:
+                loop.call_soon_threadsafe(loop.stop)
+            except Exception:
+                pass
+        if self._loop_thread and self._loop_thread.is_alive():
+            self._loop_thread.join(timeout=3.0)
+        self._loop_thread = None
+        self._loop = None
+        with self._lock:
+            self._connected = False
+            self._devices.clear()
+            self._telemetry.clear()
+        logger.info("Disconnected from BenchLab service WebSocket")
+
+    def is_connected(self) -> bool:
+        return self._connected
+
+    def list_devices(self) -> List[Dict[str, Any]]:
+        with self._lock:
+            return list(self._devices.values())
+
+    def get_telemetry(self, uid: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            return self._telemetry.get(uid)
+
+    def get_device_info(self, uid: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            return self._devices.get(uid)
+
+    @property
+    def source_type(self) -> str:
+        return "service_ws"
+
+    # ------------------------------------------------------------------
+    # Internal — background event loop
+    # ------------------------------------------------------------------
+
+    def _run_loop(self) -> None:
+        """Thread target: own an asyncio loop and run the client coroutine."""
+        import asyncio
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        self._loop = loop
+        try:
+            loop.run_until_complete(self._main())
+        except Exception as e:  # loop.stop() from disconnect() lands here
+            logger.debug(f"ServiceWs loop ended: {e}")
+        finally:
+            try:
+                loop.close()
+            except Exception:
+                pass
+
+    async def _main(self) -> None:
+        """Connect, read frames, reconnect with backoff until stopped."""
+        import asyncio
+
+        headers = (
+            {"X-Benchlab-Token": self.token} if self.token else None)
+        backoff = 1.0
+        while not self._stop_event.is_set():
+            try:
+                async with self._ws_connect(headers) as ws:
+                    backoff = 1.0
+                    self._connected = True
+                    async for raw in ws:
+                        if self._stop_event.is_set():
+                            break
+                        try:
+                            self._dispatch(json.loads(raw))
+                        except Exception as e:
+                            logger.debug(f"Bad service_ws frame: {e}")
+            except Exception as e:
+                logger.debug(f"service_ws connection error: {e}")
+
+            self._connected = False
+            if self._stop_event.is_set():
+                break
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, 30.0)
+
+    def _ws_connect(self, headers):
+        """Call websockets.connect with the header kwarg it supports.
+
+        websockets >=14 renamed ``extra_headers`` to ``additional_headers``.
+        """
+        kwargs: Dict[str, Any] = {"open_timeout": self.timeout,
+                                  "ping_interval": 20}
+        if headers:
+            try:
+                return self._websockets.connect(
+                    self.url, additional_headers=headers, **kwargs)
+            except TypeError:
+                return self._websockets.connect(
+                    self.url, extra_headers=headers, **kwargs)
+        return self._websockets.connect(self.url, **kwargs)
+
+    def _dispatch(self, msg: Dict[str, Any]) -> None:
+        """Apply one decoded frame to the caches."""
+        mtype = msg.get("type")
+
+        if mtype == "hello":
+            devices = msg.get("devices", []) or []
+            with self._lock:
+                self._devices.clear()
+                for d in devices:
+                    uid = d.get("uid", "")
+                    if uid:
+                        self._devices[uid] = _normalise_cs_device_info(d)
+                self._service_version = msg.get("serviceVersion")
+                self._poll_interval_ms = msg.get("pollIntervalMs")
+                self._connected = True
+            self._hello_event.set()
+
+        elif mtype == "telemetry":
+            uid = msg.get("uid", "")
+            if not uid:
+                return
+            norm = _normalise_cs_v(msg.get("v", {}))
+            norm["timestamp"] = msg.get(
+                "ts", datetime.now(UTC).isoformat())
+            with self._lock:
+                self._telemetry[uid] = norm
+
+        elif mtype == "device":
+            uid = msg.get("uid", "")
+            if not uid:
+                return
+            event = msg.get("event")
+            with self._lock:
+                if event == "disconnected":
+                    self._devices.pop(uid, None)
+                    self._telemetry.pop(uid, None)
+                else:  # connected | renamed
+                    dev = msg.get("device") or {"uid": uid}
+                    self._devices[uid] = _normalise_cs_device_info(dev)
+
+        else:  # subscribed | pong | error
+            logger.debug(f"service_ws control frame: {msg}")
+
+
 def create_datasource(
     source_type: str,
     **kwargs
@@ -1244,6 +1512,8 @@ def create_datasource(
                      'named_pipe'    - C# BenchLab service named pipes
                                        (Windows only)
                      'service_http'  - C# BenchLab service HTTP API
+                     'service_ws'    - C# BenchLab service WebSocket
+                                       event stream (/events)
         **kwargs: Arguments passed to the data source constructor
 
     Returns:
@@ -1266,5 +1536,7 @@ def create_datasource(
         return NamedPipeDataSource(**kwargs)
     elif source_type == 'service_http':
         return ServiceHttpDataSource(**kwargs)
+    elif source_type == 'service_ws':
+        return ServiceWsDataSource(**kwargs)
     else:
         raise ValueError(f"Unknown data source type: {source_type}")

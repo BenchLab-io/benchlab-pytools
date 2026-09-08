@@ -248,6 +248,10 @@ def _build_source_menu(is_multi: bool,
     all_sources.append(
         (f"BenchLab service - HTTP API (port {SERVICE_HTTP_DEFAULT_PORT})",
          "service_http"))
+    all_sources.append(
+        (f"BenchLab service - WebSocket events "
+         f"(port {SERVICE_HTTP_DEFAULT_PORT})",
+         "service_ws"))
 
     # Filter by supported_sources if provided
     if supported_sources is not None:
@@ -343,12 +347,20 @@ def step3_select_source(tool_ids: List[str], tool_names: List[str]) -> None:
         parsed = urllib.parse.urlparse(svc_url)
         setup_kwargs = {"host": parsed.hostname or "localhost",
                         "port": parsed.port or SERVICE_HTTP_DEFAULT_PORT}
+    elif source_type == "service_ws":
+        import urllib.parse
+        ws_url = os.environ.get(
+            "BENCHLAB_SERVICE_WS_URL",
+            f"ws://localhost:{SERVICE_HTTP_DEFAULT_PORT}/events")
+        parsed = urllib.parse.urlparse(ws_url)
+        setup_kwargs = {"host": parsed.hostname or "localhost",
+                        "port": parsed.port or SERVICE_HTTP_DEFAULT_PORT}
 
     source_ready = check_and_setup_source(source_type, **setup_kwargs)
 
     if not source_ready:
         print(f"\n  ✗ Could not set up {source_type} data source.")
-        if source_type in ("named_pipe", "service_http"):
+        if source_type in ("named_pipe", "service_http", "service_ws"):
             print(
                 "  → Start the BenchLab Windows service (BL_Service.exe) "
                 "and try again.")
