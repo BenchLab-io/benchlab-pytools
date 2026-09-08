@@ -414,11 +414,11 @@ class DirectConfigClient(ConfigClient):
             calibration=cal,
             product_id=self.product_id)
 
-    # CONFIG_ACTION_* codes for UART_CMD_ACTION (opcode 2), the command firmware
-    # actually implements. pycore's old save_config/load_config/reset_config sent
-    # UART_CMD_NVM_CONFIG (opcode 17) and friends -- opcodes no released or
-    # in-development firmware handles -- and were removed in pycore 0.6.0. See
-    # https://github.com/BenchLab-io/benchlab-pycore/issues/11.
+    # CONFIG_ACTION_* codes for UART_CMD_ACTION (opcode 2), the command
+    # firmware actually implements. pycore's old save_config/load_config/
+    # reset_config sent UART_CMD_NVM_CONFIG (opcode 17) and friends -- opcodes
+    # no released or in-development firmware handles -- and were removed in
+    # pycore 0.6.0. See benchlab-pycore issue #11.
     _CONFIG_ACTION_SAVE = 0
     _CONFIG_ACTION_LOAD = 1
     _CONFIG_ACTION_RESET = 2
