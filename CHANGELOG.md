@@ -4,7 +4,7 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [3.1.0] - 2026-09-08
 
 ### Added
 - `service_ws` data source: consumes the BENCHLAB service `/events`
@@ -112,8 +112,9 @@ Snapshot of the codebase at the point packaging work began. Interactive
 menu (prompt_toolkit-based), TUI, CSV logger, FastAPI server, graph, HWiNFO
 export, MQTT publisher, VU dials, WigiDash, and config import/export tools,
 sharing a common data-source layer (direct serial, FastAPI, MQTT, named
-pipe, service HTTP).
+pipe, service HTTP, service WebSocket).
 
+[3.1.0]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.0.4...v3.1.0
 [3.0.4]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.0.3...v3.0.4
 [3.0.3]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.0.2...v3.0.3
 [3.0.2]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.0.1...v3.0.2
