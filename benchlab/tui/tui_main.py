@@ -300,12 +300,15 @@ class TUIApplication:
                 return
             self.last_fleet_refresh = current_time
 
-            if (self.source_type != 'direct'
-                    and self.datasource_manager.is_connected()):
+            if self.source_type == 'direct':
+                self.fleet_cache = self._scan_local_fleet()
+            elif self.datasource_manager.is_connected():
                 devices_dict = self.datasource_manager.list_devices()
                 self.fleet_cache = convert_fleet_format(devices_dict)
             else:
-                self.fleet_cache = self._scan_local_fleet()
+                # A disconnected remote source must not probe local serial
+                # ports, which may already belong to another collector.
+                self.fleet_cache = []
 
             if self.tui_core and self.tui_core.fleet_index >= len(
                     self.fleet_cache):
