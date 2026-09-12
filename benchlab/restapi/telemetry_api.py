@@ -441,30 +441,25 @@ def read_device_loop(port, uid):
     reconnection logic."""
     ser = None
     consecutive_errors = 0
-    max_consecutive_errors = 10  # After this many errors, attempt reconnect
+    max_consecutive_errors = 10  # Back off after repeated read failures
     product_id = None  # Will be set once we read device info
-    is_connected = False  # Track connection status
+    is_connected = False  # Only valid telemetry establishes a connection
+    with data_lock:
+        was_connected = devices_data.get(uid, {}).get("connected", False)
+        if uid in devices_data:
+            devices_data[uid]["connected"] = False
+            devices_data[uid]["latest"] = create_empty_telemetry()
+    if was_connected:
+        schedule_device_event(uid, "disconnected")
 
     while not shutdown_event.is_set():
         # --- (Re)connect ---
         if ser is None:
-            # Mark as disconnected
-            if is_connected:
-                is_connected = False
-                with data_lock:
-                    if uid in devices_data:
-                        devices_data[uid]["connected"] = False
-                        devices_data[uid]["latest"] = create_empty_telemetry()
-                schedule_device_event(uid, "disconnected")
-                logger.info("[%s] Device disconnected", uid)
-
             try:
                 new_ser = open_serial_connection(port)
                 if new_ser is None:
                     raise OSError("open_serial_connection returned None")
                 ser = new_ser
-                # Reset error counter on successful connect
-                consecutive_errors = 0
 
                 # Read device info to get product_id for sensor reading
                 try:
@@ -481,18 +476,12 @@ def read_device_loop(port, uid):
                 except Exception:
                     pass
 
-                is_connected = True
-                with data_lock:
-                    if uid in devices_data:
-                        devices_data[uid]["connected"] = True
-                schedule_device_event(uid, "connected")
-                logger.info("Connected to device %s on %s", uid, port)
             except Exception as exc:
                 ser = None  # Ensure ser is None on error
                 consecutive_errors += 1
                 delay = min(
                     RECONNECT_DELAY * consecutive_errors,
-                    30)  # Exponential backoff, capped
+                    30)  # Linear backoff, capped
                 logger.warning(
                     "[%s] Failed to open serial port %s: %s (retry in %.1fs)",
                     uid,
@@ -509,6 +498,8 @@ def read_device_loop(port, uid):
                 shutdown_event.wait(1)
                 continue
             sensors = read_sensors(ser, product_id=product_id)
+            if sensors is None:
+                raise OSError("No complete sensor response received")
             if sensors:
                 translated = translate_sensor_struct(sensors)
                 translated["timestamp"] = datetime.now().strftime(
@@ -518,12 +509,15 @@ def read_device_loop(port, uid):
 
                 with data_lock:
                     if uid in devices_data:
+                        devices_data[uid]["connected"] = True
                         devices_data[uid]["latest"] = translated
                         devices_data[uid]["history"].append(translated)
 
+                if not is_connected:
+                    is_connected = True
+                    schedule_device_event(uid, "connected")
+                    logger.info("Connected to device %s on %s", uid, port)
                 schedule_update(uid, translated)
-            else:
-                logger.debug("[%s] No sensor data read", uid)
         except Exception as e:
             consecutive_errors += 1
             # Specific debug logging for unsupported commands
@@ -547,8 +541,18 @@ def read_device_loop(port, uid):
             except Exception:
                 pass
             ser = None
+            was_connected = is_connected
+            if is_connected:
+                logger.info("[%s] Device disconnected", uid)
+            is_connected = False
+            with data_lock:
+                if uid in devices_data:
+                    devices_data[uid]["connected"] = False
+                    devices_data[uid]["latest"] = create_empty_telemetry()
+            if was_connected:
+                schedule_device_event(uid, "disconnected")
 
-            # Exponential backoff with cap
+            # Linear backoff with cap
             if consecutive_errors >= max_consecutive_errors:
                 delay = min(RECONNECT_DELAY * consecutive_errors, 30)
                 logger.warning(
