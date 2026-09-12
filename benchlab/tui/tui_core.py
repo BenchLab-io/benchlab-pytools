@@ -82,6 +82,8 @@ class TUICore:
         if (height < Config.MIN_TERMINAL_ROWS
                 or width < Config.MIN_TERMINAL_COLS):
             self._render_size_warning(width, height)
+            self.stdscr.noutrefresh()
+            curses.doupdate()
             return False
 
         # Detect silent resize (windows-curses may not send KEY_RESIZE)
