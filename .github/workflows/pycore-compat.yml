@@ -78,6 +78,9 @@ jobs:
       - name: Test - REST API server
         run: pytest benchlab/restapi/test_server.py -v -k "not mqtt"
 
+      - name: Test - REST API read recovery
+        run: pytest benchlab/restapi/test_read_recovery.py -v
+
       - name: Test - TUI rendering
         run: pytest benchlab/tui/test_tui_core.py -v -k "not mqtt"
 
