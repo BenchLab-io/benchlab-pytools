@@ -20,6 +20,7 @@ except ImportError:
     HAS_CURSES = False
 
 import pytest
+from unittest.mock import MagicMock
 
 from benchlab.core.statistics import ChannelStats
 
@@ -239,3 +240,24 @@ def test_help_modal_renders_without_stomping_main_refresh():
         curses.wrapper(_run)
     except curses.error:
         pytest.skip("curses screen unavailable in this environment")
+
+
+@pytest.mark.parametrize("size", [(47, 100), (48, 99), (12, 60)])
+def test_size_warning_is_drawn_and_flushed(monkeypatch, size):
+    from benchlab.tui.tui_core import TUICore
+
+    for name in ("curs_set", "start_color", "use_default_colors", "init_pair"):
+        monkeypatch.setattr(curses, name, MagicMock())
+    monkeypatch.setattr(curses, "color_pair", lambda _: 0)
+    screen = MagicMock()
+    screen.getmaxyx.return_value = size
+    core = TUICore(screen)
+    calls = MagicMock()
+    calls.attach_mock(screen.addstr, "draw")
+    calls.attach_mock(screen.noutrefresh, "stage")
+    monkeypatch.setattr(curses, "doupdate", calls.update)
+
+    assert core.render(_snapshot(), ChannelStats(), [], 1.0) is False
+
+    assert "Terminal too small" in screen.addstr.call_args.args[2]
+    assert [call[0] for call in calls.mock_calls] == ["draw", "stage", "update"]
