@@ -61,6 +61,7 @@ The server will start on `http://0.0.0.0:8000` by default (configurable via `API
 
 ### Real-time Streaming
 - `WebSocket /device/{uid}/stream` - Real-time telemetry updates, pushed as each device's reader thread reads new sensor data
+- `WebSocket /events` - Multiplexed event stream for all devices: a `hello` frame on connect (service version, poll interval, device list), then `telemetry` and `device` (connected/disconnected) frames as they occur. Matches the frame envelope of the C# BENCHLAB service's `/events` (see `ServiceWsDataSource`, `--source service_ws`), so the same client works against either server — except `telemetry.v` keeps this server's own long-form sensor-key names (e.g. `EPS1_Power`) rather than the C# service's `ShortName` convention (e.g. `EPS1_P`).
 
 ### Monitoring
 - `GET /health` - Basic health check (status, platform, timestamp, connected_devices, total_clients)
@@ -128,6 +129,16 @@ const ws = new WebSocket('ws://localhost:8000/device/ABC123/stream');
 ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
     console.log('Telemetry update:', data);
+};
+```
+
+### Multiplexed Event Stream (WebSocket)
+```javascript
+const ws = new WebSocket('ws://localhost:8000/events');
+ws.onmessage = (event) => {
+    const frame = JSON.parse(event.data);
+    // frame.type is "hello", "telemetry", or "device"
+    console.log(frame);
 };
 ```
 

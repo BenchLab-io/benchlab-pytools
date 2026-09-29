@@ -315,6 +315,21 @@ manager.export_config('COM4', 'output.json')
 manager.import_config('input.json', dry_run=False)
 ```
 
+For lower-level access (used internally by `ConfigManager`), `create_config_client()`
+returns a `ConfigClient` with `read_calibration()`/`write_calibration()`,
+`save_config()`/`load_config()`/`reset_config()`, and (BL2 firmware 7+ only)
+`factory_cal_unlock()`, which temporarily lifts write-protection on the factory
+calibration slot. There is no CLI/JSON-config surface for `factory_cal_unlock()` —
+it's a niche factory-calibration tool, not a user-facing config option, and a
+successful call resets the device immediately:
+
+```python
+from benchlab.config.config_client import create_config_client
+
+client = create_config_client('direct', 'COM4')
+client.factory_cal_unlock()  # BL2 fw7+ only; device resets on success
+```
+
 ## See Also
 
 - [BENCHLAB PyTools Documentation](../../README.md) - Main PyTools documentation

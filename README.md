@@ -102,6 +102,10 @@ Most tools accept `--source` to choose where telemetry comes from:
 `/events` WebSocket: telemetry is pushed at the service's own cadence instead of
 polled, and device connect/disconnect is reflected without a manual rescan.
 Install its dependency with `pip install "benchlab-pytools[service_ws]"`.
+The pytools FastAPI server (`fastapi`/`fastapi_custom`) also exposes an
+`/events` endpoint with the same frame envelope, so `--source service_ws
+--service-ws-url ws://<fastapi-host>:<port>/events` works against it too —
+see `benchlab/restapi/readme.md`.
 
 Common connection flags:
 
