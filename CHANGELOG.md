@@ -4,7 +4,7 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [3.2.0] - 2026-09-29
 
 ### Added
 - `GET /events` WebSocket on the FastAPI server (`benchlab.restapi.telemetry_api`):
@@ -34,6 +34,20 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
   BENCHLAB_Service v2.6.0, which adds the same `FACTORY_CAL_UNLOCK`
   command plus BL1/BL2 firmware compatibility and a stuck-disconnect
   reconnect fix.
+
+### Fixed
+- TUI: a disconnected remote data source (`fastapi_custom`, `mqtt_custom`,
+  `named_pipe`, `service_http`, `service_ws`, etc.) fell back to scanning
+  local serial ports for the Fleet view, which could probe ports already
+  owned by another collector and show unrelated local devices instead of
+  an empty fleet. (#74)
+- TUI: the terminal-too-small warning was drawn but never flushed to the
+  screen before `render()` returned, leaving the terminal blank instead
+  of showing the warning. (#75)
+- Packaging: `benchlab-pytools[tui]` was missing `pydantic` and `requests`,
+  both required to initialize an HTTP-backed TUI (`fastapi`/`service_http`
+  sources); a clean `[tui]`-only install crashed with `ModuleNotFoundError`
+  unless the server/all extras happened to already pull them in. (#76)
 
 ## [3.1.0] - 2026-09-08
 
@@ -145,6 +159,7 @@ export, MQTT publisher, VU dials, WigiDash, and config import/export tools,
 sharing a common data-source layer (direct serial, FastAPI, MQTT, named
 pipe, service HTTP, service WebSocket).
 
+[3.2.0]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.0.4...v3.1.0
 [3.0.4]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.0.3...v3.0.4
 [3.0.3]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.0.2...v3.0.3
