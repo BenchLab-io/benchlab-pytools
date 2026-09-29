@@ -7,6 +7,16 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- `GET /events` WebSocket on the FastAPI server (`benchlab.restapi.telemetry_api`):
+  a multiplexed event stream matching the frame envelope of the C# BenchLab
+  service's `/events` (`hello`/`telemetry`/`device` frames), so
+  `ServiceWsDataSource` (`--source service_ws`) can point at either server.
+  `telemetry.v` keeps pytools' own TUI-style sensor-key names (e.g.
+  `EPS1_Power`) rather than the C# service's `ShortName` convention (e.g.
+  `EPS1_P`) -- there's no pycore equivalent of `ShortName` to translate
+  into, and `ServiceWsDataSource`'s key mapping already passes unrecognised
+  keys through unchanged, so no client-side changes are needed. The
+  existing per-device `/device/{uid}/stream` WebSocket is unchanged.
 - `ConfigClient.factory_cal_unlock()` (`direct` and `named_pipe` sources):
   temporarily lifts write-protection on BL2's factory calibration slot
   (BL2 firmware 7+ only). Disruptive -- a successful call resets the

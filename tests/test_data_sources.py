@@ -470,6 +470,53 @@ class TestFastAPISource:
             f"{len(data['disconnected_devices'])} disconnected")
         _info(f"Scan time: {data.get('scan_time')}")
 
+    @pytest.mark.integration
+    def test_events_stream(self, fastapi_client, device):
+        """/events sends a hello frame on connect, responds to ping, and
+        broadcasts telemetry frames using the same TUI-style sensor keys
+        as /device/{uid}/telemetry (not the C# service's ShortName
+        convention -- see telemetry_api.send_event_telemetry)."""
+        _section(f"FastAPI › WS /events ({device['uid'][:12]}…)")
+        uid = device["uid"]
+
+        with fastapi_client.websocket_connect("/events") as ws:
+            hello = ws.receive_json()
+            assert hello["type"] == "hello"
+            assert "serviceVersion" in hello
+            assert "pollIntervalMs" in hello
+            hello_uids = [d["uid"] for d in hello["devices"]]
+            assert uid in hello_uids, (
+                f"Device {uid} missing from hello.devices: {hello}"
+            )
+            _ok(f"hello frame OK — {len(hello['devices'])} device(s), "
+                f"serviceVersion={hello['serviceVersion']}")
+
+            ws.send_json({"type": "ping"})
+            pong = ws.receive_json()
+            assert pong["type"] == "pong"
+            _ok("ping/pong round-trip OK")
+
+            # Wait for a live telemetry frame for our device (the reader
+            # thread polls independently of this test).
+            deadline = time.time() + TELEMETRY_TIMEOUT
+            telemetry_frame = None
+            while time.time() < deadline:
+                frame = ws.receive_json()
+                if frame.get("type") == "telemetry" and \
+                        frame.get("uid") == uid:
+                    telemetry_frame = frame
+                    break
+            assert telemetry_frame is not None, (
+                f"No telemetry frame for {uid} within "
+                f"{TELEMETRY_TIMEOUT}s")
+            v = telemetry_frame["v"]
+            assert "timestamp" not in v, (
+                "telemetry.v should not repeat the top-level ts field")
+            assert v, "telemetry.v should not be empty"
+            _ok(f"telemetry frame OK — {len(v)} sensor(s), "
+                f"ts={telemetry_frame.get('ts')}")
+            _info(f"Sample keys: {list(v)[:5]}")
+
 
 # ---------------------------------------------------------------------------
 # Test group 3: MQTT data source

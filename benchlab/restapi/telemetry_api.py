@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pathlib import Path
 
+import benchlab
 from benchlab_pycore.core import (
     read_sensors, read_device, translate_sensor_struct)
 from benchlab.core import (
@@ -86,6 +87,7 @@ api_port = Config.API_PORT
 # { uid: { "port": str, "latest": dict, "history": deque, "connected": bool } }
 devices_data = {}
 clients = {}           # { uid: set([WebSocket, ...]) }
+event_clients = set()  # WebSockets subscribed to the /events stream
 main_loop = None       # Will store main asyncio loop
 shutdown_event = threading.Event()  # Graceful shutdown flag
 device_threads = {}    # { uid: threading.Thread } - device reader threads
@@ -142,9 +144,12 @@ def device_scanner_loop():
                         logger.info(
                             "Device %s appears disconnected "
                             "(port %s not found)", uid, port)
+                        was_connected = data.get("connected", False)
                         with data_lock:
                             if uid in devices_data:
                                 devices_data[uid]["connected"] = False
+                        if was_connected:
+                            schedule_device_event(uid, "disconnected")
 
                 logger.debug("Scanner: scan complete")
 
@@ -277,10 +282,77 @@ async def send_updates(uid, data):
                 clients[uid].discard(ws)
 
 
+async def _broadcast_event(frame):
+    """Push a hello/telemetry/device frame to every /events subscriber."""
+    with data_lock:
+        ws_list = list(event_clients)
+    dead_clients = set()
+    for ws in ws_list:
+        try:
+            await ws.send_json(frame)
+        except Exception:
+            dead_clients.add(ws)
+    if dead_clients:
+        with data_lock:
+            event_clients.difference_update(dead_clients)
+
+
+async def send_event_telemetry(uid, data):
+    """Push a /events "telemetry" frame for this UID's latest reading.
+
+    ``v`` keeps pytools' own TUI-style sensor keys (e.g. "EPS1_Power")
+    rather than the C# service's ShortName convention (e.g. "EPS1_P") --
+    there's no pycore equivalent of ShortName to translate into, and
+    ServiceWsDataSource's ShortName->TUI-key mapping already passes
+    unrecognised keys through unchanged, so this is a no-op there rather
+    than a translation, but no client-side change is required.
+    """
+    await _broadcast_event({
+        "type": "telemetry",
+        "uid": uid,
+        "ts": data.get("timestamp"),
+        "v": {k: v for k, v in data.items() if k != "timestamp"},
+    })
+
+
 def schedule_update(uid, data):
     """Thread-safe schedule to send telemetry to WebSocket clients."""
     if main_loop is not None and not main_loop.is_closed():
         asyncio.run_coroutine_threadsafe(send_updates(uid, data), main_loop)
+        asyncio.run_coroutine_threadsafe(
+            send_event_telemetry(uid, data), main_loop)
+
+
+def _device_to_wire_shape(uid, info=None):
+    """Shape a device's info the way /events' hello/device frames expect
+    (mirrors the C# service's device shape), independent of GET /devices'
+    own response shape."""
+    if info is None:
+        with data_lock:
+            info = devices_data.get(uid, {})
+    device_info = info.get("info", {}) or {}
+    return {
+        "uid": uid,
+        "name": device_info.get("deviceName", ""),
+        "productId": device_info.get("ProductId", 0),
+        "port": info.get("port", "unknown"),
+        "status": "CONNECTED" if info.get("connected", False) else
+                  "DISCONNECTED",
+        "sensorCount": len(info.get("latest", {}) or {}),
+        "firmwareVersion": device_info.get("FwVersion", 0),
+    }
+
+
+def schedule_device_event(uid, event):
+    """Thread-safe schedule to broadcast a /events "device" frame."""
+    if main_loop is not None and not main_loop.is_closed():
+        frame = {
+            "type": "device",
+            "uid": uid,
+            "event": event,
+            "device": _device_to_wire_shape(uid),
+        }
+        asyncio.run_coroutine_threadsafe(_broadcast_event(frame), main_loop)
 
 
 RECONNECT_DELAY = 2.0  # seconds
@@ -383,6 +455,7 @@ def read_device_loop(port, uid):
                     if uid in devices_data:
                         devices_data[uid]["connected"] = False
                         devices_data[uid]["latest"] = create_empty_telemetry()
+                schedule_device_event(uid, "disconnected")
                 logger.info("[%s] Device disconnected", uid)
 
             try:
@@ -412,6 +485,7 @@ def read_device_loop(port, uid):
                 with data_lock:
                     if uid in devices_data:
                         devices_data[uid]["connected"] = True
+                schedule_device_event(uid, "connected")
                 logger.info("Connected to device %s on %s", uid, port)
             except Exception as exc:
                 ser = None  # Ensure ser is None on error
@@ -490,6 +564,7 @@ def read_device_loop(port, uid):
             if uid in devices_data:
                 devices_data[uid]["connected"] = False
                 devices_data[uid]["latest"] = create_empty_telemetry()
+        schedule_device_event(uid, "disconnected")
 
     if ser:
         try:
@@ -625,6 +700,50 @@ async def stream_device(uid: str, ws: WebSocket):
             clients[uid].discard(ws)
             client_count = len(clients[uid])
         logger.info("[%s] Client disconnected (%d total)", uid, client_count)
+
+
+def build_hello_frame():
+    """Build the /events "hello" frame sent on connect: service version,
+    poll interval, and the current device list, matching the C# service's
+    /events wire shape."""
+    with data_lock:
+        uids = list(devices_data.keys())
+    return {
+        "type": "hello",
+        "serviceVersion": benchlab.__version__,
+        "pollIntervalMs": int(Config.POLL_INTERVAL * 1000),
+        "devices": [_device_to_wire_shape(uid) for uid in uids],
+    }
+
+
+@app.websocket("/events")
+async def events_stream(ws: WebSocket):
+    """Multiplexed event stream: hello on connect, then telemetry/device
+    frames for every device, matching the C# BenchLab service's /events
+    protocol (see ServiceWsDataSource in benchlab.core.datasource, the
+    consumer this endpoint is meant to be compatible with)."""
+    await ws.accept()
+    with data_lock:
+        event_clients.add(ws)
+    await ws.send_json(build_hello_frame())
+    logger.info("[/events] Client connected (%d total)", len(event_clients))
+    try:
+        while True:
+            msg = await ws.receive_json()
+            if isinstance(msg, dict) and msg.get("type") == "ping":
+                await ws.send_json({
+                    "type": "pong",
+                    "ts": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                })
+            # "subscribe" and any other client message: accepted, no-op --
+            # this endpoint always broadcasts every device to every client.
+    except WebSocketDisconnect:
+        pass
+    finally:
+        with data_lock:
+            event_clients.discard(ws)
+        logger.info(
+            "[/events] Client disconnected (%d total)", len(event_clients))
 
 
 @app.get("/favicon.ico")
@@ -766,9 +885,12 @@ def scan_for_devices():
                 disconnected.append({"uid": uid, "port": port})
                 logger.info(
                     "Device %s appears to be disconnected from %s", uid, port)
+                was_connected = data.get("connected", False)
                 with data_lock:
                     if uid in devices_data:
                         devices_data[uid]["connected"] = False
+                if was_connected:
+                    schedule_device_event(uid, "disconnected")
 
         result = {
             "scan_time": datetime.now().isoformat(),

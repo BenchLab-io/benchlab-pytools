@@ -53,6 +53,7 @@ def test_api_endpoints():
             "/device/{uid}/history",
             "/device/{uid}/sensors",
             "/device/{uid}/stream",
+            "/events",
             "/favicon.ico",
             "/health",
             "/status",
