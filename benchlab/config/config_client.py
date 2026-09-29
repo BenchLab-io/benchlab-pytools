@@ -457,7 +457,8 @@ class DirectConfigClient(ConfigClient):
         USB CDC port drops and re-enumerates, so callers must reconnect
         before sending any further command.
         """
-        from benchlab_pycore.core import factory_cal_unlock, BENCHLAB_BL2_PRODUCT_ID
+        from benchlab_pycore.core import (
+            factory_cal_unlock, BENCHLAB_BL2_PRODUCT_ID)
 
         # pycore's factory_cal_unlock() only reports whether the passphrase
         # bytes were written to the serial port, not whether the firmware
