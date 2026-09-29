@@ -128,3 +128,29 @@ jobs:
 
       - name: Test - link
         run: pytest benchlab/link/test_link_main.py -v
+
+
+  tui-install:
+    name: TUI-only HTTP dependency check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install only the TUI extra in a clean environment
+        run: |
+          python -m venv /tmp/benchlab-tui-check
+          /tmp/benchlab-tui-check/bin/python -m pip install ".[tui]"
+          /tmp/benchlab-tui-check/bin/python -m pip check
+      - name: Check HTTP datasource initialization without hardware or server
+        working-directory: /tmp
+        run: |
+          /tmp/benchlab-tui-check/bin/python - <<'PYTHON'
+          from types import SimpleNamespace
+          from benchlab.tui.tui_main import TUIApplication
+          from benchlab.core.datasource import FastAPIDataSource, ServiceHttpDataSource
+          for source in (FastAPIDataSource(), ServiceHttpDataSource()):
+              assert source._requests is not None, type(source).__name__
+          TUIApplication(SimpleNamespace(source="fastapi_custom", interval=1.0))
+          PYTHON
