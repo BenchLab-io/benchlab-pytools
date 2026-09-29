@@ -260,4 +260,5 @@ def test_size_warning_is_drawn_and_flushed(monkeypatch, size):
     assert core.render(_snapshot(), ChannelStats(), [], 1.0) is False
 
     assert "Terminal too small" in screen.addstr.call_args.args[2]
-    assert [call[0] for call in calls.mock_calls] == ["draw", "stage", "update"]
+    assert [call[0] for call in calls.mock_calls] == [
+        "draw", "stage", "update"]
