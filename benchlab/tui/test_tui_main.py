@@ -5,6 +5,8 @@ DataSourceManager directly.
 """
 
 import types
+
+import pytest
 from unittest.mock import MagicMock
 
 from benchlab.tui.tui_main import TUIApplication
@@ -74,3 +76,38 @@ def test_scan_local_fleet_survives_none_port_when_disconnected():
     fleet = app._scan_local_fleet()
 
     assert fleet == []
+
+
+@pytest.mark.parametrize("source", [
+    "fastapi", "fastapi_custom", "mqtt", "mqtt_custom",
+    "named_pipe", "service_http", "service_ws",
+])
+def test_remote_fleet_refresh_never_probes_serial(source):
+    app = _make_app()
+    app.source_type = source
+    app.datasource_manager.is_connected.return_value = True
+    app.datasource_manager.list_devices.return_value = {
+        "REMOTE-UID": {"port": "remote", "variant": "BL2"},
+    }
+    app._refresh_fleet_cache()
+    assert [device["uid"] for device in app.fleet_cache] == ["REMOTE-UID"]
+    app.datasource_manager.list_devices.assert_called_once_with()
+
+    # A disconnect clears the remote list without discovering local devices.
+    app.datasource_manager.is_connected.return_value = False
+    app.last_fleet_refresh = 0
+    app._refresh_fleet_cache()
+    assert app.fleet_cache == []
+    app.datasource_manager.discover_devices.assert_not_called()
+    app.datasource_manager.list_devices.assert_called_once_with()
+
+
+def test_direct_fleet_refresh_still_discovers_devices():
+    app = _make_app()
+    app.datasource_manager.is_connected.return_value = False
+    app.datasource_manager.discover_devices.return_value = [
+        {"uid": "LOCAL-UID", "port": "COM5", "fw": 2},
+    ]
+    app._refresh_fleet_cache()
+    app.datasource_manager.discover_devices.assert_called_once_with()
+    assert [device["uid"] for device in app.fleet_cache] == ["LOCAL-UID"]
