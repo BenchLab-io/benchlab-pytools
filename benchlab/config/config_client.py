@@ -457,7 +457,19 @@ class DirectConfigClient(ConfigClient):
         USB CDC port drops and re-enumerates, so callers must reconnect
         before sending any further command.
         """
-        from benchlab_pycore.core import factory_cal_unlock
+        from benchlab_pycore.core import factory_cal_unlock, BENCHLAB_BL2_PRODUCT_ID
+
+        # pycore's factory_cal_unlock() only reports whether the passphrase
+        # bytes were written to the serial port, not whether the firmware
+        # accepted them -- ORIGINAL and older BL2 firmware silently ignore
+        # the unknown opcode with no ACK either way. Gate on product_id
+        # ourselves so callers get an honest False instead of a misleading
+        # True on hardware where the unlock can never actually take effect.
+        if self.product_id != BENCHLAB_BL2_PRODUCT_ID:
+            logger.warning(
+                "factory_cal_unlock: not a BL2 device, refusing to send "
+                "(unknown opcode on ORIGINAL firmware)")
+            return False
         return factory_cal_unlock(self.ser)
 
     def close(self):

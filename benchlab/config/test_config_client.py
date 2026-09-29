@@ -190,6 +190,25 @@ def test_direct_factory_cal_unlock_calls_pycore(monkeypatch):
     assert captured["called"] is True
 
 
+def test_direct_factory_cal_unlock_refuses_non_bl2_device(monkeypatch):
+    """pycore's factory_cal_unlock() only reports whether bytes were
+    written, not whether the firmware accepted them -- confirmed against
+    real BL1 hardware, which returns True even though the opcode is
+    unknown on ORIGINAL firmware and nothing happens. Gate on product_id
+    ourselves so callers get an honest False."""
+    client = _make_client(BENCHLAB_ORIGINAL_PRODUCT_ID)
+    captured = {}
+
+    def fake_factory_cal_unlock(ser):
+        captured["called"] = True
+        return True
+    monkeypatch.setattr(
+        "benchlab_pycore.core.factory_cal_unlock", fake_factory_cal_unlock)
+
+    assert client.factory_cal_unlock() is False
+    assert "called" not in captured
+
+
 def test_direct_factory_cal_unlock_propagates_a_failed_call(monkeypatch):
     client = _make_client(BENCHLAB_BL2_PRODUCT_ID)
     monkeypatch.setattr(
