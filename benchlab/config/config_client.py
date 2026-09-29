@@ -150,6 +150,17 @@ class ConfigClient(ABC):
         pass
 
     @abstractmethod
+    def factory_cal_unlock(self) -> bool:
+        """Temporarily lift write-protection on BL2's factory calibration
+        slot (BL2 fw07+ only; rejected on ORIGINAL or older BL2 firmware).
+
+        Disruptive: a successful call resets the device immediately -- the
+        connection drops and must be reestablished before sending further
+        commands.
+        """
+        pass
+
+    @abstractmethod
     def close(self):
         """Close connection and cleanup resources."""
         pass
@@ -438,6 +449,17 @@ class DirectConfigClient(ConfigClient):
         from benchlab_pycore.core import send_action
         return send_action(self.ser, action=self._CONFIG_ACTION_RESET)
 
+    def factory_cal_unlock(self) -> bool:
+        """Temporarily lift write-protection on BL2's factory calibration
+        slot. BL2 fw07+ only -- rejected on ORIGINAL or older BL2 firmware.
+
+        Disruptive: a successful call resets the device immediately -- the
+        USB CDC port drops and re-enumerates, so callers must reconnect
+        before sending any further command.
+        """
+        from benchlab_pycore.core import factory_cal_unlock
+        return factory_cal_unlock(self.ser)
+
     def close(self):
         """Close serial connection."""
         if self.ser and self.ser.is_open:
@@ -609,6 +631,17 @@ class NamedPipeConfigClient(ConfigClient):
     def reset_config(self) -> bool:
         """Reset configuration to factory defaults."""
         result = self._send_command("ResetConfig")
+        return result and result.get('success', False)
+
+    def factory_cal_unlock(self) -> bool:
+        """Temporarily lift write-protection on BL2's factory calibration
+        slot. BL2 fw07+ only -- rejected on ORIGINAL or older BL2 firmware.
+
+        Disruptive: a successful call resets the device immediately -- the
+        pipe and COM port disconnect, so callers must reconnect before
+        sending any further command.
+        """
+        result = self._send_command("SendFactoryCalUnlock", payload="benchlab")
         return result and result.get('success', False)
 
     def close(self):

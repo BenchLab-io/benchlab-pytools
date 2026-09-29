@@ -164,3 +164,70 @@ def test_save_config_propagates_a_failed_send(monkeypatch):
         "benchlab_pycore.core.send_action", lambda ser, action: False)
 
     assert client.save_config() is False
+
+
+# ---------------------------------------------------------------------------
+# factory_cal_unlock -- benchlab-pycore 0.8.0 / BENCHLAB_Service 2.6.0
+#
+# New BL2 fw07+ only command that temporarily lifts write-protection on the
+# factory calibration slot. Disruptive (resets the device on success), but
+# from this client's perspective it's a thin pass-through: DirectConfigClient
+# calls pycore's factory_cal_unlock(ser); NamedPipeConfigClient sends the
+# SendFactoryCalUnlock pipe command with the fixed passphrase payload.
+# ---------------------------------------------------------------------------
+
+def test_direct_factory_cal_unlock_calls_pycore(monkeypatch):
+    client = _make_client(BENCHLAB_BL2_PRODUCT_ID)
+    captured = {}
+
+    def fake_factory_cal_unlock(ser):
+        captured["called"] = True
+        return True
+    monkeypatch.setattr(
+        "benchlab_pycore.core.factory_cal_unlock", fake_factory_cal_unlock)
+
+    assert client.factory_cal_unlock() is True
+    assert captured["called"] is True
+
+
+def test_direct_factory_cal_unlock_propagates_a_failed_call(monkeypatch):
+    client = _make_client(BENCHLAB_BL2_PRODUCT_ID)
+    monkeypatch.setattr(
+        "benchlab_pycore.core.factory_cal_unlock", lambda ser: False)
+
+    assert client.factory_cal_unlock() is False
+
+
+def test_named_pipe_factory_cal_unlock_sends_command_and_passphrase(
+        monkeypatch):
+    from benchlab.config.config_client import NamedPipeConfigClient
+
+    client = NamedPipeConfigClient.__new__(NamedPipeConfigClient)
+    client.pipe_name = "BenchlabSensorPipe_11_TEST"
+    client.handle = None
+
+    captured = {}
+
+    def fake_send_command(command, payload=None):
+        captured["command"] = command
+        captured["payload"] = payload
+        return {"success": True}
+    monkeypatch.setattr(client, "_send_command", fake_send_command)
+
+    assert client.factory_cal_unlock() is True
+    assert captured["command"] == "SendFactoryCalUnlock"
+    assert captured["payload"] == "benchlab"
+
+
+def test_named_pipe_factory_cal_unlock_propagates_a_failed_call(monkeypatch):
+    from benchlab.config.config_client import NamedPipeConfigClient
+
+    client = NamedPipeConfigClient.__new__(NamedPipeConfigClient)
+    client.pipe_name = "BenchlabSensorPipe_11_TEST"
+    client.handle = None
+
+    monkeypatch.setattr(
+        client, "_send_command",
+        lambda command, payload=None: {"success": False})
+
+    assert client.factory_cal_unlock() is False

@@ -4,6 +4,27 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- `ConfigClient.factory_cal_unlock()` (`direct` and `named_pipe` sources):
+  temporarily lifts write-protection on BL2's factory calibration slot
+  (BL2 firmware 7+ only). Disruptive -- a successful call resets the
+  device immediately; reconnect before issuing further commands.
+
+### Changed
+- Bumped the `benchlab-pycore` floor to `>=0.8.0` (from `>=0.6.0`).
+  0.8.0 fixes `write_calibration()`'s wire format on BL1 firmware 6+ /
+  BL2 firmware 7+, where `WRITE_CALIBRATION` changed from an
+  offset-addressed partial write to a whole-struct replace; sending the
+  old format there silently corrupts calibration data.
+  `DirectConfigClient.write_calibration()` was already firmware-agnostic
+  (it doesn't pass `fw_version`, so pycore auto-probes it), so no code
+  change was needed here beyond the floor bump. Companion release:
+  BENCHLAB_Service v2.6.0, which adds the same `FACTORY_CAL_UNLOCK`
+  command plus BL1/BL2 firmware compatibility and a stuck-disconnect
+  reconnect fix.
+
 ## [3.1.0] - 2026-09-08
 
 ### Added
