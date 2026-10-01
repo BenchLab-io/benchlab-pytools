@@ -9,7 +9,7 @@ import logging
 from typing import Optional, Dict, Any, List
 
 from .config_client import (
-    create_config_client, ConfigClient, query_named_pipe,
+    create_config_client, ConfigClient, HttpConfigClient, query_named_pipe,
     DISCOVERY_PIPE_NAME)
 from .schema import validate_config_file
 from .diff import compute_diff, format_diff, DiffResult
@@ -27,13 +27,21 @@ def _default_confirm(diff: DiffResult, device_label: str) -> bool:
 class ConfigManager:
     """Manages device configuration import/export operations."""
 
-    def __init__(self, source: str = 'direct'):
+    def __init__(self, source: str = 'direct',
+                 base_url: Optional[str] = None,
+                 token: Optional[str] = None):
         """Initialize configuration manager.
 
         Args:
-            source: Data source type ('direct' or 'named_pipe')
+            source: Data source type ('direct', 'named_pipe', or
+                'service_http')
+            base_url: C# service base URL (service_http only; defaults to
+                HttpConfigClient.DEFAULT_URL if not given)
+            token: Optional X-Benchlab-Token (service_http only)
         """
         self.source = source
+        self.base_url = base_url or HttpConfigClient.DEFAULT_URL
+        self.token = token
         logger.info(f"Initialized ConfigManager with source: {source}")
 
     def discover_devices(self) -> List[Dict[str, Any]]:
@@ -46,6 +54,8 @@ class ConfigManager:
             return self._discover_direct()
         elif self.source == 'named_pipe':
             return self._discover_named_pipe()
+        elif self.source == 'service_http':
+            return self._discover_service_http()
         else:
             raise ValueError(f"Invalid source: {self.source}")
 
@@ -83,7 +93,9 @@ class ConfigManager:
                     'pipe': d.get('pipeName'),
                     'guid': d.get('guid'),
                     'port': d.get('port'),
+                    'vendorId': d.get('vendorId'),
                     'productId': d.get('productId'),
+                    'firmwareVersion': d.get('firmwareVersion'),
                     'deviceName': d.get('deviceName'),
                 }
                 for d in result
@@ -96,6 +108,55 @@ class ConfigManager:
         except Exception as e:
             logger.error(f"Failed to discover named pipe devices: {e}")
             return []
+
+    def _discover_service_http(self) -> List[Dict[str, Any]]:
+        """Discover devices via the C# BenchLab service's GET /devices
+        endpoint -- a single round-trip returning every known device
+        (connected or not), including port/firmwareVersion/variant."""
+        try:
+            import requests
+        except ImportError:
+            logger.error(
+                "requests library not available -- pip install requests")
+            return []
+
+        try:
+            session = requests.Session()
+            if self.token:
+                session.headers["X-Benchlab-Token"] = self.token
+            resp = session.get(f"{self.base_url}/devices", timeout=5.0)
+            if resp.status_code != 200:
+                logger.warning(
+                    "GET /devices -> %s: %s", resp.status_code, resp.text)
+                return []
+
+            devices = [
+                {
+                    'uid': d.get('uid'),
+                    'deviceName': d.get('name'),
+                    'port': d.get('port'),
+                    'productId': d.get('productId'),
+                    'firmwareVersion': d.get('firmwareVersion'),
+                    'variant': d.get('variant'),
+                    'status': d.get('status'),
+                }
+                for d in resp.json()
+            ]
+
+            logger.info(
+                f"Discovered {len(devices)} device(s) via service HTTP")
+            return devices
+
+        except Exception as e:
+            logger.error(f"Failed to discover service HTTP devices: {e}")
+            return []
+
+    def _create_client(self, identifier: str) -> ConfigClient:
+        """create_config_client(), threading base_url/token through for
+        service_http (no-ops for direct/named_pipe)."""
+        return create_config_client(
+            self.source, identifier,
+            base_url=self.base_url, token=self.token)
 
     def select_device(
             self, selector: Dict[str, Any],
@@ -124,6 +185,8 @@ class ConfigManager:
             # Return first available device
             if self.source == 'direct':
                 return devices[0].get('port')
+            elif self.source == 'service_http':
+                return devices[0].get('uid')
             else:
                 return devices[0].get('pipe')
 
@@ -134,6 +197,13 @@ class ConfigManager:
                     return device.get('port')
                 elif sel_type == 'guid' and device.get('uid') == sel_value:
                     return device.get('port')
+            elif self.source == 'service_http':
+                # HTTP matching -- identifier is the device UID
+                if sel_type == 'guid' and device.get('uid') == sel_value:
+                    return device.get('uid')
+                elif (sel_type == 'productId'
+                        and device.get('productId') == sel_value):
+                    return device.get('uid')
             else:
                 # Named pipe matching
                 if sel_type == 'guid' and device.get('guid') == sel_value:
@@ -230,7 +300,7 @@ class ConfigManager:
             True if successful
         """
         try:
-            client = create_config_client(self.source, identifier)
+            client = self._create_client(identifier)
         except Exception as e:
             logger.error(f"Failed to connect: {e}")
             return False
@@ -364,7 +434,7 @@ class ConfigManager:
 
                 # Read current state and show a diff before applying anything
                 try:
-                    client = create_config_client(self.source, identifier)
+                    client = self._create_client(identifier)
                 except Exception as e:
                     logger.error(f"Failed to connect to {identifier}: {e}")
                     continue
@@ -428,7 +498,7 @@ class ConfigManager:
             True if successful
         """
         try:
-            client = create_config_client(self.source, identifier)
+            client = self._create_client(identifier)
         except Exception as e:
             logger.error(f"Failed to connect: {e}")
             return False

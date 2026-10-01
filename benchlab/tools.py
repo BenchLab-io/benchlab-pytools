@@ -28,6 +28,15 @@ CONSUMER_TOOLS = {
         "requirements": "requirements.txt",
         "supported_sources": ["direct", "named_pipe"],
     },
+    "flash": {
+        "name": "Firmware Flash Tool",
+        "description": "Flash STM32 ROM DFU firmware to BENCHLAB devices",
+        "flag": "-flash",
+        "module": "benchlab.flash.flash_tool",
+        "function": "main",
+        "requirements": "requirements.txt",
+        "supported_sources": ["direct", "named_pipe", "service_http"],
+    },
     "csv_log": {
         "name": "CSV Logger",
         "description": "Log device telemetry to CSV files",

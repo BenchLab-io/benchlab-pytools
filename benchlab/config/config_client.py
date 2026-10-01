@@ -161,6 +161,18 @@ class ConfigClient(ABC):
         pass
 
     @abstractmethod
+    def enter_bootloader(self) -> bool:
+        """Jump the device into its USB DFU bootloader.
+
+        Disruptive: the device stops responding as a sensor/CDC device
+        immediately after this succeeds, and re-enumerates as USB DFU
+        (VID 0x0483 / PID 0xDF11). Callers must close this connection and
+        take over the device directly over USB from there -- see
+        benchlab.flash.flash_manager.
+        """
+        pass
+
+    @abstractmethod
     def close(self):
         """Close connection and cleanup resources."""
         pass
@@ -473,6 +485,16 @@ class DirectConfigClient(ConfigClient):
             return False
         return factory_cal_unlock(self.ser)
 
+    def enter_bootloader(self) -> bool:
+        """Jump the device into its USB DFU bootloader.
+
+        Disruptive: the device stops responding over CDC immediately after
+        this succeeds. Mirrors enter_bootloader()'s own caveat in pycore --
+        the actual jump happens on the firmware's next 100ms task tick.
+        """
+        from benchlab_pycore.core.config_io import enter_bootloader
+        return enter_bootloader(self.ser)
+
     def close(self):
         """Close serial connection."""
         if self.ser and self.ser.is_open:
@@ -657,18 +679,214 @@ class NamedPipeConfigClient(ConfigClient):
         result = self._send_command("SendFactoryCalUnlock", payload="benchlab")
         return result and result.get('success', False)
 
+    def enter_bootloader(self) -> bool:
+        """Jump the device into its USB DFU bootloader.
+
+        Disruptive: the device stops responding over CDC immediately after
+        this succeeds, and the C# service marks it DISCONNECTED (it does
+        not treat this as a device error). Mirrors the service's own
+        SendBootloader pipe command and its HTTP equivalent
+        (POST /device/{uid}/bootloader).
+        """
+        result = self._send_command("SendBootloader")
+        return result and result.get('success', False)
+
     def close(self):
         """Close pipe connection."""
         self._close_pipe()
         logger.info(f"Closed named pipe connection to {self.pipe_name}")
 
 
-def create_config_client(source: str, identifier: str) -> ConfigClient:
+class HttpConfigClient(ConfigClient):
+    """Configuration client using the C# BenchLab service's HTTP API.
+
+    Implements device info, name, save/load config, and the disruptive
+    reset/bootloader/factory-cal-unlock commands -- all simple 1:1 HTTP
+    routes. Fan/RGB/calibration read-write routes DO exist on the service
+    (GET/PUT /device/{uid}/fan, /rgb/{profile}, /calibration), but their
+    DTOs use a different, more structured shape than this repo's existing
+    raw ctypes-struct-dict convention (DirectConfigClient/
+    NamedPipeConfigClient), especially for calibration where BL2 has its
+    own wider wire struct. Translating between those shapes correctly
+    needs its own dedicated, tested implementation, so those methods raise
+    NotImplementedError for now rather than risk a subtly wrong translation
+    -- tracked as a follow-up. reset_config has no HTTP equivalent at all
+    (by design: the service only exposes save/load actions, since no
+    firmware contract defines a config-reset opcode -- RESET power-cycles
+    the whole device instead).
+    """
+
+    DEFAULT_URL = "http://localhost:8585"
+
+    def __init__(self, uid: str, base_url: str = DEFAULT_URL,
+                 token: Optional[str] = None, timeout: float = 5.0):
+        """Initialize an HTTP client scoped to one device.
+
+        Args:
+            uid: Device UID (used in /device/{uid}/... routes).
+            base_url: Base URL of the C# BenchLab service.
+            token: Optional X-Benchlab-Token value (only needed when the
+                service has token auth configured -- required on every
+                request except GET /health).
+            timeout: HTTP request timeout in seconds.
+        """
+        import requests
+
+        self.uid = uid
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
+        self._session = requests.Session()
+        if token:
+            self._session.headers["X-Benchlab-Token"] = token
+
+    def _get(self, path: str) -> Optional[Dict[str, Any]]:
+        try:
+            resp = self._session.get(
+                f"{self.base_url}{path}", timeout=self.timeout)
+            if resp.status_code == 200:
+                return resp.json()
+            logger.warning(
+                "GET %s -> %s: %s", path, resp.status_code, resp.text)
+            return None
+        except Exception as e:
+            logger.error(f"GET {path} failed: {e}")
+            return None
+
+    def _post(self, path: str, json_body=None) -> bool:
+        try:
+            resp = self._session.post(
+                f"{self.base_url}{path}", json=json_body,
+                timeout=self.timeout)
+            if resp.status_code in (200, 204):
+                return True
+            logger.warning(
+                "POST %s -> %s: %s", path, resp.status_code, resp.text)
+            return False
+        except Exception as e:
+            logger.error(f"POST {path} failed: {e}")
+            return False
+
+    def _put(self, path: str, json_body=None) -> bool:
+        try:
+            resp = self._session.put(
+                f"{self.base_url}{path}", json=json_body,
+                timeout=self.timeout)
+            if resp.status_code in (200, 204):
+                return True
+            logger.warning(
+                "PUT %s -> %s: %s", path, resp.status_code, resp.text)
+            return False
+        except Exception as e:
+            logger.error(f"PUT {path} failed: {e}")
+            return False
+
+    def get_device_info(self) -> Optional[Dict[str, Any]]:
+        """Get device information from GET /device/{uid}/info."""
+        return self._get(f"/device/{self.uid}/info")
+
+    def read_device_name(self) -> Optional[str]:
+        info = self.get_device_info()
+        return info.get('deviceName') if info else None
+
+    def write_device_name(self, name: str) -> bool:
+        """Write device friendly name via PUT /device/{uid}/name."""
+        return self._put(f"/device/{self.uid}/name", {"name": name})
+
+    def read_fan_config(self, profile_id: int,
+                        fan_id: int) -> Optional[Dict[str, Any]]:
+        raise NotImplementedError(
+            "HttpConfigClient does not yet support reading fan config -- "
+            "the HTTP route exists (GET /device/{uid}/fan/{profile}/{fan}) "
+            "but its FanConfigDto shape needs a dedicated translation to "
+            "this repo's raw struct-dict convention; not yet implemented")
+
+    def write_fan_config(self, profile_id: int, fan_id: int,
+                         config: Dict[str, Any]) -> bool:
+        raise NotImplementedError(
+            "HttpConfigClient does not yet support writing fan config -- "
+            "see read_fan_config's docstring")
+
+    def read_rgb_config(self, profile_id: int) -> Optional[Dict[str, Any]]:
+        raise NotImplementedError(
+            "HttpConfigClient does not yet support reading RGB config -- "
+            "the HTTP route exists (GET /device/{uid}/rgb/{profile}) but "
+            "its RgbConfigDto shape needs a dedicated translation to this "
+            "repo's raw struct-dict convention; not yet implemented")
+
+    def write_rgb_config(self, profile_id: int,
+                         config: Dict[str, Any]) -> bool:
+        raise NotImplementedError(
+            "HttpConfigClient does not yet support writing RGB config -- "
+            "see read_rgb_config's docstring")
+
+    def read_calibration(self) -> Optional[Dict[str, Any]]:
+        raise NotImplementedError(
+            "HttpConfigClient does not yet support reading calibration -- "
+            "the HTTP route exists (GET /device/{uid}/calibration) but its "
+            "CalibrationDto shape (and BL2's separate wider wire struct) "
+            "needs a dedicated translation to this repo's raw "
+            "struct-dict convention; not yet implemented")
+
+    def write_calibration(self, calibration: Dict[str, Any]) -> bool:
+        raise NotImplementedError(
+            "HttpConfigClient does not yet support writing calibration -- "
+            "see read_calibration's docstring")
+
+    def save_config(self) -> bool:
+        """Save configuration to device flash via
+        POST /device/{uid}/config/save."""
+        return self._post(f"/device/{self.uid}/config/save")
+
+    def load_config(self) -> bool:
+        """Reload configuration from device flash via
+        POST /device/{uid}/config/load."""
+        return self._post(f"/device/{self.uid}/config/load")
+
+    def reset_config(self) -> bool:
+        raise NotImplementedError(
+            "HttpConfigClient does not support config reset -- the C# "
+            "service has no HTTP route for it, by design: no firmware "
+            "contract defines a config-reset opcode (use the device's "
+            "RESET command / POST /device/{uid}/reset to power-cycle "
+            "instead, which is not equivalent)")
+
+    def factory_cal_unlock(self) -> bool:
+        """Temporarily lift write-protection on BL2's factory calibration
+        slot via POST /device/{uid}/factory-cal-unlock.
+
+        Disruptive: a successful call resets the device immediately -- the
+        service marks it DISCONNECTED until it re-enumerates.
+        """
+        return self._post(
+            f"/device/{self.uid}/factory-cal-unlock",
+            json_body={"passphrase": "benchlab"})
+
+    def enter_bootloader(self) -> bool:
+        """Jump the device into its USB DFU bootloader via
+        POST /device/{uid}/bootloader.
+
+        Disruptive: the device stops responding over CDC immediately after
+        this succeeds, and the C# service marks it DISCONNECTED (it does
+        not treat this as a device error).
+        """
+        return self._post(f"/device/{self.uid}/bootloader")
+
+    def close(self):
+        """Close the HTTP session."""
+        self._session.close()
+
+
+def create_config_client(
+        source: str, identifier: str, base_url: Optional[str] = None,
+        token: Optional[str] = None) -> ConfigClient:
     """Factory function to create appropriate config client.
 
     Args:
-        source: 'direct' or 'named_pipe'
-        identifier: Port name for direct, pipe name for named_pipe
+        source: 'direct', 'named_pipe', or 'service_http'
+        identifier: Port name for direct, pipe name for named_pipe, device
+            UID for service_http
+        base_url: Service base URL (service_http only)
+        token: Optional X-Benchlab-Token (service_http only)
 
     Returns:
         ConfigClient instance
@@ -681,5 +899,12 @@ def create_config_client(source: str, identifier: str) -> ConfigClient:
         return DirectConfigClient(identifier)
     elif source == 'named_pipe':
         return NamedPipeConfigClient(identifier)
+    elif source == 'service_http':
+        kwargs = {}
+        if base_url:
+            kwargs['base_url'] = base_url
+        if token:
+            kwargs['token'] = token
+        return HttpConfigClient(identifier, **kwargs)
     else:
         raise ValueError(f"Invalid source type: {source}")
