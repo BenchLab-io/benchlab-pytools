@@ -87,12 +87,39 @@ def find_dfu_devices(vid=ST_DFU_VENDOR_ID, pid=ST_DFU_PRODUCT_ID):
 class DfuDevice:
     """Wraps a usb.core.Device and speaks DFU 1.1 + DfuSe over it."""
 
-    def __init__(self, dev, alt_setting=0):
+    def __init__(self, dev, alt_setting=0,
+                 _set_configuration_retries=5,
+                 _set_configuration_retry_delay=0.5):
         self.dev = dev
         self.alt_setting = alt_setting
         self.transfer_size = _DEFAULT_TRANSFER_SIZE
 
-        dev.set_configuration()
+        # A device that just re-enumerated into DFU mode (e.g. right after
+        # enter_dfu_mode's jump) can briefly fail to open with libusb's
+        # LIBUSB_ERROR_NOT_SUPPORTED ("Operation not supported or
+        # unimplemented on this platform") on Windows/WinUSB -- confirmed
+        # against real hardware as a transient race between the physical
+        # re-enumeration completing and a new process's first claim
+        # attempt, not a persistent fault (the very next attempt, even
+        # from a fresh process, succeeds; the device is never left in a
+        # bad state by this). Retry the claim a few times before giving up.
+        last_exc = None
+        for attempt in range(_set_configuration_retries):
+            try:
+                dev.set_configuration()
+                last_exc = None
+                break
+            except (usb.core.USBError, NotImplementedError) as e:
+                # pyusb's libusb1 backend raises NotImplementedError
+                # specifically for LIBUSB_ERROR_NOT_SUPPORTED, which is
+                # what this transient claim race surfaces as -- not a
+                # usb.core.USBError.
+                last_exc = e
+                if attempt < _set_configuration_retries - 1:
+                    time.sleep(_set_configuration_retry_delay)
+        if last_exc is not None:
+            raise last_exc
+
         cfg = dev.get_active_configuration()
         intf = usb.util.find_descriptor(
             cfg, bInterfaceClass=0xFE, bInterfaceSubClass=1)

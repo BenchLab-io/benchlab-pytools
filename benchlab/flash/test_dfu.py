@@ -165,3 +165,47 @@ def test_find_dfu_devices_filters_by_vid_pid(monkeypatch):
     assert seen_kwargs["idVendor"] == 0x1234
     assert seen_kwargs["idProduct"] == 0x5678
     assert seen_kwargs["find_all"] is True
+
+
+# -- DfuDevice.__init__: transient claim-failure retry ----------------------
+#
+# Confirmed against real hardware: a device that just re-enumerated into
+# DFU mode can briefly fail set_configuration() with libusb's
+# LIBUSB_ERROR_NOT_SUPPORTED (surfaced by pyusb as NotImplementedError),
+# before succeeding on a near-immediate retry -- not a persistent fault.
+
+class FlakyUsbDevice(FakeUsbDevice):
+    def __init__(self, fail_times):
+        super().__init__()
+        self.fail_times = fail_times
+        self.attempts = 0
+
+    def set_configuration(self):
+        self.attempts += 1
+        if self.attempts <= self.fail_times:
+            raise NotImplementedError(
+                "Operation not supported or unimplemented on this platform")
+        super().set_configuration()
+
+
+def test_init_retries_transient_not_implemented_error(monkeypatch):
+    monkeypatch.setattr(dfu.usb.util, "claim_interface", lambda *a, **k: None)
+    monkeypatch.setattr(dfu.time, "sleep", lambda s: None)
+
+    flaky = FlakyUsbDevice(fail_times=2)
+    device = dfu.DfuDevice(flaky, _set_configuration_retries=5,
+                           _set_configuration_retry_delay=0)
+
+    assert flaky.attempts == 3
+    assert device.interface == 0
+
+
+def test_init_gives_up_after_exhausting_retries(monkeypatch):
+    monkeypatch.setattr(dfu.usb.util, "claim_interface", lambda *a, **k: None)
+    monkeypatch.setattr(dfu.time, "sleep", lambda s: None)
+
+    flaky = FlakyUsbDevice(fail_times=10)
+    with pytest.raises(NotImplementedError):
+        dfu.DfuDevice(flaky, _set_configuration_retries=3,
+                      _set_configuration_retry_delay=0)
+    assert flaky.attempts == 3
