@@ -297,12 +297,26 @@ Examples:
   # Use named pipe source (Windows only)
   python -m benchlab -config --list --source named_pipe
   python -m benchlab -config --import config.json --source named_pipe
+
+  # Use the running C# BenchLab service over HTTP
+  python -m benchlab -config --list --source service_http
+  python -m benchlab -config --import config.json --source service_http \\
+      --service-url http://localhost:8585 --service-token secret
             """
         )
 
-        parser.add_argument('--source', choices=['direct', 'named_pipe'],
-                            default='direct',
-                            help='Data source type (default: direct)')
+        parser.add_argument(
+            '--source', choices=['direct', 'named_pipe', 'service_http'],
+            default='direct',
+            help='Data source type (default: direct)')
+        parser.add_argument(
+            '--service-url', dest='service_url',
+            help='C# BenchLab service base URL (service_http only; '
+                 'default: http://localhost:8585)')
+        parser.add_argument(
+            '--service-token', dest='service_token',
+            help='X-Benchlab-Token for the C# service (service_http '
+                 'only, if token auth is enabled)')
 
         # Commands
         parser.add_argument('--list', action='store_true',
@@ -334,6 +348,10 @@ Examples:
         # Ensure source exists (should be set by launcher)
         if not hasattr(args, 'source'):
             args.source = 'direct'
+        if not hasattr(args, 'service_url'):
+            args.service_url = None
+        if not hasattr(args, 'service_token'):
+            args.service_token = None
         if not hasattr(args, 'list'):
             args.list = False
         if not hasattr(args, 'output'):
