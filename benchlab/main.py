@@ -51,6 +51,8 @@ def get_parser() -> argparse.ArgumentParser:
                         version=f"benchlab-pytools {__version__}")
     parser.add_argument("-config", action="store_true",
                         help="Device configuration import/export tool")
+    parser.add_argument("-flash", action="store_true",
+                        help="Firmware flash tool (STM32 ROM DFU)")
     parser.add_argument("-fastapi", action="store_true",
                         help="Launch FastAPI telemetry API server")
     parser.add_argument("-graph", action="store_true",
@@ -343,12 +345,13 @@ def launch_mode() -> None:
 
     # Check if -config is in args - if so, use parse_known_args to allow
     # config tool args through
-    if '-config' in sys.argv:
+    if '-config' in sys.argv or '-flash' in sys.argv:
         args, unknown = parser.parse_known_args()
     else:
         args = parser.parse_args()
 
     no_flags = not any([args.config,
+                        args.flash,
                         args.fastapi,
                         args.graph,
                         args.hwinfo,
@@ -402,6 +405,15 @@ def launch_mode() -> None:
             sys.exit(config_main())
         except ModuleNotFoundError:
             print("Config tool module not available in this build.")
+
+    elif args.flash:
+        # Flash tool handles its own argument parsing
+        try:
+            sys.argv.remove('-flash')
+            from benchlab.flash.flash_tool import main as flash_main
+            sys.exit(flash_main())
+        except ModuleNotFoundError:
+            print("Flash tool module not available in this build.")
 
     elif args.fastapi:
         try:
