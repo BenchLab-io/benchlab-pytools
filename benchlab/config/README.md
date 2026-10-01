@@ -1,12 +1,12 @@
 # BENCHLAB Device Configuration Tool
 
-A command-line tool for importing and exporting BENCHLAB device configuration via JSON files. Supports both direct serial (pycore) and Windows named pipe (BL_Service) data sources.
+A command-line tool for importing and exporting BENCHLAB device configuration via JSON files. Supports direct serial (pycore), Windows named pipe (BL_Service), and the BL_Service HTTP API as data sources.
 
 ## Features
 
 - **Export Configuration**: Read current device settings and save to JSON
 - **Import Configuration**: Apply JSON configuration to devices
-- **Multi-Source Support**: Works with both direct serial and named pipe connections
+- **Multi-Source Support**: Works with direct serial, named pipe, and HTTP connections
 - **Interactive Mode**: Simple interface for loading JSON configs
 - **Validation**: Schema validation with detailed error messages
 - **Batch Operations**: Configure multiple devices from a single JSON file
@@ -27,6 +27,11 @@ pip install benchlab-pycore
 For named pipe support (Windows only), you need:
 ```bash
 pip install pywin32
+```
+
+For `service_http` support (talking to a running BL_Service instance over HTTP, any platform), you need:
+```bash
+pip install requests
 ```
 
 ## Usage
@@ -55,6 +60,11 @@ python -m benchlab -config --list
 
 # List devices via named pipe (Windows only)
 python -m benchlab -config --list --source named_pipe
+
+# List devices via the BL_Service HTTP API
+python -m benchlab -config --list --source service_http
+python -m benchlab -config --list --source service_http \
+    --service-url http://localhost:8585 --service-token secret
 ```
 
 #### Export Configuration
@@ -68,6 +78,9 @@ python -m benchlab -config --export my_config.json --device COM4
 
 # Export via named pipe
 python -m benchlab -config --export my_config.json --source named_pipe
+
+# Export via the BL_Service HTTP API
+python -m benchlab -config --export my_config.json --source service_http
 ```
 
 #### Import Configuration
@@ -88,6 +101,9 @@ python -m benchlab -config --import my_config.json --yes
 
 # Import via named pipe
 python -m benchlab -config --import my_config.json --source named_pipe
+
+# Import via the BL_Service HTTP API
+python -m benchlab -config --import my_config.json --source service_http
 ```
 
 ## JSON Configuration Format
@@ -120,6 +136,7 @@ python -m benchlab -config --import my_config.json --source named_pipe
 - **`port`**: Match by serial port (e.g., "COM4" - not portable)
 - **`productId`**: Match by product ID (0x10 or 0x11)
 - **`pipeName`**: Match by named pipe name (named_pipe source only)
+- **`guid`** is also required when using `service_http`, since the service addresses devices by their UID rather than a port or pipe name.
 
 **Note:** When exporting, the tool automatically uses `guid` selector with the device UID for portability. This allows you to export configuration on one system and import it on another, and the tool will find the same device regardless of which COM port it's connected to.
 
@@ -235,6 +252,25 @@ Uses the Windows BL_Service named pipe interface for communication.
 - Requires BL_Service to be running
 - Requires pywin32 library
 
+### Service HTTP (BL_Service HTTP API)
+
+Talks to a running BL_Service instance over its HTTP API (`--service-url`,
+default `http://localhost:8585`). Fan, RGB, and calibration read/write go
+through a translation layer (`benchlab/config/http_dto.py`) between the
+service's DTO JSON shapes and this tool's own config format — see that
+module if you're integrating against the HTTP API directly rather than
+through this tool.
+
+**Advantages:**
+- Cross-platform (the service itself may run anywhere reachable over HTTP)
+- Multiple tools can access the device simultaneously
+- No direct serial port management
+
+**Limitations:**
+- Requires BL_Service to be running and reachable
+- Requires the `requests` library
+- Device selector must use `guid` (the service addresses devices by UID, not port/pipe name)
+
 ## Configuration Profiles
 
 ### Profile IDs
@@ -276,6 +312,11 @@ Use `--dry-run` to preview exactly what would change on the device (connects and
 - Check Windows service status
 - Verify device is connected to service
 
+**Service HTTP:**
+- Ensure BL_Service is running and reachable at `--service-url`
+- Check `--service-token` if the service has token auth enabled
+- Verify the device UID is correct (use `--list` to see available UIDs)
+
 ### Import Fails
 
 - Use `--dry-run` to validate JSON syntax
@@ -316,12 +357,14 @@ manager.import_config('input.json', dry_run=False)
 ```
 
 For lower-level access (used internally by `ConfigManager`), `create_config_client()`
-returns a `ConfigClient` with `read_calibration()`/`write_calibration()`,
+returns a `ConfigClient` with `read_fan_config()`/`write_fan_config()`,
+`read_rgb_config()`/`write_rgb_config()`, `read_calibration()`/`write_calibration()`,
 `save_config()`/`load_config()`/`reset_config()`, and (BL2 firmware 7+ only)
 `factory_cal_unlock()`, which temporarily lifts write-protection on the factory
-calibration slot. There is no CLI/JSON-config surface for `factory_cal_unlock()` —
-it's a niche factory-calibration tool, not a user-facing config option, and a
-successful call resets the device immediately:
+calibration slot. All three sources (`direct`, `named_pipe`, `service_http`)
+implement the full interface. There is no CLI/JSON-config surface for
+`factory_cal_unlock()` — it's a niche factory-calibration tool, not a
+user-facing config option, and a successful call resets the device immediately:
 
 ```python
 from benchlab.config.config_client import create_config_client

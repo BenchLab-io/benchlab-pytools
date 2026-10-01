@@ -12,6 +12,7 @@ BENCHLAB PyTools is the Python-based control suite for BENCHLAB telemetry device
 - **VU Dials** — analog-style VU meter dial display and configuration
 - **WigiDash** — telemetry/graph display on a G.SKILL WigiDash panel
 - **Config Tool** — import/export device configuration (fan curves, RGB, etc.) via JSON
+- **Flash Tool** — flash new firmware onto BENCHLAB1/2 devices over USB DFU
 
 All tools share a common data-source layer, so the same telemetry can be read directly from a device, through a FastAPI server, over MQTT, or via the Windows BENCHLAB service — locally or remotely — without changing the consumer tool.
 
@@ -79,6 +80,7 @@ python -m benchlab -vu          # VU analog dials
 python -m benchlab -vuconfig    # VU dial configuration UI
 python -m benchlab -wigidash    # WigiDash display
 python -m benchlab -config ...  # Device configuration import/export
+python -m benchlab -flash ...   # Firmware flash tool (STM32 ROM DFU)
 ```
 
 Running with no flags is equivalent to launching the interactive menu.
@@ -121,7 +123,7 @@ Common connection flags:
 -i, --interval SECONDS     Refresh interval (default: 1.0)
 ```
 
-When a source needs a background service (`fastapi`, `mqtt`), the launcher starts and health-checks it automatically, and tears it down on exit. Not every tool supports every source — the config tool, for example, only supports `direct` and `named_pipe`. See each tool's README for specifics.
+When a source needs a background service (`fastapi`, `mqtt`), the launcher starts and health-checks it automatically, and tears it down on exit. Not every tool supports every source — the config and flash tools, for example, only support `direct`, `named_pipe`, and `service_http`. See each tool's README for specifics.
 
 ### Launch Profiles
 
@@ -162,6 +164,7 @@ Each consumer tool lives in its own subpackage under `benchlab/` with its own RE
 - [Core](benchlab/core/README.md) — shared internals (data sources, process management, discovery)
 - [CSV Logger](benchlab/csv_log/README.md)
 - [FastAPI Server](benchlab/restapi/readme.md)
+- [Flash Tool](benchlab/flash/README.md) — firmware flashing over USB DFU
 - [Graph](benchlab/graph/README.md)
 - [HWiNFO Export](benchlab/hwinfo/README.md)
 - [Link](benchlab/link/README.md) — publish telemetry to BENCHLAB cloud

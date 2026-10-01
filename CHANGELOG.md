@@ -4,6 +4,26 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Firmware flash tool (`-flash`, `benchlab.flash`): flashes new firmware
+  onto BENCHLAB1/2 devices (STM32F303RB) over USB DFU, commanding the
+  running firmware to jump into ST's factory ROM bootloader and talking to
+  it via a pure-Python `pyusb` client (no external flashing binary
+  required). Supports `.bin` (primary), `.hex`, and `.elf` images, and
+  `direct`/`named_pipe`/`service_http` sources for the initial CDC-side
+  bootloader jump. Falls back to a guided manual BOOT0 entry for firmware
+  too old to support the CDC bootloader command. (#84)
+- `HttpConfigClient` (`service_http` source) now implements fan/RGB/
+  calibration read-write (`read_fan_config`/`write_fan_config`,
+  `read_rgb_config`/`write_rgb_config`, `read_calibration`/
+  `write_calibration`), via a new translation layer
+  (`benchlab.config.http_dto`) between the BL_Service HTTP API's DTO JSON
+  shapes and this repo's existing config-dict convention. Handles BL2's
+  wider calibration wire struct correctly. `config_tool.py` (`-config`)
+  gained `--source service_http` CLI support to match. (#86)
+
 ## [3.2.1] - 2026-10-01
 
 ### Fixed
