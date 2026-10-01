@@ -18,6 +18,8 @@ from benchlab_pycore.core import (
     read_device,
 )
 
+from benchlab.config.config_client import create_config_client
+from benchlab.config.config_manager import ConfigManager
 from benchlab.core.discovery import discover_devices
 from benchlab.core.shared_serial import open_serial_connection
 from benchlab.flash import dfu, image
@@ -48,14 +50,51 @@ class FlashResult:
 
 
 class FlashManager:
-    def discover_devices(self) -> List[dict]:
-        return discover_devices()
+    def __init__(self, source: str = "direct",
+                 base_url: Optional[str] = None,
+                 token: Optional[str] = None):
+        """
+        Args:
+            source: 'direct' (raw serial, the only mode validated against
+                real hardware), 'named_pipe', or 'service_http'. For
+                named_pipe/service_http, the C# BenchLab service owns the
+                serial port and must be the one to trigger the bootloader
+                jump (via its existing SendBootloader pipe command / POST
+                /device/{uid}/bootloader) and release the port -- this
+                tool then takes over the bare USB device directly via
+                pyusb, identically to the direct-mode flow.
+            base_url: C# service base URL (service_http only).
+            token: Optional X-Benchlab-Token (service_http only).
+        """
+        self.source = source
+        self.base_url = base_url
+        self.token = token
 
-    def identify_device(self, port: str) -> Optional[dict]:
-        """Open `port`, read vendor/product/firmware info, and gate on it
-        being a recognized BENCHLAB device. Returns None if the port can't
-        be opened/read, or isn't a recognized device (e.g. already in DFU
-        mode, which doesn't expose a CDC port at all)."""
+    def discover_devices(self) -> List[dict]:
+        if self.source == "direct":
+            return discover_devices()
+        return ConfigManager(
+            source=self.source, base_url=self.base_url,
+            token=self.token).discover_devices()
+
+    def identify_device(self, identifier: str) -> Optional[dict]:
+        """Read vendor/product/firmware info for `identifier` (a COM port
+        for 'direct', a pipe name for 'named_pipe', a device UID for
+        'service_http'), and gate on it being a recognized BENCHLAB
+        device. Returns None if the device can't be reached/read, or isn't
+        recognized (e.g. already in DFU mode, which exposes neither a CDC
+        port nor a named pipe).
+
+        Always returns the same shape regardless of source --
+        {VendorId, ProductId, FwVersion, uid} -- normalizing named_pipe/
+        service_http's camelCase ConfigClient fields to match direct
+        mode's, so every other FlashManager method stays source-agnostic.
+        """
+        if self.source == "direct":
+            return self._identify_direct(identifier)
+        return self._identify_via_config_client(identifier)
+
+    def _identify_direct(self, port: str) -> Optional[dict]:
         ser = open_serial_connection(port)
         if ser is None:
             return None
@@ -72,17 +111,46 @@ class FlashManager:
             return None
         return info
 
-    def assert_cdc_mode(self, port: str) -> dict:
-        """Confirm `port` is a BENCHLAB device currently running in normal
-        CDC mode (not already in DFU). Raises ConnectionError with an
-        actionable message otherwise."""
-        info = self.identify_device(port)
+    def _identify_via_config_client(
+            self, identifier: str) -> Optional[dict]:
+        try:
+            client = create_config_client(
+                self.source, identifier, base_url=self.base_url,
+                token=self.token)
+        except Exception as e:
+            logger.debug("Could not connect to %s: %s", identifier, e)
+            return None
+
+        try:
+            info = client.get_device_info()
+        finally:
+            client.close()
+
+        if not info:
+            return None
+        product_id = info.get("productId")
+        if product_id not in _KNOWN_PRODUCT_IDS:
+            return None
+        return {
+            "VendorId": info.get("vendorId"),
+            "ProductId": product_id,
+            "FwVersion": info.get("firmwareVersion"),
+            "uid": info.get("guid") or info.get("uid"),
+            "port": info.get("port"),
+        }
+
+    def assert_cdc_mode(self, identifier: str) -> dict:
+        """Confirm `identifier` identifies a BENCHLAB device currently
+        reachable over its normal control channel (CDC for direct, the
+        pipe/HTTP API otherwise) -- i.e. not already in DFU mode. Raises
+        ConnectionError with an actionable message otherwise."""
+        info = self.identify_device(identifier)
         if info is None:
             raise ConnectionError(
-                f"Could not identify a BENCHLAB device on {port}. It may "
-                "already be in DFU mode (e.g. from an interrupted previous "
-                "flash attempt) or may not be a BENCHLAB device. Try "
-                "--list, or power-cycle the device and reconnect.")
+                f"Could not identify a BENCHLAB device at {identifier}. "
+                "It may already be in DFU mode (e.g. from an interrupted "
+                "previous flash attempt) or may not be a BENCHLAB device. "
+                "Try --list, or power-cycle the device and reconnect.")
         return info
 
     def check_bootloader_supported(
@@ -98,17 +166,43 @@ class FlashManager:
                 "into DFU mode via software -- use a physical BOOT0/jumper "
                 "bootloader entry instead.")
 
-    def enter_dfu_mode(self, port: str, timeout: float = 5.0) -> None:
-        """Send the bootloader-jump command and wait for the CDC port to
-        disappear (the firmware defers the actual jump to its next 100ms
-        task tick)."""
-        ser = open_serial_connection(port)
-        if ser is None:
-            raise ConnectionError(f"Could not open {port} to enter DFU mode")
-        try:
-            config_io.enter_bootloader(ser)
-        finally:
-            ser.close()
+    def enter_dfu_mode(
+            self, identifier: str, port: Optional[str] = None,
+            timeout: float = 5.0) -> None:
+        """Send the bootloader-jump command and wait for the physical CDC
+        port to disappear (the firmware defers the actual jump to its next
+        100ms task tick). `port` is the OS-level COM port to poll for
+        disappearance -- for 'direct' it's the same as `identifier`; for
+        'named_pipe'/'service_http' it must be looked up from the device
+        info first (the pipe/HTTP identifier isn't a COM port), since USB
+        enumeration is physical and OS-level regardless of which control
+        channel sent the jump command.
+        """
+        if self.source == "direct":
+            port = identifier
+            ser = open_serial_connection(identifier)
+            if ser is None:
+                raise ConnectionError(
+                    f"Could not open {identifier} to enter DFU mode")
+            try:
+                config_io.enter_bootloader(ser)
+            finally:
+                ser.close()
+        else:
+            if port is None:
+                raise ValueError(
+                    "port is required for named_pipe/service_http -- look "
+                    "it up from identify_device()'s result first")
+            client = create_config_client(
+                self.source, identifier, base_url=self.base_url,
+                token=self.token)
+            try:
+                if not client.enter_bootloader():
+                    raise ConnectionError(
+                        f"The device at {identifier} rejected the "
+                        "bootloader jump")
+            finally:
+                client.close()
 
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -195,9 +289,18 @@ class FlashManager:
             self, usb_dev, port: str,
             timeout: float = 10.0) -> Optional[dict]:
         """Leave DFU mode (standard DfuSe "leave" sequence) and wait for
-        the device's CDC port to reappear. No separate vendor command is
-        needed: the freshly-flashed app's normal boot path re-initializes
-        USB CDC on its own."""
+        the device's physical CDC port to reappear. No separate vendor
+        command is needed: the freshly-flashed app's normal boot path
+        re-initializes USB CDC on its own.
+
+        For 'direct', re-identifies the device by port once it reappears
+        and returns the fresh info. For 'named_pipe'/'service_http', only
+        confirms the port physically came back -- the C# service owns
+        re-detecting/re-opening it on its own schedule, and the
+        pipe-name/UID used to identify the device before flashing may not
+        be immediately valid again, so this doesn't attempt to re-query
+        through the service here.
+        """
         dev = dfu.DfuDevice(usb_dev)
         dev.set_address_pointer(image.FLASH_BASE)
         dev.leave_dfu()
@@ -206,7 +309,9 @@ class FlashManager:
         while time.monotonic() < deadline:
             ports = {p.get("port") for p in get_benchlab_ports()}
             if port in ports:
-                return self.identify_device(port)
+                if self.source == "direct":
+                    return self.identify_device(port)
+                return None
             time.sleep(0.2)
 
         logger.warning(
@@ -246,31 +351,44 @@ class FlashManager:
             dfu.DfuDevice(usb_dev).leave_dfu()
         return ok, message
 
-    def flash_one(self, port: str, data: bytes, product_id: int,
+    def flash_one(self, identifier: str, data: bytes, product_id: int,
                   verify_only: bool = False,
                   progress_cb: Optional[Callable[[int, int], None]] = None
                   ) -> FlashResult:
         """Run the full single-device sequence for a device currently
-        connected in normal CDC mode. Never raises -- failures at any step
-        are caught and returned as a failed FlashResult so flash_many()
-        can continue with the rest of a batch."""
+        reachable over its normal control channel. `identifier` is a COM
+        port for 'direct', a pipe name for 'named_pipe', or a device UID
+        for 'service_http'. Never raises -- failures at any step are
+        caught and returned as a failed FlashResult so flash_many() can
+        continue with the rest of a batch."""
         uid = None
         try:
-            info = self.assert_cdc_mode(port)
+            info = self.assert_cdc_mode(identifier)
             uid = info.get("uid")
             self.check_bootloader_supported(info, product_id)
 
-            self.enter_dfu_mode(port)
+            # The physical COM port to watch disappear/reappear -- for
+            # 'direct' the identifier already is the port; for
+            # named_pipe/service_http it comes from the device info.
+            port = identifier if self.source == "direct" else info.get(
+                "port")
+            if port is None:
+                raise ConnectionError(
+                    f"Device info for {identifier} did not include a "
+                    "physical port to monitor")
+
+            self.enter_dfu_mode(identifier, port=port)
             devices = self.wait_for_dfu_device(expected_count=1)
             usb_dev = devices[0]
 
             ok, message = self._erase_verify_leave(
                 usb_dev, data, product_id, port, verify_only, progress_cb)
-            return FlashResult(port=port, uid=uid, ok=ok, message=message)
-        except Exception as e:
-            logger.exception("Flashing %s failed", port)
             return FlashResult(
-                port=port, uid=uid, ok=False, message=str(e))
+                port=identifier, uid=uid, ok=ok, message=message)
+        except Exception as e:
+            logger.exception("Flashing %s failed", identifier)
+            return FlashResult(
+                port=identifier, uid=uid, ok=False, message=str(e))
 
     def flash_bare_dfu(
             self, product_id: int, data: bytes, verify_only: bool = False,
@@ -305,34 +423,35 @@ class FlashManager:
                 port="<bare DFU>", uid=None, ok=False, message=str(e))
 
     def flash_many(
-            self, ports: List[str], image_path: Path,
+            self, identifiers: List[str], image_path: Path,
             verify_only: bool = False,
             progress_cb: Optional[Callable[[str, int, int], None]] = None
     ) -> List[FlashResult]:
-        """Flash (or verify) `image_path` on every port in `ports`,
-        strictly sequentially -- DFU mode exposes no BENCHLAB-specific
-        identity, so devices are never staged in DFU concurrently (there
-        would be no way to tell them apart). One device's failure never
-        stops the rest of the batch; all are attempted and every outcome
-        is returned."""
+        """Flash (or verify) `image_path` on every device in `identifiers`
+        (COM ports for 'direct', pipe names for 'named_pipe', device UIDs
+        for 'service_http'), strictly sequentially -- DFU mode exposes no
+        BENCHLAB-specific identity, so devices are never staged in DFU
+        concurrently (there would be no way to tell them apart). One
+        device's failure never stops the rest of the batch; all are
+        attempted and every outcome is returned."""
         data = image.load_image(Path(image_path))
         results = []
-        for port in ports:
-            info = self.identify_device(port)
+        for identifier in identifiers:
+            info = self.identify_device(identifier)
             if info is None:
                 results.append(FlashResult(
-                    port=port, uid=None, ok=False,
-                    message=f"Could not identify a BENCHLAB device on "
-                            f"{port} before starting"))
+                    port=identifier, uid=None, ok=False,
+                    message=f"Could not identify a BENCHLAB device at "
+                            f"{identifier} before starting"))
                 continue
 
             product_id = info.get("ProductId")
 
-            def cb(written, total, _port=port):
+            def cb(written, total, _identifier=identifier):
                 if progress_cb:
-                    progress_cb(_port, written, total)
+                    progress_cb(_identifier, written, total)
 
             results.append(self.flash_one(
-                port, data, product_id, verify_only=verify_only,
+                identifier, data, product_id, verify_only=verify_only,
                 progress_cb=cb))
         return results

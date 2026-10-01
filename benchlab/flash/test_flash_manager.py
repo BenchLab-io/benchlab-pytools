@@ -284,3 +284,185 @@ def test_flash_bare_dfu_catches_exceptions(manager, monkeypatch):
 
     assert not result.ok
     assert "no DFU device found" in result.message
+
+
+# -- named_pipe / service_http sources: the C# service owns the port -------
+
+def _fake_client_info(product_id=BENCHLAB_ORIGINAL_PRODUCT_ID, fw=6,
+                      guid="U1", port="COM9", vendor_id=0xEE):
+    """Shape returned by ConfigClient.get_device_info() for named_pipe/
+    service_http -- camelCase keys, unlike DirectConfigClient's PascalCase."""
+    return {
+        "vendorId": vendor_id, "productId": product_id,
+        "firmwareVersion": fw, "guid": guid, "port": port,
+    }
+
+
+@pytest.fixture
+def named_pipe_manager():
+    return FlashManager(source="named_pipe")
+
+
+@pytest.fixture
+def http_manager():
+    return FlashManager(
+        source="service_http", base_url="http://localhost:8585",
+        token="secret")
+
+
+def test_identify_device_normalizes_named_pipe_shape(
+        named_pipe_manager, monkeypatch):
+    fake_client = MagicMock()
+    fake_client.get_device_info.return_value = _fake_client_info()
+    monkeypatch.setattr(
+        fm_module, "create_config_client", lambda *a, **k: fake_client)
+
+    info = named_pipe_manager.identify_device("BenchlabSensorPipe_X")
+
+    assert info == {
+        "VendorId": 0xEE, "ProductId": BENCHLAB_ORIGINAL_PRODUCT_ID,
+        "FwVersion": 6, "uid": "U1", "port": "COM9",
+    }
+    fake_client.close.assert_called_once()
+
+
+def test_identify_device_passes_base_url_and_token_for_http(
+        http_manager, monkeypatch):
+    captured = {}
+
+    def fake_create(source, identifier, base_url=None, token=None):
+        captured["source"] = source
+        captured["identifier"] = identifier
+        captured["base_url"] = base_url
+        captured["token"] = token
+        client = MagicMock()
+        client.get_device_info.return_value = _fake_client_info()
+        return client
+
+    monkeypatch.setattr(fm_module, "create_config_client", fake_create)
+    http_manager.identify_device("some-uid")
+
+    assert captured == {
+        "source": "service_http", "identifier": "some-uid",
+        "base_url": "http://localhost:8585", "token": "secret",
+    }
+
+
+def test_identify_device_none_for_unreachable_named_pipe_device(
+        named_pipe_manager, monkeypatch):
+    def fake_create(*a, **k):
+        raise ConnectionError("pipe not available")
+
+    monkeypatch.setattr(fm_module, "create_config_client", fake_create)
+    assert named_pipe_manager.identify_device("BenchlabSensorPipe_X") is None
+
+
+def test_identify_device_none_when_get_device_info_returns_none(
+        named_pipe_manager, monkeypatch):
+    fake_client = MagicMock()
+    fake_client.get_device_info.return_value = None
+    monkeypatch.setattr(
+        fm_module, "create_config_client", lambda *a, **k: fake_client)
+
+    assert named_pipe_manager.identify_device("BenchlabSensorPipe_X") is None
+    fake_client.close.assert_called_once()
+
+
+def test_discover_devices_uses_config_manager_for_named_pipe(
+        named_pipe_manager, monkeypatch):
+    fake_cm = MagicMock()
+    fake_cm.discover_devices.return_value = [{"pipe": "p1"}]
+    monkeypatch.setattr(
+        fm_module, "ConfigManager", lambda **kwargs: fake_cm)
+
+    result = named_pipe_manager.discover_devices()
+
+    assert result == [{"pipe": "p1"}]
+
+
+def test_enter_dfu_mode_uses_config_client_for_named_pipe(
+        named_pipe_manager, monkeypatch):
+    fake_client = MagicMock()
+    fake_client.enter_bootloader.return_value = True
+    monkeypatch.setattr(
+        fm_module, "create_config_client", lambda *a, **k: fake_client)
+    monkeypatch.setattr(fm_module, "get_benchlab_ports", lambda: [])
+    monkeypatch.setattr(fm_module.time, "sleep", lambda s: None)
+
+    named_pipe_manager.enter_dfu_mode(
+        "BenchlabSensorPipe_X", port="COM9", timeout=5.0)
+
+    fake_client.enter_bootloader.assert_called_once()
+    fake_client.close.assert_called_once()
+
+
+def test_enter_dfu_mode_raises_when_service_rejects_bootloader(
+        named_pipe_manager, monkeypatch):
+    fake_client = MagicMock()
+    fake_client.enter_bootloader.return_value = False
+    monkeypatch.setattr(
+        fm_module, "create_config_client", lambda *a, **k: fake_client)
+
+    with pytest.raises(ConnectionError, match="rejected the bootloader"):
+        named_pipe_manager.enter_dfu_mode(
+            "BenchlabSensorPipe_X", port="COM9")
+
+
+def test_enter_dfu_mode_requires_port_for_named_pipe(named_pipe_manager):
+    with pytest.raises(ValueError, match="port is required"):
+        named_pipe_manager.enter_dfu_mode("BenchlabSensorPipe_X")
+
+
+def test_leave_and_reboot_skips_reidentify_for_named_pipe(
+        named_pipe_manager, monkeypatch):
+    """For named_pipe/service_http, re-identifying by the physical COM
+    port after leaving DFU would be wrong (identify_device expects a pipe
+    name/UID, not a port) -- confirm it's skipped, not misused."""
+    monkeypatch.setattr(
+        fm_module, "get_benchlab_ports", lambda: [{"port": "COM9"}])
+    monkeypatch.setattr(fm_module.dfu, "DfuDevice", lambda dev: MagicMock())
+
+    def fail_if_called(identifier):
+        raise AssertionError(
+            "must not call identify_device with a raw COM port for "
+            "named_pipe")
+
+    monkeypatch.setattr(
+        named_pipe_manager, "identify_device", fail_if_called)
+
+    result = named_pipe_manager.leave_and_reboot(MagicMock(), "COM9")
+
+    assert result is None
+
+
+def test_flash_one_resolves_physical_port_for_named_pipe(
+        named_pipe_manager, monkeypatch):
+    """flash_one must pass the device's reported physical port (not the
+    pipe-name identifier) to enter_dfu_mode/leave_and_reboot."""
+    monkeypatch.setattr(
+        named_pipe_manager, "assert_cdc_mode",
+        lambda identifier: _device_info(uid="U1") | {"port": "COM9"})
+    monkeypatch.setattr(
+        named_pipe_manager, "check_bootloader_supported", lambda *a: None)
+
+    captured = {}
+
+    def fake_enter_dfu_mode(identifier, port=None, timeout=5.0):
+        captured["identifier"] = identifier
+        captured["port"] = port
+
+    monkeypatch.setattr(
+        named_pipe_manager, "enter_dfu_mode", fake_enter_dfu_mode)
+    monkeypatch.setattr(
+        named_pipe_manager, "wait_for_dfu_device",
+        lambda expected_count=1: [MagicMock()])
+    monkeypatch.setattr(
+        named_pipe_manager, "_erase_verify_leave",
+        lambda *a, **k: (True, "ok"))
+
+    result = named_pipe_manager.flash_one(
+        "BenchlabSensorPipe_X", b"\x00" * 16, BENCHLAB_ORIGINAL_PRODUCT_ID)
+
+    assert captured == {"identifier": "BenchlabSensorPipe_X", "port": "COM9"}
+    assert result.ok
+    assert result.port == "BenchlabSensorPipe_X"

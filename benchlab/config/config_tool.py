@@ -19,9 +19,18 @@ logging.basicConfig(
 logger = logging.getLogger("benchlab.config.tool")
 
 
+def _make_manager(args) -> ConfigManager:
+    """Build a ConfigManager, threading service_http's base_url/token
+    through (no-ops for direct/named_pipe)."""
+    return ConfigManager(
+        source=args.source,
+        base_url=getattr(args, 'service_url', None),
+        token=getattr(args, 'service_token', None))
+
+
 def cmd_export(args):
     """Handle export command."""
-    manager = ConfigManager(source=args.source)
+    manager = _make_manager(args)
 
     # Discover devices
     devices = manager.discover_devices()
@@ -55,7 +64,7 @@ def cmd_import(args):
         print(f"ERROR: Config file not found: {args.config_file}")
         return 1
 
-    manager = ConfigManager(source=args.source)
+    manager = _make_manager(args)
 
     if args.dry_run:
         print("DRY RUN MODE - showing what would change, "
@@ -75,7 +84,7 @@ def cmd_import(args):
 
 def cmd_list(args):
     """Handle list command."""
-    manager = ConfigManager(source=args.source)
+    manager = _make_manager(args)
     devices = manager.discover_devices()
 
     if not devices:
@@ -111,7 +120,7 @@ def interactive_mode(args):
     logger.info(f"Using data source: {args.source}")
 
     # List available devices
-    manager = ConfigManager(source=args.source)
+    manager = _make_manager(args)
     devices = manager.discover_devices()
 
     if not devices:

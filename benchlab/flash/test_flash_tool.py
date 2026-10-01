@@ -5,8 +5,76 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from benchlab_pycore.core import (
+    BENCHLAB_BL2_PRODUCT_ID,
+    BENCHLAB_ORIGINAL_PRODUCT_ID,
+)
+
 from benchlab.flash import flash_tool
 from benchlab.flash.flash_manager import FlashResult
+
+
+# -- _make_manager / per-source device helpers ------------------------------
+
+def _args(source='direct', service_url=None, service_token=None):
+    return type('Args', (), {
+        'source': source, 'service_url': service_url,
+        'service_token': service_token,
+    })()
+
+
+def test_make_manager_passes_source_and_http_kwargs(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        flash_tool, 'FlashManager',
+        lambda **kw: captured.update(kw) or MagicMock())
+
+    flash_tool._make_manager(_args(
+        source='service_http', service_url='http://host:1234',
+        service_token='tok'))
+
+    assert captured == {
+        'source': 'service_http', 'base_url': 'http://host:1234',
+        'token': 'tok',
+    }
+
+
+@pytest.mark.parametrize("source,device,expected", [
+    ('direct', {'port': 'COM5'}, 'COM5'),
+    ('named_pipe', {'pipe': 'BenchlabSensorPipe_X'}, 'BenchlabSensorPipe_X'),
+    ('service_http', {'uid': 'abc123'}, 'abc123'),
+])
+def test_device_identifier_per_source(source, device, expected):
+    assert flash_tool._device_identifier(_args(source=source), device) == \
+        expected
+
+
+@pytest.mark.parametrize("device,expected", [
+    ({'fw': 6}, '0x06'),
+    ({'firmwareVersion': 7}, '0x07'),
+    ({'fw': None, 'firmwareVersion': None}, 'None'),
+])
+def test_device_fw_display(device, expected):
+    assert flash_tool._device_fw(device) == expected
+
+
+@pytest.mark.parametrize("device,expected", [
+    ({'variant': 'ORIGINAL'}, BENCHLAB_ORIGINAL_PRODUCT_ID),
+    ({'variant': 'BL2'}, BENCHLAB_BL2_PRODUCT_ID),
+    ({'productId': BENCHLAB_BL2_PRODUCT_ID}, BENCHLAB_BL2_PRODUCT_ID),
+])
+def test_device_product_id(device, expected):
+    assert flash_tool._device_product_id(device) == expected
+
+
+@pytest.mark.parametrize("device,expected", [
+    ({'variant': 'BL2'}, 'BL2'),
+    ({'productId': BENCHLAB_ORIGINAL_PRODUCT_ID}, 'ORIGINAL'),
+    ({'productId': BENCHLAB_BL2_PRODUCT_ID}, 'BL2'),
+    ({}, 'N/A'),
+])
+def test_device_variant_label(device, expected):
+    assert flash_tool._device_variant_label(device) == expected
 
 
 # -- _parse_device_selection ------------------------------------------------
@@ -36,7 +104,7 @@ def _devices():
 
 
 def test_interactive_mode_no_devices_returns_error(monkeypatch):
-    monkeypatch.setattr(flash_tool, "FlashManager", lambda: MagicMock(
+    monkeypatch.setattr(flash_tool, "FlashManager", lambda **kw: MagicMock(
         discover_devices=lambda: []))
     monkeypatch.setattr("builtins.input", lambda *a: "")
     assert flash_tool.interactive_mode(object()) == 1
@@ -45,7 +113,7 @@ def test_interactive_mode_no_devices_returns_error(monkeypatch):
 def test_interactive_mode_invalid_selection_returns_error(
         monkeypatch):
     manager = MagicMock(discover_devices=lambda: _devices())
-    monkeypatch.setattr(flash_tool, "FlashManager", lambda: manager)
+    monkeypatch.setattr(flash_tool, "FlashManager", lambda **kw: manager)
     monkeypatch.setattr("builtins.input", lambda *a: "99")
     assert flash_tool.interactive_mode(object()) == 1
 
@@ -59,7 +127,7 @@ def test_interactive_mode_single_device_happy_path(
     manager.flash_many.return_value = [
         FlashResult(port="COM5", uid="U1", ok=True, message="ok"),
     ]
-    monkeypatch.setattr(flash_tool, "FlashManager", lambda: manager)
+    monkeypatch.setattr(flash_tool, "FlashManager", lambda **kw: manager)
 
     inputs = iter(["1", str(fw_path), "y", "FLASH", ""])
     monkeypatch.setattr("builtins.input", lambda *a: next(inputs))
@@ -82,7 +150,7 @@ def test_interactive_mode_all_devices_mixed_results(
         FlashResult(port="COM5", uid="U1", ok=True, message="ok"),
         FlashResult(port="COM6", uid="U2", ok=False, message="failed"),
     ]
-    monkeypatch.setattr(flash_tool, "FlashManager", lambda: manager)
+    monkeypatch.setattr(flash_tool, "FlashManager", lambda **kw: manager)
 
     inputs = iter(["all", str(fw_path), "y", "FLASH", ""])
     monkeypatch.setattr("builtins.input", lambda *a: next(inputs))
@@ -102,7 +170,7 @@ def test_interactive_mode_blocks_on_confirmed_variant_mismatch(
     fw_path.write_bytes(b"\x00" * 16)
 
     manager = MagicMock(discover_devices=lambda: _devices())
-    monkeypatch.setattr(flash_tool, "FlashManager", lambda: manager)
+    monkeypatch.setattr(flash_tool, "FlashManager", lambda **kw: manager)
 
     inputs = iter(["1", str(fw_path)])  # device 1 is ORIGINAL
     monkeypatch.setattr("builtins.input", lambda *a: next(inputs))
@@ -119,7 +187,7 @@ def test_interactive_mode_cancel_at_first_confirmation(
     fw_path.write_bytes(b"\x00" * 16)
 
     manager = MagicMock(discover_devices=lambda: _devices())
-    monkeypatch.setattr(flash_tool, "FlashManager", lambda: manager)
+    monkeypatch.setattr(flash_tool, "FlashManager", lambda **kw: manager)
 
     inputs = iter(["1", str(fw_path), "n"])
     monkeypatch.setattr("builtins.input", lambda *a: next(inputs))
@@ -136,7 +204,7 @@ def test_interactive_mode_cancel_at_second_confirmation(
     fw_path.write_bytes(b"\x00" * 16)
 
     manager = MagicMock(discover_devices=lambda: _devices())
-    monkeypatch.setattr(flash_tool, "FlashManager", lambda: manager)
+    monkeypatch.setattr(flash_tool, "FlashManager", lambda **kw: manager)
 
     inputs = iter(["1", str(fw_path), "y", "not flash"])
     monkeypatch.setattr("builtins.input", lambda *a: next(inputs))
@@ -156,7 +224,7 @@ def test_cmd_flash_bare_dfu_uses_explicit_variant(monkeypatch, tmp_path):
     manager = MagicMock()
     manager.flash_bare_dfu.return_value = FlashResult(
         port="<bare DFU>", uid=None, ok=True, message="ok")
-    monkeypatch.setattr(flash_tool, "FlashManager", lambda: manager)
+    monkeypatch.setattr(flash_tool, "FlashManager", lambda **kw: manager)
 
     args = type("Args", (), {
         "file": str(fw_path), "variant": "benchlab2",
@@ -179,7 +247,7 @@ def test_cmd_flash_bare_dfu_prompts_when_filename_unrecognized(
     manager = MagicMock()
     manager.flash_bare_dfu.return_value = FlashResult(
         port="<bare DFU>", uid=None, ok=True, message="ok")
-    monkeypatch.setattr(flash_tool, "FlashManager", lambda: manager)
+    monkeypatch.setattr(flash_tool, "FlashManager", lambda **kw: manager)
 
     args = type("Args", (), {
         "file": str(fw_path), "variant": None,

@@ -34,9 +34,62 @@ _VARIANT_CHOICES = {
 }
 
 
+def _make_manager(args) -> FlashManager:
+    """Build a FlashManager, threading service_http's base_url/token
+    through (no-ops for direct/named_pipe)."""
+    return FlashManager(
+        source=getattr(args, 'source', 'direct'),
+        base_url=getattr(args, 'service_url', None),
+        token=getattr(args, 'service_token', None))
+
+
+def _device_identifier(args, device: dict) -> Optional[str]:
+    """The string identify_device()/flash_one() expect for this device:
+    a COM port for 'direct', a pipe name for 'named_pipe', a device UID
+    for 'service_http' -- each source's discover_devices() uses a
+    different key for it."""
+    source = getattr(args, 'source', 'direct')
+    if source == 'named_pipe':
+        return device.get('pipe')
+    if source == 'service_http':
+        return device.get('uid')
+    return device.get('port')
+
+
+def _device_fw(device: dict) -> str:
+    """Firmware version display string -- direct's discover_devices()
+    uses 'fw', named_pipe/service_http's ConfigManager discovery uses
+    'firmwareVersion'."""
+    fw = device.get('fw', device.get('firmwareVersion'))
+    return f"0x{fw:02X}" if isinstance(fw, int) else str(fw)
+
+
+def _device_product_id(device: dict) -> Optional[int]:
+    """The device's BENCHLAB product_id -- direct's discover_devices()
+    only reports a 'variant' string ('ORIGINAL'/'BL2'), while named_pipe/
+    service_http's ConfigManager discovery reports 'productId' directly."""
+    if 'productId' in device:
+        return device.get('productId')
+    return _VARIANT_CHOICES[
+        'benchlab2' if device.get('variant') == 'BL2' else 'benchlab1']
+
+
+def _device_variant_label(device: dict) -> str:
+    """Display label for the device's variant, from whichever field this
+    source's discovery dict actually provides."""
+    if device.get('variant'):
+        return device.get('variant')
+    product_id = device.get('productId')
+    if product_id == BENCHLAB_BL2_PRODUCT_ID:
+        return 'BL2'
+    if product_id == BENCHLAB_ORIGINAL_PRODUCT_ID:
+        return 'ORIGINAL'
+    return 'N/A'
+
+
 def cmd_list(args):
     """Handle --list command."""
-    manager = FlashManager()
+    manager = _make_manager(args)
     devices = manager.discover_devices()
 
     if not devices:
@@ -46,41 +99,45 @@ def cmd_list(args):
     print(f"Found {len(devices)} device(s):")
     print()
     for i, device in enumerate(devices, 1):
-        print(f"{i}. Port: {device.get('port')}")
-        print(f"   UID:  {device.get('uid', 'N/A')}")
-        print(f"   FW:   0x{device.get('fw', 0):02X}")
+        print(f"{i}. Identifier: {_device_identifier(args, device)}")
+        print(f"   UID:  {device.get('uid', device.get('guid', 'N/A'))}")
+        print(f"   FW:   {_device_fw(device)}")
         print()
 
     return 0
 
 
 def _resolve_ports(args, manager: FlashManager):
-    """Resolve the list of target ports from --all/--port/auto-pick."""
+    """Resolve the list of target device identifiers from
+    --all/--port/auto-pick (COM ports for 'direct', but see
+    _device_identifier for named_pipe/service_http)."""
     if args.all:
         devices = manager.discover_devices()
-        return [d.get("port") for d in devices if d.get("port")]
+        return [_device_identifier(args, d) for d in devices
+                if _device_identifier(args, d)]
 
     if args.port:
         return [p.strip() for p in args.port.split(",") if p.strip()]
 
     devices = manager.discover_devices()
     if len(devices) == 1:
-        port = devices[0].get("port")
-        print(f"Using device: {port}")
-        return [port]
+        identifier = _device_identifier(args, devices[0])
+        print(f"Using device: {identifier}")
+        return [identifier]
     if not devices:
         print("ERROR: No devices found")
         return []
     print(
         "ERROR: Multiple devices found, specify --port or --all:")
     for d in devices:
-        print(f"  {d.get('port')} (UID: {d.get('uid', 'N/A')})")
+        print(f"  {_device_identifier(args, d)} "
+              f"(UID: {d.get('uid', d.get('guid', 'N/A'))})")
     return []
 
 
 def cmd_flash(args):
     """Handle the flash/verify-only command."""
-    manager = FlashManager()
+    manager = _make_manager(args)
 
     ports = _resolve_ports(args, manager)
     if not ports:
@@ -260,23 +317,24 @@ def interactive_mode(args):
     print("=" * 60)
     print()
 
-    manager = FlashManager()
+    manager = _make_manager(args)
     devices = manager.discover_devices()
 
     if not devices:
-        print("ERROR: No devices found. Devices must be connected in "
-              "normal CDC mode to appear here -- use --dfu for a device "
-              "already manually jumpered into DFU mode.")
+        print("ERROR: No devices found. Devices must be reachable over "
+              "their normal control channel (CDC/pipe/HTTP) to appear "
+              "here -- use --dfu for a device already manually jumpered "
+              "into DFU mode.")
         print()
         input("Press Enter to exit...")
         return 1
 
     print(f"Found {len(devices)} device(s):")
     for i, device in enumerate(devices, 1):
-        print(f"  {i}. {device.get('port')}  "
-              f"Variant: {device.get('variant', 'N/A')}  "
-              f"FW: {device.get('fw', 'N/A')}  "
-              f"UID: {device.get('uid', 'N/A')}")
+        print(f"  {i}. {_device_identifier(args, device)}  "
+              f"Variant: {_device_variant_label(device)}  "
+              f"FW: {_device_fw(device)}  "
+              f"UID: {device.get('uid', device.get('guid', 'N/A'))}")
     print()
 
     print("Which device(s) do you want to flash?")
@@ -292,8 +350,8 @@ def interactive_mode(args):
     print()
     print("Selected device(s):")
     for device in selected:
-        print(f"  {device.get('port')}  "
-              f"Variant: {device.get('variant', 'N/A')}")
+        print(f"  {_device_identifier(args, device)}  "
+              f"Variant: {_device_variant_label(device)}")
     print()
 
     file_path_str = input(
@@ -314,8 +372,7 @@ def interactive_mode(args):
 
     targets = []
     for device in selected:
-        product_id = _VARIANT_CHOICES[
-            "benchlab2" if device.get("variant") == "BL2" else "benchlab1"]
+        product_id = _device_product_id(device)
         ok, message = image.confirm_image_matches_device(
             file_path, product_id)
         if not ok:
@@ -329,9 +386,9 @@ def interactive_mode(args):
     print(f"About to flash {file_path.name} ({len(data)} bytes) on "
           f"{len(targets)} device(s):")
     for device in targets:
-        print(f"  {device.get('port')}  "
-              f"Variant: {device.get('variant', 'N/A')}  "
-              f"FW: {device.get('fw', 'N/A')}")
+        print(f"  {_device_identifier(args, device)}  "
+              f"Variant: {_device_variant_label(device)}  "
+              f"FW: {_device_fw(device)}")
     print()
 
     print("This will ERASE and REWRITE the selected device(s)' firmware.")
@@ -355,8 +412,8 @@ def interactive_mode(args):
 
     print()
     results = manager.flash_many(
-        [device.get("port") for device in targets], file_path,
-        progress_cb=progress_cb)
+        [_device_identifier(args, device) for device in targets],
+        file_path, progress_cb=progress_cb)
     print()
 
     print()
@@ -408,6 +465,16 @@ Examples:
   # if it can't be guessed from the filename.
   python -m benchlab -flash --dfu --file firmware.bin
   python -m benchlab -flash --dfu --variant benchlab1 --file firmware.bin
+
+  # Flash a device via the running C# BenchLab service instead of taking
+  # the serial port directly -- the service sends the bootloader jump and
+  # releases the port, this tool takes over via USB DFU from there, then
+  # the device returns to CDC on its own (the service picks it back up).
+  python -m benchlab -flash --source named_pipe --all --file firmware.bin
+  python -m benchlab -flash --source service_http --all --file firmware.bin
+  python -m benchlab -flash --source service_http \\
+      --service-url http://localhost:8585 --service-token secret \\
+      --all --file firmware.bin
             """
         )
 
@@ -415,11 +482,29 @@ Examples:
                             help='List available devices')
         parser.add_argument('--file', metavar='PATH',
                             help='Firmware image to flash (.bin or .hex)')
+        parser.add_argument(
+            '--source', choices=['direct', 'named_pipe', 'service_http'],
+            default='direct',
+            help='How to reach devices for the CDC-equivalent bootloader '
+                 'jump (default: direct). named_pipe/service_http ask the '
+                 'running C# BenchLab service to send the bootloader jump '
+                 'and release the port, since it owns it -- this tool '
+                 'then takes over via raw USB DFU either way.')
+        parser.add_argument(
+            '--service-url', dest='service_url',
+            help='C# BenchLab service base URL (service_http only; '
+                 'default: http://localhost:8585)')
+        parser.add_argument(
+            '--service-token', dest='service_token',
+            help='X-Benchlab-Token for the C# service (service_http '
+                 'only, if token auth is enabled)')
 
         target_group = parser.add_mutually_exclusive_group()
         target_group.add_argument(
-            '--port', metavar='PORT',
-            help='Target port(s), comma-separated (e.g. COM3,COM5)')
+            '--port', metavar='IDENTIFIER',
+            help='Target device identifier(s), comma-separated -- COM '
+                 'port(s) for --source direct (e.g. COM3,COM5), pipe '
+                 'name(s) for named_pipe, device UID(s) for service_http')
         target_group.add_argument(
             '--all', action='store_true',
             help='Flash every connected BENCHLAB device')
@@ -427,7 +512,8 @@ Examples:
             '--dfu', action='store_true',
             help='Flash a device already in USB DFU mode with no CDC '
                  'port (e.g. an old BL1 unit manually jumpered into its '
-                 'bootloader via BOOT0)')
+                 'bootloader via BOOT0). Ignores --source: always talks '
+                 'directly to the bare USB device.')
 
         parser.add_argument(
             '--variant', choices=sorted(_VARIANT_CHOICES),
@@ -447,6 +533,12 @@ Examples:
             args.list = False
         if not hasattr(args, 'file'):
             args.file = None
+        if not hasattr(args, 'source'):
+            args.source = 'direct'
+        if not hasattr(args, 'service_url'):
+            args.service_url = None
+        if not hasattr(args, 'service_token'):
+            args.service_token = None
         if not hasattr(args, 'port'):
             args.port = None
         if not hasattr(args, 'all'):

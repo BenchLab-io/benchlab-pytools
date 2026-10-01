@@ -71,6 +71,42 @@ time. If one device fails (timeout, verify mismatch, etc.), the rest of the
 batch still proceeds -- a summary of per-device outcomes is printed at the
 end, and the command exits non-zero if any device failed.
 
+## Flashing via the C# BenchLab service (`--source`)
+
+By default (`--source direct`) this tool opens the serial port itself,
+which only works if nothing else currently holds it. If the C# BenchLab
+service is running (the typical Windows setup) and already owns the port,
+use `--source named_pipe` or `--source service_http` instead -- the
+service sends the bootloader jump on this tool's behalf (via its existing
+`SendBootloader` pipe command / `POST /device/{uid}/bootloader` endpoint)
+and releases the port, then this tool takes over the bare USB device
+directly via `pyusb`, identically to the direct-mode flow. You do not need
+to stop the service.
+
+```
+# Via the service's named pipe (Windows only)
+python -m benchlab -flash --source named_pipe --all --file firmware.bin
+
+# Via the service's HTTP API
+python -m benchlab -flash --source service_http --all --file firmware.bin
+
+# ...with a non-default service URL or token auth enabled
+python -m benchlab -flash --source service_http \
+    --service-url http://localhost:8585 --service-token secret \
+    --all --file firmware.bin
+```
+
+With `--source named_pipe`/`service_http`, `--port` takes the service's
+pipe name / device UID respectively (as shown by `--list`), not a raw COM
+port -- the physical COM port is still looked up automatically from the
+device's reported info for the actual DFU handoff.
+
+After leaving DFU mode, this tool only confirms the physical port came
+back -- it does not re-query the service for the freshly-flashed device's
+new firmware version, since the service reconnects to it on its own
+schedule. Run `--list`/`-config --source <same> --list` again afterward if
+you want to confirm the new version.
+
 ## Flashing a unit with no software bootloader support (`--dfu`)
 
 BENCHLAB1 units on `FIRMWARE_VERSION` below `0x04` have no working
