@@ -135,6 +135,43 @@ def _resolve_ports(args, manager: FlashManager):
     return []
 
 
+def _make_boot0_fallback_prompt(auto_confirm: bool = False):
+    """Build an on_unsupported_firmware callback for FlashManager.flash_one/
+    flash_many: when a device's firmware is too old for CMD_BOOTLOADER,
+    walk the user through a physical BOOT0/jumper bootloader entry instead
+    of just failing, and let them confirm once it's done.
+
+    With `auto_confirm` (e.g. --yes), skips the interactive confirmation
+    and proceeds directly -- there's no unattended way to actually perform
+    the physical step, so this only makes sense for scripted runs where
+    the jumper has already been set by the time this runs.
+    """
+    def on_unsupported_firmware(identifier, info):
+        fw = info.get("FwVersion", 0)
+        print()
+        print(f"WARNING: {identifier} is running firmware 0x{fw:02X}, "
+              "which predates CMD_BOOTLOADER support -- it can't be put "
+              "into DFU mode via software.")
+        print()
+        print("To continue, physically put this device into its ROM DFU "
+              "bootloader: set the BOOT0 jumper/strap and power-cycle the "
+              "device (see your hardware's documentation for the exact "
+              "procedure).")
+        if not auto_confirm:
+            print()
+            response = input(
+                "Press Enter once done, or type 'skip' to skip this "
+                "device: ").strip().lower()
+            if response == "skip":
+                print(f"Skipping {identifier}.")
+                return False
+        print(f"Waiting for {identifier} to appear as a bare USB DFU "
+              "device...")
+        return True
+
+    return on_unsupported_firmware
+
+
 def cmd_flash(args):
     """Handle the flash/verify-only command."""
     manager = _make_manager(args)
@@ -194,7 +231,8 @@ def cmd_flash(args):
 
     results = manager.flash_many(
         [port for port, _ in targets], args.file,
-        verify_only=args.verify_only, progress_cb=progress_cb)
+        verify_only=args.verify_only, progress_cb=progress_cb,
+        on_unsupported_firmware=_make_boot0_fallback_prompt(args.yes))
     print()
 
     print()
@@ -421,7 +459,8 @@ def interactive_mode(args):
     print()
     results = manager.flash_many(
         [_device_identifier(args, device) for device in targets],
-        file_path, progress_cb=progress_cb)
+        file_path, progress_cb=progress_cb,
+        on_unsupported_firmware=_make_boot0_fallback_prompt())
     print()
 
     print()

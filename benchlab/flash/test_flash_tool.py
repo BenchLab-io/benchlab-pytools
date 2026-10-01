@@ -262,3 +262,89 @@ def test_cmd_flash_bare_dfu_prompts_when_filename_unrecognized(
     from benchlab_pycore.core import BENCHLAB_ORIGINAL_PRODUCT_ID
     assert manager.flash_bare_dfu.call_args[0][0] == \
         BENCHLAB_ORIGINAL_PRODUCT_ID
+
+
+# -- _make_boot0_fallback_prompt --------------------------------------------
+
+def test_boot0_fallback_prompt_confirms_on_enter(monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda *a: "")
+    callback = flash_tool._make_boot0_fallback_prompt()
+    assert callback("COM5", {"FwVersion": 0x03}) is True
+
+
+def test_boot0_fallback_prompt_skip_declines(monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda *a: "skip")
+    callback = flash_tool._make_boot0_fallback_prompt()
+    assert callback("COM5", {"FwVersion": 0x03}) is False
+
+
+def test_boot0_fallback_prompt_auto_confirm_skips_input(monkeypatch):
+    def fail_if_called(*a, **k):
+        raise AssertionError("must not call input() when auto_confirm")
+
+    monkeypatch.setattr("builtins.input", fail_if_called)
+    callback = flash_tool._make_boot0_fallback_prompt(auto_confirm=True)
+    assert callback("COM5", {"FwVersion": 0x03}) is True
+
+
+def test_interactive_mode_falls_back_to_dfu_for_old_firmware(
+        monkeypatch, tmp_path):
+    """interactive_mode must pass an on_unsupported_firmware callback into
+    flash_many so an old-firmware device isn't just reported as failed."""
+    fw_path = tmp_path / "generic_fw.bin"
+    fw_path.write_bytes(b"\x00" * 16)
+
+    devices = [
+        {"port": "COM5", "uid": "U1", "fw": 3, "variant": "ORIGINAL"},
+    ]
+    manager = MagicMock(discover_devices=lambda: devices)
+    manager.flash_many.return_value = [
+        FlashResult(port="COM5", uid="U1", ok=True, message="ok"),
+    ]
+    monkeypatch.setattr(flash_tool, "FlashManager", lambda **kw: manager)
+
+    inputs = iter(["1", str(fw_path), "y", "FLASH", ""])
+    monkeypatch.setattr("builtins.input", lambda *a: next(inputs))
+
+    rc = flash_tool.interactive_mode(object())
+
+    assert rc == 0
+    assert manager.flash_many.call_args.kwargs[
+        "on_unsupported_firmware"] is not None
+
+
+def test_cmd_flash_passes_fallback_with_auto_confirm_from_yes(
+        monkeypatch, tmp_path):
+    fw_path = tmp_path / "generic_fw.bin"
+    fw_path.write_bytes(b"\x00" * 16)
+
+    manager = MagicMock()
+    manager.discover_devices.return_value = [
+        {"port": "COM5", "uid": "U1", "fw": 3, "variant": "ORIGINAL"},
+    ]
+    manager.identify_device.return_value = {
+        "VendorId": 0xEE, "ProductId": 16, "FwVersion": 3, "uid": "U1",
+    }
+    manager.flash_many.return_value = [
+        FlashResult(port="COM5", uid="U1", ok=True, message="ok"),
+    ]
+    monkeypatch.setattr(flash_tool, "FlashManager", lambda **kw: manager)
+
+    args = type("Args", (), {
+        "file": str(fw_path), "source": "direct", "service_url": None,
+        "service_token": None, "port": "COM5", "all": False,
+        "verify_only": False, "yes": True,
+    })()
+
+    rc = flash_tool.cmd_flash(args)
+
+    assert rc == 0
+    callback = manager.flash_many.call_args.kwargs[
+        "on_unsupported_firmware"]
+
+    # With --yes, the fallback prompt must not block on input().
+    def fail_if_called(*a, **k):
+        raise AssertionError("must not call input() with --yes")
+
+    monkeypatch.setattr("builtins.input", fail_if_called)
+    assert callback("COM5", {"FwVersion": 0x03}) is True

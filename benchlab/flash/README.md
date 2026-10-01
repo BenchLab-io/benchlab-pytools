@@ -31,10 +31,28 @@ device or put it into DFU mode yourself.
 `CMD_BOOTLOADER` (the command this tool uses to request a DFU-mode jump)
 only has a working handler starting at BENCHLAB1 `FIRMWARE_VERSION 0x04`.
 Older units (0x02/0x03) predate it entirely and silently ignore the
-command. This tool checks the firmware version before attempting anything
-and will refuse with a clear error on unsupported units -- see
-[Flashing a unit with no software bootloader support](#flashing-a-unit-with-no-software-bootloader-support-dfu)
-below for how to flash those via a physical BOOT0/jumper entry instead.
+command. When the tool detects this (via `--all`/`--port`, or in
+interactive mode), it doesn't just fail -- it walks you through a physical
+BOOT0/jumper bootloader entry instead, right there in the same run:
+
+```
+WARNING: COM5 is running firmware 0x03, which predates CMD_BOOTLOADER
+support -- it can't be put into DFU mode via software.
+
+To continue, physically put this device into its ROM DFU bootloader: set
+the BOOT0 jumper/strap and power-cycle the device (see your hardware's
+documentation for the exact procedure).
+
+Press Enter once done, or type 'skip' to skip this device:
+```
+
+Once you confirm, it waits for the device to appear as a bare USB DFU
+device and proceeds with the same flash sequence as `--dfu` (see below) --
+no separate invocation needed. Type `skip` instead to leave that device
+alone and continue with the rest of a batch. With `--yes` (non-interactive/
+scripted runs), this confirmation is skipped automatically -- only use
+`--yes` for an old-firmware device if the jumper has already been set
+before the command runs.
 
 BENCHLAB2 firmware has always shipped with `CMD_BOOTLOADER` support.
 
@@ -111,13 +129,12 @@ new firmware version, since the service reconnects to it on its own
 schedule. Run `--list`/`-config --source <same> --list` again afterward if
 you want to confirm the new version.
 
-## Flashing a unit with no software bootloader support (`--dfu`)
+## Flashing a device that's already in DFU mode (`--dfu`)
 
-BENCHLAB1 units on `FIRMWARE_VERSION` below `0x04` have no working
-`CMD_BOOTLOADER` handler, so this tool can't command them into DFU mode
-over CDC. For those units, put the device into DFU mode yourself via its
-physical BOOT0 jumper/pin (see your hardware's documentation for the exact
-procedure), then use `--dfu`:
+If a device is already sitting in USB DFU mode with no CDC/pipe/HTTP
+identity at all -- e.g. you manually jumpered an old-firmware BENCHLAB1
+unit into DFU *before* starting this tool, rather than being walked
+through it interactively (see above) -- use `--dfu` directly:
 
 ```
 # Variant guessed from the filename, with a y/n confirmation

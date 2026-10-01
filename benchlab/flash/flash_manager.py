@@ -361,19 +361,48 @@ class FlashManager:
 
     def flash_one(self, identifier: str, data: bytes, product_id: int,
                   verify_only: bool = False,
-                  progress_cb: Optional[Callable[[int, int], None]] = None
+                  progress_cb: Optional[Callable[[int, int], None]] = None,
+                  on_unsupported_firmware:
+                      Optional[Callable[[str, dict], bool]] = None
                   ) -> FlashResult:
         """Run the full single-device sequence for a device currently
         reachable over its normal control channel. `identifier` is a COM
         port for 'direct', a pipe name for 'named_pipe', or a device UID
         for 'service_http'. Never raises -- failures at any step are
         caught and returned as a failed FlashResult so flash_many() can
-        continue with the rest of a batch."""
+        continue with the rest of a batch.
+
+        `on_unsupported_firmware`, if given, is called as
+        `on_unsupported_firmware(identifier, device_info)` when the
+        device's firmware is too old for CMD_BOOTLOADER
+        (UnsupportedFirmwareError). It should walk the user through a
+        physical BOOT0/jumper bootloader entry and return True once
+        they've confirmed it's done (at which point this falls through to
+        the same bare-DFU sequence flash_bare_dfu uses), or False to skip
+        this device without attempting the software path further. If not
+        given, UnsupportedFirmwareError behaves as before -- the device is
+        reported as failed.
+        """
         uid = None
         try:
             info = self.assert_cdc_mode(identifier)
             uid = info.get("uid")
-            self.check_bootloader_supported(info, product_id)
+            try:
+                self.check_bootloader_supported(info, product_id)
+            except UnsupportedFirmwareError:
+                if on_unsupported_firmware is None or \
+                        not on_unsupported_firmware(identifier, info):
+                    raise
+                # User confirmed they've manually jumpered the device into
+                # DFU mode -- skip enter_dfu_mode entirely and wait for
+                # the bare USB DFU device directly, same as flash_bare_dfu.
+                devices = self.wait_for_dfu_device(expected_count=1)
+                usb_dev = devices[0]
+                ok, message = self._erase_verify_leave(
+                    usb_dev, data, product_id, None, verify_only,
+                    progress_cb)
+                return FlashResult(
+                    port=identifier, uid=uid, ok=ok, message=message)
 
             # The physical COM port to watch disappear/reappear -- for
             # 'direct' the identifier already is the port; for
@@ -433,7 +462,9 @@ class FlashManager:
     def flash_many(
             self, identifiers: List[str], image_path: Path,
             verify_only: bool = False,
-            progress_cb: Optional[Callable[[str, int, int], None]] = None
+            progress_cb: Optional[Callable[[str, int, int], None]] = None,
+            on_unsupported_firmware: Optional[
+                Callable[[str, dict], bool]] = None
     ) -> List[FlashResult]:
         """Flash (or verify) `image_path` on every device in `identifiers`
         (COM ports for 'direct', pipe names for 'named_pipe', device UIDs
@@ -441,7 +472,10 @@ class FlashManager:
         BENCHLAB-specific identity, so devices are never staged in DFU
         concurrently (there would be no way to tell them apart). One
         device's failure never stops the rest of the batch; all are
-        attempted and every outcome is returned."""
+        attempted and every outcome is returned.
+
+        `on_unsupported_firmware`, if given, is forwarded to each
+        flash_one() call -- see its docstring."""
         data = image.load_image(Path(image_path))
         results = []
         for identifier in identifiers:
@@ -461,5 +495,6 @@ class FlashManager:
 
             results.append(self.flash_one(
                 identifier, data, product_id, verify_only=verify_only,
-                progress_cb=cb))
+                progress_cb=cb,
+                on_unsupported_firmware=on_unsupported_firmware))
         return results

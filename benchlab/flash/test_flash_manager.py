@@ -184,7 +184,7 @@ def test_flash_many_continues_past_one_device_failure(
         manager, "identify_device", lambda port: infos[port])
 
     def fake_flash_one(port, data, product_id, verify_only=False,
-                       progress_cb=None):
+                       progress_cb=None, on_unsupported_firmware=None):
         if port == failing_port:
             return FlashResult(
                 port=port, uid=infos[port]["uid"], ok=False,
@@ -215,7 +215,8 @@ def test_flash_many_reports_unidentifiable_device_without_aborting_batch(
     monkeypatch.setattr(manager, "identify_device", fake_identify)
     monkeypatch.setattr(
         manager, "flash_one",
-        lambda port, data, product_id, verify_only=False, progress_cb=None:
+        lambda port, data, product_id, verify_only=False, progress_cb=None,
+        on_unsupported_firmware=None:
             FlashResult(port=port, uid=port, ok=True, message="ok"))
 
     results = manager.flash_many(["COM5", "COM6"], image_path)
@@ -239,6 +240,72 @@ def test_flash_one_catches_exceptions_and_returns_failed_result(
     assert isinstance(result, FlashResult)
     assert not result.ok
     assert "boom" in result.message
+
+
+# -- flash_one: on_unsupported_firmware fallback to manual BOOT0 -----------
+
+def test_flash_one_without_callback_fails_on_old_firmware(
+        manager, monkeypatch):
+    """Unchanged pre-existing behavior when no callback is given."""
+    old_fw_info = _device_info(fw=0x03)
+    monkeypatch.setattr(
+        manager, "assert_cdc_mode", lambda identifier: old_fw_info)
+
+    result = manager.flash_one(
+        "COM5", b"\x00" * 16, BENCHLAB_ORIGINAL_PRODUCT_ID)
+    assert not result.ok
+    assert "predates CMD_BOOTLOADER" in result.message
+
+
+def test_flash_one_falls_back_to_bare_dfu_when_callback_confirms(
+        manager, monkeypatch):
+    """When on_unsupported_firmware confirms the user manually jumpered
+    the device into DFU, flash_one must skip enter_dfu_mode entirely and
+    proceed with the bare-DFU sequence (no CDC round trip)."""
+    old_fw_info = _device_info(fw=0x03)
+    monkeypatch.setattr(
+        manager, "assert_cdc_mode", lambda identifier: old_fw_info)
+
+    def fail_if_called(*a, **k):
+        raise AssertionError(
+            "must not call enter_dfu_mode once the user has manually "
+            "jumpered the device")
+
+    monkeypatch.setattr(manager, "enter_dfu_mode", fail_if_called)
+    monkeypatch.setattr(
+        manager, "wait_for_dfu_device",
+        lambda expected_count=1: [MagicMock()])
+    monkeypatch.setattr(
+        manager, "_erase_verify_leave",
+        lambda *a, **k: (True, "Flashed and verified successfully"))
+
+    callback_calls = []
+
+    def on_unsupported(identifier, info):
+        callback_calls.append((identifier, info))
+        return True
+
+    result = manager.flash_one(
+        "COM5", b"\x00" * 16, BENCHLAB_ORIGINAL_PRODUCT_ID,
+        on_unsupported_firmware=on_unsupported)
+
+    assert result.ok
+    assert result.message == "Flashed and verified successfully"
+    assert callback_calls == [("COM5", old_fw_info)]
+
+
+def test_flash_one_reports_failure_when_callback_declines(
+        manager, monkeypatch):
+    old_fw_info = _device_info(fw=0x03)
+    monkeypatch.setattr(
+        manager, "assert_cdc_mode", lambda identifier: old_fw_info)
+
+    result = manager.flash_one(
+        "COM5", b"\x00" * 16, BENCHLAB_ORIGINAL_PRODUCT_ID,
+        on_unsupported_firmware=lambda identifier, info: False)
+
+    assert not result.ok
+    assert "predates CMD_BOOTLOADER" in result.message
 
 
 # -- flash_bare_dfu: manually-jumpered device, no CDC port -----------------
