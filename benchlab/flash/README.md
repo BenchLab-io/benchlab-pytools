@@ -28,12 +28,22 @@ device or put it into DFU mode yourself.
 only has a working handler starting at BENCHLAB1 `FIRMWARE_VERSION 0x04`.
 Older units (0x02/0x03) predate it entirely and silently ignore the
 command. This tool checks the firmware version before attempting anything
-and will refuse with a clear error on unsupported units -- those require a
-physical BOOT0/jumper bootloader entry, which is outside this tool's scope.
+and will refuse with a clear error on unsupported units -- see
+[Flashing a unit with no software bootloader support](#flashing-a-unit-with-no-software-bootloader-support-dfu)
+below for how to flash those via a physical BOOT0/jumper entry instead.
 
 BENCHLAB2 firmware has always shipped with `CMD_BOOTLOADER` support.
 
 ## Usage
+
+Running `python -m benchlab -flash` with no arguments starts a guided
+interactive mode: it lists connected devices (port, variant, firmware
+version, UID), lets you pick one, several, or all of them by number, asks
+for the firmware file path, and requires two separate confirmations before
+touching flash. This is the easiest way to flash a device and the
+recommended starting point.
+
+For scripting/automation, the same operations are available as flags:
 
 ```
 # List connected devices
@@ -55,11 +65,41 @@ python -m benchlab -flash --port COM4 --file firmware.bin --verify-only
 python -m benchlab -flash --all --file firmware.bin --yes
 ```
 
-When flashing multiple devices with `--all` (or a comma-separated
-`--port`), devices are flashed strictly one at a time. If one device fails
-(timeout, verify mismatch, etc.), the rest of the batch still proceeds --
-a summary of per-device outcomes is printed at the end, and the command
-exits non-zero if any device failed.
+When flashing multiple devices (`--all`, a comma-separated `--port`, or a
+multi-selection in interactive mode), devices are flashed strictly one at a
+time. If one device fails (timeout, verify mismatch, etc.), the rest of the
+batch still proceeds -- a summary of per-device outcomes is printed at the
+end, and the command exits non-zero if any device failed.
+
+## Flashing a unit with no software bootloader support (`--dfu`)
+
+BENCHLAB1 units on `FIRMWARE_VERSION` below `0x04` have no working
+`CMD_BOOTLOADER` handler, so this tool can't command them into DFU mode
+over CDC. For those units, put the device into DFU mode yourself via its
+physical BOOT0 jumper/pin (see your hardware's documentation for the exact
+procedure), then use `--dfu`:
+
+```
+# Variant guessed from the filename, with a y/n confirmation
+python -m benchlab -flash --dfu --file benchlab-original-fw06-v0.6.0.bin
+
+# Variant given explicitly (skips the filename guess/prompt)
+python -m benchlab -flash --dfu --variant benchlab1 --file firmware.bin
+```
+
+A device manually jumpered into DFU mode has no CDC port, so it can't
+report its own `VendorId`/`ProductId`/`FwVersion` the way a CDC-connected
+device can -- `--dfu` mode has no way to auto-detect or cross-check the
+variant against the connected hardware. If `--variant` isn't given, the
+tool guesses from the image's filename and asks you to confirm, falling
+back to an explicit prompt if the filename doesn't match the release
+naming convention. Double check you're selecting the correct variant --
+flashing the wrong variant's image onto a device will not match the
+BENCHLAB2 EEPROM-boundary safety check for the actual connected hardware.
+
+`--dfu` only supports a single device at a time (bare USB DFU devices
+expose no BENCHLAB-specific identity, so multiple devices in DFU mode
+simultaneously can't be told apart -- make sure only one is connected).
 
 ## Windows: USB driver setup (Zadig)
 

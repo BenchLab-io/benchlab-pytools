@@ -27,6 +27,12 @@ CONSUMER_TOOLS = {
         "function": "main",
         "requirements": "requirements.txt",
         "supported_sources": ["direct", "named_pipe"],
+        # One-shot CLI tool with its own argparse (--export/--import/etc.),
+        # not a concurrent telemetry consumer -- the interactive picker's
+        # generic args namespace (source/interval/api_url/...) has no way
+        # to carry its command-specific flags, so it can't be launched that
+        # way. Run it via `-config ...` directly instead.
+        "interactive_menu": False,
     },
     "flash": {
         "name": "Firmware Flash Tool",
@@ -36,6 +42,10 @@ CONSUMER_TOOLS = {
         "function": "main",
         "requirements": "requirements.txt",
         "supported_sources": ["direct"],
+        # Same reasoning as "config" above -- one-shot CLI tool (--file/
+        # --port/--all/...), not a concurrent telemetry consumer. Run it
+        # via `-flash ...` directly instead.
+        "interactive_menu": False,
     },
     "csv_log": {
         "name": "CSV Logger",

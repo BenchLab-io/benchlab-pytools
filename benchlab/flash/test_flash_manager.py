@@ -239,3 +239,48 @@ def test_flash_one_catches_exceptions_and_returns_failed_result(
     assert isinstance(result, FlashResult)
     assert not result.ok
     assert "boom" in result.message
+
+
+# -- flash_bare_dfu: manually-jumpered device, no CDC port -----------------
+
+def test_flash_bare_dfu_flashes_without_cdc_round_trip(
+        manager, monkeypatch):
+    """A device manually jumpered into DFU (old BL1 firmware below
+    MIN_BOOTLOADER_FW_VERSION) has no CDC port at all -- flash_bare_dfu
+    must never call assert_cdc_mode/enter_dfu_mode, only wait for the
+    already-present USB DFU device and flash it directly."""
+    data = b"\x00" * 16
+    fake_usb_dev = MagicMock()
+    monkeypatch.setattr(
+        manager, "wait_for_dfu_device", lambda expected_count=1,
+        timeout=10.0: [fake_usb_dev])
+    monkeypatch.setattr(
+        manager, "verify_image", lambda usb_dev, d, pid: True)
+    monkeypatch.setattr(
+        manager, "erase_and_flash",
+        lambda usb_dev, d, pid, progress_cb=None: None)
+    monkeypatch.setattr(fm_module.dfu, "DfuDevice", lambda dev: MagicMock())
+
+    def fail_if_called(*a, **k):
+        raise AssertionError("must not touch CDC for a bare-DFU device")
+
+    monkeypatch.setattr(manager, "assert_cdc_mode", fail_if_called)
+    monkeypatch.setattr(manager, "enter_dfu_mode", fail_if_called)
+
+    result = manager.flash_bare_dfu(BENCHLAB_ORIGINAL_PRODUCT_ID, data)
+
+    assert result.ok
+    assert "Flashed and verified successfully" in result.message
+
+
+def test_flash_bare_dfu_catches_exceptions(manager, monkeypatch):
+    monkeypatch.setattr(
+        manager, "wait_for_dfu_device",
+        lambda expected_count=1, timeout=10.0: (_ for _ in ()).throw(
+            TimeoutError("no DFU device found")))
+
+    result = manager.flash_bare_dfu(
+        BENCHLAB_ORIGINAL_PRODUCT_ID, b"\x00" * 16)
+
+    assert not result.ok
+    assert "no DFU device found" in result.message

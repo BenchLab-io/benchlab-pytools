@@ -215,13 +215,45 @@ class FlashManager:
             port, timeout)
         return None
 
+    def _erase_verify_leave(
+            self, usb_dev, data: bytes, product_id: int, port: Optional[str],
+            verify_only: bool,
+            progress_cb: Optional[Callable[[int, int], None]] = None
+    ) -> tuple:
+        """Shared tail of the flashing sequence once a usb_dev and
+        product_id are known, used by both flash_one (CDC-driven) and
+        flash_bare_dfu (device already manually jumpered into DFU)."""
+        if verify_only:
+            ok = self.verify_image(usb_dev, data, product_id)
+            message = (
+                "Verify OK: flashed firmware matches image"
+                if ok else
+                "Verify FAILED: flashed firmware differs from image")
+        else:
+            self.erase_and_flash(
+                usb_dev, data, product_id, progress_cb=progress_cb)
+            ok = self.verify_image(usb_dev, data, product_id)
+            message = (
+                "Flashed and verified successfully"
+                if ok else
+                "Flash completed but verification failed")
+
+        if port is not None:
+            self.leave_and_reboot(usb_dev, port)
+        else:
+            # No CDC port to wait for -- just trigger the DfuSe leave
+            # sequence so the device reboots into the newly-flashed app.
+            dfu.DfuDevice(usb_dev).leave_dfu()
+        return ok, message
+
     def flash_one(self, port: str, data: bytes, product_id: int,
                   verify_only: bool = False,
                   progress_cb: Optional[Callable[[int, int], None]] = None
                   ) -> FlashResult:
-        """Run the full single-device sequence. Never raises -- failures
-        at any step are caught and returned as a failed FlashResult so
-        flash_many() can continue with the rest of a batch."""
+        """Run the full single-device sequence for a device currently
+        connected in normal CDC mode. Never raises -- failures at any step
+        are caught and returned as a failed FlashResult so flash_many()
+        can continue with the rest of a batch."""
         uid = None
         try:
             info = self.assert_cdc_mode(port)
@@ -232,27 +264,45 @@ class FlashManager:
             devices = self.wait_for_dfu_device(expected_count=1)
             usb_dev = devices[0]
 
-            if verify_only:
-                ok = self.verify_image(usb_dev, data, product_id)
-                message = (
-                    "Verify OK: flashed firmware matches image"
-                    if ok else
-                    "Verify FAILED: flashed firmware differs from image")
-            else:
-                self.erase_and_flash(
-                    usb_dev, data, product_id, progress_cb=progress_cb)
-                ok = self.verify_image(usb_dev, data, product_id)
-                message = (
-                    "Flashed and verified successfully"
-                    if ok else
-                    "Flash completed but verification failed")
-
-            self.leave_and_reboot(usb_dev, port)
+            ok, message = self._erase_verify_leave(
+                usb_dev, data, product_id, port, verify_only, progress_cb)
             return FlashResult(port=port, uid=uid, ok=ok, message=message)
         except Exception as e:
             logger.exception("Flashing %s failed", port)
             return FlashResult(
                 port=port, uid=uid, ok=False, message=str(e))
+
+    def flash_bare_dfu(
+            self, product_id: int, data: bytes, verify_only: bool = False,
+            progress_cb: Optional[Callable[[int, int], None]] = None,
+            timeout: float = 10.0) -> FlashResult:
+        """Flash a device that's already sitting in USB DFU mode with no
+        CDC/serial port at all -- e.g. an old BL1 unit manually jumpered
+        into its bootloader via BOOT0, since CMD_BOOTLOADER doesn't exist
+        on firmware below MIN_BOOTLOADER_FW_VERSION.
+
+        There's no way to read VendorId/ProductId/FwVersion from a bare
+        DFU device (that's only exposed over the normal CDC protocol), so
+        the caller must supply `product_id` explicitly -- see
+        flash_tool.py's --dfu/--variant handling, which prompts for it
+        interactively when not given on the command line.
+
+        Requires exactly one DFU device to be present (same reasoning as
+        flash_many's sequential-only policy: DFU mode exposes no
+        BENCHLAB-specific identity, so multiple bare DFU devices can't be
+        disambiguated)."""
+        try:
+            devices = self.wait_for_dfu_device(
+                expected_count=1, timeout=timeout)
+            usb_dev = devices[0]
+            ok, message = self._erase_verify_leave(
+                usb_dev, data, product_id, None, verify_only, progress_cb)
+            return FlashResult(
+                port="<bare DFU>", uid=None, ok=ok, message=message)
+        except Exception as e:
+            logger.exception("Flashing bare DFU device failed")
+            return FlashResult(
+                port="<bare DFU>", uid=None, ok=False, message=str(e))
 
     def flash_many(
             self, ports: List[str], image_path: Path,
