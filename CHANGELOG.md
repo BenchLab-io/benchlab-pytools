@@ -4,6 +4,20 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.2.1] - 2026-10-01
+
+### Fixed
+- Collector recovery after incomplete sensor reads
+  (`benchlab.restapi.telemetry_api.read_device_loop`): incomplete serial
+  responses (`read_sensors()` returning `None`) are now treated as read
+  failures instead of being silently ignored, so the collector reconnects
+  instead of continuing to publish stale telemetry. The read-error
+  backoff counter now survives serial port reopen attempts and resets
+  only after a successfully decoded sample, restoring the intended
+  retry/backoff policy. A device is marked `connected` only once a
+  sample has actually been decoded, and stale telemetry is cleared
+  before the collector waits to retry. (#77)
+
 ## [3.2.0] - 2026-09-29
 
 ### Added
@@ -159,6 +173,7 @@ export, MQTT publisher, VU dials, WigiDash, and config import/export tools,
 sharing a common data-source layer (direct serial, FastAPI, MQTT, named
 pipe, service HTTP, service WebSocket).
 
+[3.2.1]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.0.4...v3.1.0
 [3.0.4]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.0.3...v3.0.4
