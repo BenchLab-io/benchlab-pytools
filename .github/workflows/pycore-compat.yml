@@ -37,6 +37,7 @@ jobs:
           pip install -r benchlab/graph/requirements.txt
           pip install -r benchlab/wigidash/requirements.txt
           pip install -r benchlab/vu/requirements.txt
+          pip install -r benchlab/flash/requirements.txt
           pip install pytest
 
       # libusb-package is Windows-only (see wigidash/requirements.txt); on Linux
@@ -122,6 +123,12 @@ jobs:
 
       - name: Test - config client (calibration struct selection)
         run: pytest benchlab/config/test_config_client.py -v
+
+      - name: Test - HTTP config DTO translation
+        run: pytest benchlab/config/test_http_dto.py benchlab/config/test_http_config_client.py -v
+
+      - name: Test - flash tool
+        run: pytest benchlab/flash -v
 
       - name: Test - launcher bug sweep
         run: pytest tests/test_launcher.py -v

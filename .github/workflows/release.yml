@@ -38,6 +38,7 @@ jobs:
           pip install -r benchlab/graph/requirements.txt
           pip install -r benchlab/wigidash/requirements.txt
           pip install -r benchlab/vu/requirements.txt
+          pip install -r benchlab/flash/requirements.txt
           pip install pytest build
 
       - name: Run test suite
