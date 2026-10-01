@@ -248,9 +248,15 @@ def test_flash_bare_dfu_flashes_without_cdc_round_trip(
     """A device manually jumpered into DFU (old BL1 firmware below
     MIN_BOOTLOADER_FW_VERSION) has no CDC port at all -- flash_bare_dfu
     must never call assert_cdc_mode/enter_dfu_mode, only wait for the
-    already-present USB DFU device and flash it directly."""
+    already-present USB DFU device and flash it directly. Also: the final
+    leave_dfu() must be preceded by set_address_pointer() -- confirmed
+    against real hardware that skipping it leaves the device stuck in DFU
+    instead of rebooting into the app, since leave_dfu() jumps to
+    whatever address the device's internal pointer last held, not
+    necessarily FLASH_BASE."""
     data = b"\x00" * 16
     fake_usb_dev = MagicMock()
+    fake_dfu_device = MagicMock()
     monkeypatch.setattr(
         manager, "wait_for_dfu_device", lambda expected_count=1,
         timeout=10.0: [fake_usb_dev])
@@ -259,7 +265,8 @@ def test_flash_bare_dfu_flashes_without_cdc_round_trip(
     monkeypatch.setattr(
         manager, "erase_and_flash",
         lambda usb_dev, d, pid, progress_cb=None: None)
-    monkeypatch.setattr(fm_module.dfu, "DfuDevice", lambda dev: MagicMock())
+    monkeypatch.setattr(
+        fm_module.dfu, "DfuDevice", lambda dev: fake_dfu_device)
 
     def fail_if_called(*a, **k):
         raise AssertionError("must not touch CDC for a bare-DFU device")
@@ -268,6 +275,13 @@ def test_flash_bare_dfu_flashes_without_cdc_round_trip(
     monkeypatch.setattr(manager, "enter_dfu_mode", fail_if_called)
 
     result = manager.flash_bare_dfu(BENCHLAB_ORIGINAL_PRODUCT_ID, data)
+
+    fake_dfu_device.set_address_pointer.assert_called_once_with(
+        fm_module.image.FLASH_BASE)
+    fake_dfu_device.leave_dfu.assert_called_once()
+    call_order = [c[0] for c in fake_dfu_device.method_calls]
+    assert call_order.index("set_address_pointer") < \
+        call_order.index("leave_dfu")
 
     assert result.ok
     assert "Flashed and verified successfully" in result.message

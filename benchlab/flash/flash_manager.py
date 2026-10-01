@@ -348,7 +348,15 @@ class FlashManager:
         else:
             # No CDC port to wait for -- just trigger the DfuSe leave
             # sequence so the device reboots into the newly-flashed app.
-            dfu.DfuDevice(usb_dev).leave_dfu()
+            # set_address_pointer first is required -- leave_dfu() jumps
+            # to whatever address the device's internal pointer currently
+            # holds, which after erase_and_flash/verify_image is wherever
+            # their last chunk left it, not necessarily FLASH_BASE
+            # (confirmed against real hardware: omitting this left the
+            # device stuck in DFU instead of rebooting into the app).
+            dev = dfu.DfuDevice(usb_dev)
+            dev.set_address_pointer(image.FLASH_BASE)
+            dev.leave_dfu()
         return ok, message
 
     def flash_one(self, identifier: str, data: bytes, product_id: int,
