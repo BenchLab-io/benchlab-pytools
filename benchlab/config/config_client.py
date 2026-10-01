@@ -10,6 +10,12 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any
 
+from .http_dto import (
+    fan_dto_to_dict, fan_dict_to_dto,
+    rgb_dto_to_dict, rgb_dict_to_dto,
+    calibration_dto_to_dict, calibration_dict_to_dto,
+)
+
 logger = logging.getLogger("benchlab.config.client")
 
 DISCOVERY_PIPE_NAME = "BenchlabDiscovery"
@@ -700,20 +706,16 @@ class NamedPipeConfigClient(ConfigClient):
 class HttpConfigClient(ConfigClient):
     """Configuration client using the C# BenchLab service's HTTP API.
 
-    Implements device info, name, save/load config, and the disruptive
-    reset/bootloader/factory-cal-unlock commands -- all simple 1:1 HTTP
-    routes. Fan/RGB/calibration read-write routes DO exist on the service
-    (GET/PUT /device/{uid}/fan, /rgb/{profile}, /calibration), but their
-    DTOs use a different, more structured shape than this repo's existing
-    raw ctypes-struct-dict convention (DirectConfigClient/
-    NamedPipeConfigClient), especially for calibration where BL2 has its
-    own wider wire struct. Translating between those shapes correctly
-    needs its own dedicated, tested implementation, so those methods raise
-    NotImplementedError for now rather than risk a subtly wrong translation
-    -- tracked as a follow-up. reset_config has no HTTP equivalent at all
-    (by design: the service only exposes save/load actions, since no
-    firmware contract defines a config-reset opcode -- RESET power-cycles
-    the whole device instead).
+    Implements device info, name, save/load config, fan/RGB/calibration
+    read-write, and the disruptive reset/bootloader/factory-cal-unlock
+    commands. Fan/RGB/calibration routes (GET/PUT /device/{uid}/fan,
+    /rgb/{profile}, /calibration) use DTOs with a different, more
+    structured shape than this repo's raw ctypes-struct-dict convention
+    (DirectConfigClient/NamedPipeConfigClient) -- see benchlab.config.
+    http_dto for the translation layer between the two. reset_config has
+    no HTTP equivalent at all (by design: the service only exposes
+    save/load actions, since no firmware contract defines a config-reset
+    opcode -- RESET power-cycles the whole device instead).
     """
 
     DEFAULT_URL = "http://localhost:8585"
@@ -794,43 +796,51 @@ class HttpConfigClient(ConfigClient):
 
     def read_fan_config(self, profile_id: int,
                         fan_id: int) -> Optional[Dict[str, Any]]:
-        raise NotImplementedError(
-            "HttpConfigClient does not yet support reading fan config -- "
-            "the HTTP route exists (GET /device/{uid}/fan/{profile}/{fan}) "
-            "but its FanConfigDto shape needs a dedicated translation to "
-            "this repo's raw struct-dict convention; not yet implemented")
+        """Read fan config via GET /device/{uid}/fan/{profile}/{fan}."""
+        dto = self._get(f"/device/{self.uid}/fan/{profile_id}/{fan_id}")
+        return fan_dto_to_dict(dto) if dto is not None else None
 
     def write_fan_config(self, profile_id: int, fan_id: int,
                          config: Dict[str, Any]) -> bool:
-        raise NotImplementedError(
-            "HttpConfigClient does not yet support writing fan config -- "
-            "see read_fan_config's docstring")
+        """Write fan config via PUT /device/{uid}/fan/{profile}/{fan}."""
+        return self._put(
+            f"/device/{self.uid}/fan/{profile_id}/{fan_id}",
+            fan_dict_to_dto(config))
 
     def read_rgb_config(self, profile_id: int) -> Optional[Dict[str, Any]]:
-        raise NotImplementedError(
-            "HttpConfigClient does not yet support reading RGB config -- "
-            "the HTTP route exists (GET /device/{uid}/rgb/{profile}) but "
-            "its RgbConfigDto shape needs a dedicated translation to this "
-            "repo's raw struct-dict convention; not yet implemented")
+        """Read RGB config via GET /device/{uid}/rgb/{profile}."""
+        dto = self._get(f"/device/{self.uid}/rgb/{profile_id}")
+        return rgb_dto_to_dict(dto) if dto is not None else None
 
     def write_rgb_config(self, profile_id: int,
                          config: Dict[str, Any]) -> bool:
-        raise NotImplementedError(
-            "HttpConfigClient does not yet support writing RGB config -- "
-            "see read_rgb_config's docstring")
+        """Write RGB config via PUT /device/{uid}/rgb/{profile}."""
+        return self._put(
+            f"/device/{self.uid}/rgb/{profile_id}", rgb_dict_to_dto(config))
 
     def read_calibration(self) -> Optional[Dict[str, Any]]:
-        raise NotImplementedError(
-            "HttpConfigClient does not yet support reading calibration -- "
-            "the HTTP route exists (GET /device/{uid}/calibration) but its "
-            "CalibrationDto shape (and BL2's separate wider wire struct) "
-            "needs a dedicated translation to this repo's raw "
-            "struct-dict convention; not yet implemented")
+        """Read calibration via GET /device/{uid}/calibration.
+
+        Works for both BENCHLAB Original and BL2 -- the service resolves
+        the connected device's variant server-side and returns a
+        CalibrationDto with array lengths matching that variant.
+        """
+        dto = self._get(f"/device/{self.uid}/calibration")
+        return calibration_dto_to_dict(dto) if dto is not None else None
 
     def write_calibration(self, calibration: Dict[str, Any]) -> bool:
-        raise NotImplementedError(
-            "HttpConfigClient does not yet support writing calibration -- "
-            "see read_calibration's docstring")
+        """Write calibration via PUT /device/{uid}/calibration.
+
+        No read-before-write: the server validates the submitted array
+        lengths (Vin/Ts/TsB/power arrays) against the connected device's
+        own variant and rejects a mismatch with a 400 (surfaced here as a
+        logged warning and a False return). Callers are expected to pass
+        a dict shaped like read_calibration()'s own output. The submitted
+        Crc is ignored -- the server always recomputes it before writing.
+        """
+        return self._put(
+            f"/device/{self.uid}/calibration",
+            calibration_dict_to_dto(calibration))
 
     def save_config(self) -> bool:
         """Save configuration to device flash via
