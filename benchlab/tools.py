@@ -35,7 +35,7 @@ CONSUMER_TOOLS = {
         "module": "benchlab.flash.flash_tool",
         "function": "main",
         "requirements": "requirements.txt",
-        "supported_sources": ["direct"],
+        "supported_sources": ["direct", "named_pipe", "service_http"],
     },
     "csv_log": {
         "name": "CSV Logger",

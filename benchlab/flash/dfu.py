@@ -88,21 +88,24 @@ class DfuDevice:
     """Wraps a usb.core.Device and speaks DFU 1.1 + DfuSe over it."""
 
     def __init__(self, dev, alt_setting=0,
-                 _set_configuration_retries=5,
+                 _set_configuration_retries=20,
                  _set_configuration_retry_delay=0.5):
         self.dev = dev
         self.alt_setting = alt_setting
         self.transfer_size = _DEFAULT_TRANSFER_SIZE
 
         # A device that just re-enumerated into DFU mode (e.g. right after
-        # enter_dfu_mode's jump) can briefly fail to open with libusb's
+        # enter_dfu_mode's jump) can fail to open with libusb's
         # LIBUSB_ERROR_NOT_SUPPORTED ("Operation not supported or
-        # unimplemented on this platform") on Windows/WinUSB -- confirmed
-        # against real hardware as a transient race between the physical
-        # re-enumeration completing and a new process's first claim
-        # attempt, not a persistent fault (the very next attempt, even
-        # from a fresh process, succeeds; the device is never left in a
-        # bad state by this). Retry the claim a few times before giving up.
+        # unimplemented on this platform") on Windows/WinUSB for a
+        # noticeable window -- confirmed against real hardware as a
+        # transient race between the physical re-enumeration completing
+        # and a new claim attempt, not a persistent fault (a later
+        # attempt, even from a fresh process, succeeds; the device is
+        # never left in a bad state by this). The exact duration varies
+        # (observed anywhere from under a second up to several seconds
+        # depending on the machine/firmware), so retry generously -- up to
+        # ~10s by default -- before giving up.
         last_exc = None
         for attempt in range(_set_configuration_retries):
             try:
