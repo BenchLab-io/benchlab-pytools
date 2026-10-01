@@ -233,7 +233,6 @@ def _build_launcher_app(
                                 tid,
                                 tid in self._default_tool_ids)
                             for tid, t in CONSUMER_TOOLS.items()
-                            if t.get("interactive_menu", True)
                         ]
                         yield SelectionList[str](*tool_selections, id="tools")
                     with Vertical(id="source-panel", classes="panel"):
@@ -500,8 +499,7 @@ def _sequential_pick(
         return ("provider", provider)
 
     tool_values = [(tid, f"{t['name']} - {t['description']}")
-                   for tid, t in CONSUMER_TOOLS.items()
-                   if t.get("interactive_menu", True)]
+                   for tid, t in CONSUMER_TOOLS.items()]
 
     print("\n=== Select Tool(s) ===")
     try:

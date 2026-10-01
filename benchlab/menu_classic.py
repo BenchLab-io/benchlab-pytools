@@ -144,8 +144,7 @@ def step2_single_tool() -> None:
     """Select one tool and proceed to source selection."""
     print()
     print("=== Select Tool ===")
-    consumer_list = [(tid, t) for tid, t in CONSUMER_TOOLS.items()
-                     if t.get("interactive_menu", True)]
+    consumer_list = list(CONSUMER_TOOLS.items())
     for i, (_, t) in enumerate(consumer_list, 1):
         print(f"  {i}. {t['name']} - {t['description']}")
     print()
@@ -178,8 +177,7 @@ def step2_multi_tool() -> None:
     print("Enter tool numbers separated by commas (e.g., 1,3,5)")
     print("Or 'all' to select all.")
 
-    consumer_list = [(tid, t) for tid, t in CONSUMER_TOOLS.items()
-                     if t.get("interactive_menu", True)]
+    consumer_list = list(CONSUMER_TOOLS.items())
     for i, (_, t) in enumerate(consumer_list, 1):
         print(f"  {i}. {t['name']} - {t['description']}")
     print()
