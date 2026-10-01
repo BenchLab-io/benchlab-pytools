@@ -4,7 +4,7 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [3.3.0] - 2026-10-01
 
 ### Added
 - Firmware flash tool (`-flash`, `benchlab.flash`): flashes new firmware
@@ -193,6 +193,7 @@ export, MQTT publisher, VU dials, WigiDash, and config import/export tools,
 sharing a common data-source layer (direct serial, FastAPI, MQTT, named
 pipe, service HTTP, service WebSocket).
 
+[3.3.0]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.2.1...v3.3.0
 [3.2.1]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.0.4...v3.1.0
