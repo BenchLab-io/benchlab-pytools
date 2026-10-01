@@ -289,6 +289,14 @@ def cmd_flash_bare_dfu(args):
     status = "OK" if result.ok else "FAILED"
     print(f"[{status}]  {result.message}")
 
+    if result.ok and not args.verify_only:
+        print()
+        print("Remove the BOOT0 jumper/strap and manually power-cycle the "
+              "device now. If BOOT0 is still held, the device will keep "
+              "re-entering DFU mode on reset instead of starting the new "
+              "firmware -- that's expected hardware behavior, not a sign "
+              "this flash failed.")
+
     return 0 if result.ok else 1
 
 

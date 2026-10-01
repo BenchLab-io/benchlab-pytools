@@ -137,6 +137,16 @@ BENCHLAB2 EEPROM-boundary safety check for the actual connected hardware.
 expose no BENCHLAB-specific identity, so multiple devices in DFU mode
 simultaneously can't be told apart -- make sure only one is connected).
 
+After flashing, **remove the BOOT0 jumper/strap and manually power-cycle
+the device.** The tool triggers the device's reset as part of leaving DFU
+mode, but if BOOT0 is still physically held, the STM32 boot ROM re-checks
+it on every reset (not just power-on) and will keep re-entering DFU
+instead of starting the newly-flashed application -- this is expected
+hardware behavior, not a sign the flash failed. Confirmed on real
+hardware: the device correctly completes the DfuSe leave sequence and
+resets, but only boots the new firmware once BOOT0 is removed and power
+is cycled.
+
 ## Windows: USB driver setup (Zadig)
 
 ST's ROM DFU device (VID `0483`, PID `DF11`) does not automatically bind to
