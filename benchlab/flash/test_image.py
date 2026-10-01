@@ -1,4 +1,6 @@
 """Tests for firmware image loading/validation; no hardware needed."""
+import struct
+
 import pytest
 
 from benchlab_pycore.core import (
@@ -25,10 +27,75 @@ def test_load_image_hex(tmp_path):
     assert data == b"\xDE\xAD\xBE\xEF"
 
 
-def test_load_image_elf_rejected(tmp_path):
+def _build_minimal_elf32(segments):
+    """Build a minimal valid 32-bit little-endian ELF (EM_ARM) with the
+    given PT_LOAD segments as (paddr, data) tuples -- just enough for
+    pyelftools to parse, to test this module's PT_LOAD extraction/
+    flattening logic against a controlled input without needing a real
+    toolchain-produced firmware ELF."""
+    ehsize = 52
+    phentsize = 32
+    phnum = len(segments)
+    phoff = ehsize
+    data_start = phoff + phentsize * phnum
+
+    ph_bytes = b""
+    file_data = b""
+    offset = data_start
+    for paddr, data in segments:
+        ph_bytes += struct.pack(
+            "<8I",
+            1,            # p_type = PT_LOAD
+            offset,       # p_offset
+            paddr,        # p_vaddr
+            paddr,        # p_paddr
+            len(data),    # p_filesz
+            len(data),    # p_memsz
+            5,            # p_flags R+X
+            4,            # p_align
+        )
+        file_data += data
+        offset += len(data)
+
+    e_ident = b"\x7fELF" + bytes([1, 1, 1, 0]) + b"\x00" * 8
+    header = e_ident + struct.pack(
+        "<HHIIIIIHHHHHH",
+        2, 0x28, 1, 0, phoff, 0, 0, ehsize, phentsize, phnum, 0, 0, 0)
+    assert len(header) == ehsize
+    return header + ph_bytes + file_data
+
+
+def test_load_image_elf_extracts_single_segment(tmp_path):
     path = tmp_path / "fw.elf"
-    path.write_bytes(b"\x7fELF")
-    with pytest.raises(ValueError, match="debug symbols"):
+    path.write_bytes(_build_minimal_elf32([
+        (image.FLASH_BASE, b"\x01\x02\x03\x04"),
+    ]))
+    assert image.load_image(path) == b"\x01\x02\x03\x04"
+
+
+def test_load_image_elf_fills_gaps_between_segments_with_0xff(tmp_path):
+    path = tmp_path / "fw.elf"
+    path.write_bytes(_build_minimal_elf32([
+        (image.FLASH_BASE, b"\x11" * 16),
+        (image.FLASH_BASE + 0x20, b"\x22" * 8),
+    ]))
+    data = image.load_image(path)
+    assert data == b"\x11" * 16 + b"\xff" * 16 + b"\x22" * 8
+
+
+def test_load_image_elf_rejects_segment_outside_flash_range(tmp_path):
+    path = tmp_path / "fw.elf"
+    path.write_bytes(_build_minimal_elf32([
+        (0x20000000, b"\x01\x02\x03\x04"),  # SRAM, not flash
+    ]))
+    with pytest.raises(ValueError, match="outside the internal flash"):
+        image.load_image(path)
+
+
+def test_load_image_elf_rejects_no_loadable_segments(tmp_path):
+    path = tmp_path / "fw.elf"
+    path.write_bytes(_build_minimal_elf32([]))
+    with pytest.raises(ValueError, match="no loadable"):
         image.load_image(path)
 
 

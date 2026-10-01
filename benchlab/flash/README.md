@@ -18,9 +18,13 @@ device or put it into DFU mode yourself.
 - **`.bin`** -- primary supported format. This is what's shipped in
   release artifacts, and is flashed directly.
 - **`.hex`** -- supported as a developer convenience for local builds.
-- **`.elf`** -- **not supported for flashing.** ELF files carry debug
-  symbols/sections, not a flat memory image. Release artifacts ship a
-  `.bin`/`.hex` alongside the `.elf` for the same build -- use those.
+- **`.elf`** -- supported by extracting its loadable (`PT_LOAD`) segments
+  and flattening them into a single image starting at `0x08000000`, the
+  same shape as a release `.bin` (confirmed byte-for-byte identical to the
+  official `.bin` for both BENCHLAB1 and BENCHLAB2 release builds). Gaps
+  between segments are padded with `0xFF`. Segments outside the internal
+  flash address range (e.g. a `PT_LOAD` segment destined for SRAM) are
+  rejected with a clear error rather than silently producing a bad image.
 
 ## Minimum firmware version for BENCHLAB1
 

@@ -37,9 +37,9 @@ def load_image(path: Path) -> bytes:
     """Load a firmware image file, dispatching on its extension.
 
     .bin is read raw (the primary supported format -- what release
-    artifacts ship). .hex is converted via intelhex. .elf is rejected,
-    since it carries debug symbols/sections rather than a flat memory
-    image -- release artifacts ship a sibling .bin/.hex for the same build.
+    artifacts ship). .hex is converted via intelhex. .elf has its
+    PT_LOAD segments extracted and flattened into a single image starting
+    at FLASH_BASE (see _load_elf).
     """
     path = Path(path)
     suffix = path.suffix.lower()
@@ -52,14 +52,63 @@ def load_image(path: Path) -> bytes:
         return IntelHex(str(path)).tobinstr()
 
     if suffix == ".elf":
-        raise ValueError(
-            f"{path}: .elf images can't be flashed directly (they contain "
-            "debug symbols/sections, not a flat memory image). Use the "
-            ".bin or .hex file from the same release instead.")
+        return _load_elf(path)
 
     raise ValueError(
         f"{path}: unsupported firmware image extension '{suffix}' "
-        "(expected .bin or .hex)")
+        "(expected .bin, .hex, or .elf)")
+
+
+def _load_elf(path: Path) -> bytes:
+    """Extract an ELF's loadable (PT_LOAD) segments and flatten them into
+    a single contiguous image starting at FLASH_BASE, the same shape as a
+    release .bin. Gaps between segments (e.g. between .text/.data and a
+    debug-info-only region, or alignment padding) are filled with 0xFF to
+    match erased-flash semantics -- those bytes are never written to
+    device flash with meaningful content anyway, since DFU only writes
+    what's in the resulting image buffer.
+
+    Raises ValueError if the ELF has no loadable segments, or if any
+    segment's physical address falls outside the internal flash range
+    (this tool only flashes internal flash -- a segment destined for
+    SRAM/option bytes/peripherals that happened to be marked PT_LOAD,
+    e.g. SRAM at 0x20000000, would otherwise silently produce a garbage
+    flash image).
+    """
+    from elftools.elf.elffile import ELFFile
+
+    flash_end = FLASH_BASE + BENCHLAB1_FLASH_SIZE
+
+    with open(path, "rb") as f:
+        elf = ELFFile(f)
+        segments = [
+            seg for seg in elf.iter_segments()
+            if seg["p_type"] == "PT_LOAD" and seg["p_filesz"] > 0
+        ]
+        if not segments:
+            raise ValueError(
+                f"{path}: no loadable (PT_LOAD) segments found in this "
+                "ELF -- nothing to flash")
+
+        for seg in segments:
+            paddr = seg["p_paddr"]
+            seg_end = paddr + seg["p_filesz"]
+            if paddr < FLASH_BASE or seg_end > flash_end:
+                raise ValueError(
+                    f"{path}: segment at physical address 0x{paddr:08X} "
+                    f"(size {seg['p_filesz']} bytes) falls outside the "
+                    f"internal flash range (0x{FLASH_BASE:08X}-"
+                    f"0x{flash_end:08X}) -- this tool only flashes "
+                    "internal flash, not RAM or other memory regions")
+
+        end = max(seg["p_paddr"] + seg["p_filesz"] for seg in segments)
+        image = bytearray(b"\xff" * (end - FLASH_BASE))
+        for seg in segments:
+            offset = seg["p_paddr"] - FLASH_BASE
+            data = seg.data()
+            image[offset:offset + len(data)] = data
+
+        return bytes(image)
 
 
 def validate_image_size(data: bytes, product_id: int) -> None:

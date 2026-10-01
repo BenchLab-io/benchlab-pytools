@@ -363,7 +363,7 @@ def interactive_mode(args):
     print()
 
     file_path_str = input(
-        "Path to firmware file (.bin or .hex): ").strip().strip('"')
+        "Path to firmware file (.bin, .hex, or .elf): ").strip().strip('"')
     if not file_path_str:
         print("Cancelled.")
         return 0
@@ -488,8 +488,9 @@ Examples:
 
         parser.add_argument('--list', action='store_true',
                             help='List available devices')
-        parser.add_argument('--file', metavar='PATH',
-                            help='Firmware image to flash (.bin or .hex)')
+        parser.add_argument(
+            '--file', metavar='PATH',
+            help='Firmware image to flash (.bin, .hex, or .elf)')
         parser.add_argument(
             '--source', choices=['direct', 'named_pipe', 'service_http'],
             default='direct',
