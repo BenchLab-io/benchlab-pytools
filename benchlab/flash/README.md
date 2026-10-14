@@ -178,10 +178,26 @@ WinUSB (or libusbK) driver to it using
 
 1. Start the flash operation so the device enters DFU mode (or put it into
    DFU mode and let it stay there briefly).
-2. Open Zadig, enable "List All Devices", find the device (it should show
-   up as an STM32 BOOTLOADER or similar, VID/PID `0483`/`DF11`).
-3. Select the WinUSB driver and click "Install Driver" / "Replace Driver".
-4. Re-run the flash command.
+2. Open Zadig **as Administrator** and find the device -- it should show up
+   as `STM32  BOOTLOADER`. A driverless device is listed by default; only
+   enable "List All Devices" if it does not appear.
+3. **Check the USB ID reads `0483  DF11`** before continuing, so the driver
+   cannot go onto the wrong device.
+4. Select the WinUSB driver and click "Install Driver" / "Replace Driver".
+   This takes around 30 seconds and the window may appear frozen.
+5. Re-run the flash command.
+
+To confirm the bind before re-running, on Windows:
+
+```powershell
+Get-PnpDevice | Where-Object { $_.InstanceId -like '*VID_0483&PID_DF11*' } |
+  Select-Object Status, FriendlyName, Service
+```
+
+`Service : WinUSB` with `Status : OK` means libusb can now see it. An
+unbound device instead reports `Status : Error` and
+`ConfigManagerErrorCode : 28` ("no driver installed"), which is the
+underlying cause of the timeout above.
 
 This is a one-time setup per machine/USB port combination. This is a
 Windows driver-binding limitation, independent of this tool being pure
