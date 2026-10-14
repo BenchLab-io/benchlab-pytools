@@ -83,6 +83,16 @@ python -m benchlab -config ...  # Device configuration import/export
 python -m benchlab -flash ...   # Firmware flash tool (STM32 ROM DFU)
 ```
 
+The flash tool needs its extra: `pip install "benchlab-pytools[flash]"`. It takes a firmware
+image with `--file` and does not download one; releases live in
+[BENCHLAB-FW](https://github.com/BenchLab-io/BENCHLAB-FW/releases). Start with `--list` to see what
+is connected, and `--verify-only` to check an image against a device without erasing or writing:
+
+```bash
+python -m benchlab -flash --list
+python -m benchlab -flash --file benchlab2-fw07-v0.7.2.bin --verify-only
+```
+
 Running with no flags is equivalent to launching the interactive menu.
 
 ### Data Sources

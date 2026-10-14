@@ -411,9 +411,13 @@ def launch_mode() -> None:
         try:
             sys.argv.remove('-flash')
             from benchlab.flash.flash_tool import main as flash_main
+        except ModuleNotFoundError as exc:
+            # A missing transitive dependency is not a missing build: name
+            # it, and point at the extra that supplies it (see #90).
+            print(f"Flash tool unavailable: {exc}")
+            print('Install it with: pip install "benchlab-pytools[flash]"')
+        else:
             sys.exit(flash_main())
-        except ModuleNotFoundError:
-            print("Flash tool module not available in this build.")
 
     elif args.fastapi:
         try:
