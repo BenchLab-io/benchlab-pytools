@@ -404,8 +404,10 @@ def launch_mode() -> None:
             from benchlab.config.config_tool import main as config_main
         except ModuleNotFoundError as exc:
             # A missing transitive dependency is not a missing build: name the
-            # real cause. No install hint here -- unlike -flash, the config
-            # stack has no extra or requirements file to point at (see #90).
+            # real cause. There is no install hint because config's only
+            # third-party import (pydantic) is a core dependency, so a miss
+            # here means a broken install rather than a missing extra (#90,
+            # #92).
             print(f"Config tool unavailable: {exc}")
         else:
             sys.exit(config_main())

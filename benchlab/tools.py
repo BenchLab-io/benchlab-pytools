@@ -25,7 +25,9 @@ CONSUMER_TOOLS = {
         "flag": "-config",
         "module": "benchlab.config.config_tool",
         "function": "main",
-        "requirements": "requirements.txt",
+        # No requirements file: config's only third-party import is pydantic,
+        # which is a core dependency, so there is nothing tool-specific to
+        # install (see #92).
         "supported_sources": ["direct", "named_pipe"],
     },
     "flash": {
