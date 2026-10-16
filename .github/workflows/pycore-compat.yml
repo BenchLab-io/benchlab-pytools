@@ -140,27 +140,75 @@ jobs:
         run: pytest benchlab/link/test_link_main.py -v
 
 
-  tui-install:
-    name: TUI-only HTTP dependency check
+  # Nothing in CI used to run "pip install .[<extra>]" except this one TUI job,
+  # so a stale extra shipped unnoticed (see #90 / #93). Every extra now gets the
+  # same treatment in a clean venv: install from pyproject.toml, pip check, and
+  # import that extra's entry point. The install also proves the extras resolve
+  # together, which the requirements.txt installs above cannot.
+  extra-install:
+    name: "[${{ matrix.extra }}] clean install"
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - extra: tui
+            module: benchlab.tui.tui_main
+          - extra: csv_log
+            module: benchlab.csv_log.csv_logger_enhanced
+          - extra: restapi
+            module: benchlab.restapi.telemetry_api
+          - extra: mqtt
+            module: benchlab.mqtt.mqtt_publisher
+          - extra: graph
+            module: benchlab.graph.runner
+          - extra: hwinfo
+            module: benchlab.hwinfo.hwinfo_export
+          - extra: vu
+            module: benchlab.vu.vu_updater
+          - extra: wigidash
+            module: benchlab.wigidash.wigidash_manager
+          - extra: flash
+            module: benchlab.flash.flash_tool
+          - extra: link
+            module: benchlab.link.link_main
+          # service_ws is a data source rather than a tool, so it has no entry
+          # point of its own; benchlab.core.datasource is where it is implemented.
+          - extra: service_ws
+            module: benchlab.core.datasource
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: Install only the TUI extra in a clean environment
+      - name: Install only the ${{ matrix.extra }} extra in a clean environment
         run: |
-          python -m venv /tmp/benchlab-tui-check
-          /tmp/benchlab-tui-check/bin/python -m pip install ".[tui]"
-          /tmp/benchlab-tui-check/bin/python -m pip check
+          python -m venv /tmp/benchlab-extra-check
+          /tmp/benchlab-extra-check/bin/python -m pip install ".[${{ matrix.extra }}]"
+          /tmp/benchlab-extra-check/bin/python -m pip check
+      - name: Import the ${{ matrix.extra }} entry point
+        working-directory: /tmp
+        run: |
+          /tmp/benchlab-extra-check/bin/python - <<'PYTHON'
+          import importlib
+          importlib.import_module("${{ matrix.module }}")
+          PYTHON
       - name: Check HTTP datasource initialization without hardware or server
         working-directory: /tmp
         run: |
-          /tmp/benchlab-tui-check/bin/python - <<'PYTHON'
-          from types import SimpleNamespace
-          from benchlab.tui.tui_main import TUIApplication
+          /tmp/benchlab-extra-check/bin/python - <<'PYTHON'
           from benchlab.core.datasource import FastAPIDataSource, ServiceHttpDataSource
           for source in (FastAPIDataSource(), ServiceHttpDataSource()):
               assert source._requests is not None, type(source).__name__
+          PYTHON
+      # The TUI builds its datasource during construction instead of on first
+      # use, so it needs the extra step the original job had.
+      - name: Construct the TUI against an HTTP source
+        if: matrix.extra == 'tui'
+        working-directory: /tmp
+        run: |
+          /tmp/benchlab-extra-check/bin/python - <<'PYTHON'
+          from types import SimpleNamespace
+          from benchlab.tui.tui_main import TUIApplication
           TUIApplication(SimpleNamespace(source="fastapi_custom", interval=1.0))
           PYTHON
