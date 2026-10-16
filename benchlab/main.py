@@ -402,9 +402,13 @@ def launch_mode() -> None:
         try:
             sys.argv.remove('-config')
             from benchlab.config.config_tool import main as config_main
+        except ModuleNotFoundError as exc:
+            # A missing transitive dependency is not a missing build: name the
+            # real cause. No install hint here -- unlike -flash, the config
+            # stack has no extra or requirements file to point at (see #90).
+            print(f"Config tool unavailable: {exc}")
+        else:
             sys.exit(config_main())
-        except ModuleNotFoundError:
-            print("Config tool module not available in this build.")
 
     elif args.flash:
         # Flash tool handles its own argument parsing
@@ -422,18 +426,24 @@ def launch_mode() -> None:
     elif args.fastapi:
         try:
             from benchlab.restapi.telemetry_api import run_server
+        except ModuleNotFoundError as exc:
+            # Same reasoning as -flash: a missing dependency is not a missing
+            # build, so report which module is absent (see #90).
+            print(f"FastAPI / Uvicorn unavailable: {exc}")
+            print('Install it with: pip install "benchlab-pytools[restapi]"')
+        else:
             run_server()
-        except ModuleNotFoundError:
-            print("FastAPI / Uvicorn not available in this build.")
 
     elif args.mqtt:
         try:
             from benchlab.mqtt.mqtt_publisher import run_mqtt_mode
+        except ModuleNotFoundError as exc:
+            print(f"MQTT module unavailable: {exc}")
+            print('Install it with: pip install "benchlab-pytools[mqtt]"')
+        else:
             broker = args.mqtt if args.mqtt else "localhost"
             os.environ.setdefault("MQTT_BROKER", broker)
             run_mqtt_mode(broker)
-        except ModuleNotFoundError:
-            print("MQTT module not available in this build.")
 
     elif args.link:
         _export_link_env(args)

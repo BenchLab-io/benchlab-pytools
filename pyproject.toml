@@ -96,8 +96,9 @@ flash = [
     "libusb-package>=1.0.26.1; sys_platform == 'win32'",
     # flash_manager -> config_manager -> config.schema (see #90)
     "pydantic>=2.0.0",
-    # needed by --source service_http (see #90)
-    "requests>=2.31.0",
+    # needed by --source service_http (see #90). Floor matches the tui extra
+    # and benchlab/requirements.txt so [flash] and [tui] resolve the same way.
+    "requests>=2.33.1",
 ]
 all = [
     "benchlab-pytools[tui,csv_log,restapi,mqtt,service_ws,graph,hwinfo,vu,wigidash,flash]",
