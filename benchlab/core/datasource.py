@@ -312,6 +312,15 @@ class DirectDataSource(DataSource):
                         ser, product_id=product_id)
                     if sensors:
                         data = self._pycore['translate_sensor_struct'](sensors)
+                        # translate_sensor_struct_bl2() doesn't read these
+                        # off the raw struct (BL2 fw05+ only), so pull them
+                        # directly here.
+                        fault_status = getattr(sensors, 'FaultStatus', None)
+                        fault_log = getattr(sensors, 'FaultLog', None)
+                        if fault_status is not None:
+                            data['FaultStatus'] = fault_status
+                        if fault_log is not None:
+                            data['FaultLog'] = fault_log
                         data['timestamp'] = datetime.now(UTC).isoformat()
                         with self._lock:
                             self._latest_data[uid] = data
@@ -722,6 +731,10 @@ CS_SHORT_NAME_MAP: Dict[str, str] = {
         **{f"FAN{i}_T": f"Fan{i}_RPM" for i in range(1, 10)},
         **{f"FAN{i}_D": f"Fan{i}_Duty" for i in range(1, 10)},
         "FAN_EXT": "FanExtDuty",
+
+        # BL2 fault bitmasks (fw05+ only) — see Fault enum in benchlab_pycore
+        "FAULT_STATUS": "FaultStatus",
+        "FAULT_LOG": "FaultLog",
 }
 
 

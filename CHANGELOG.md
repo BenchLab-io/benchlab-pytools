@@ -4,6 +4,15 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- TUI: BENCHLAB2 fault status is now surfaced. The Device tab shows a
+  quick-glance warning when a fault is currently active, and a new Faults
+  tab lists all 34 known BL2 faults with their live (`FaultStatus`) and
+  latched (`FaultLog`) state. Requires BL2 firmware 05+; ORIGINAL devices
+  and earlier BL2 firmware show an explanatory message instead. (#95)
+
 ## [3.3.1] - 2026-10-17
 
 ### Fixed

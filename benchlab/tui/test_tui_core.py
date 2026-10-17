@@ -106,7 +106,7 @@ def _render_tab(tab_index, snapshot, fleet_devices=None):
 
 
 @pytest.mark.parametrize("tab_index",
-                         range(8),
+                         range(9),
                          ids=["fleet",
                               "device",
                               "system",
@@ -114,7 +114,8 @@ def _render_tab(tab_index, snapshot, fleet_devices=None):
                               "hpwr",
                               "voltage",
                               "temperature",
-                              "fans"],
+                              "fans",
+                              "faults"],
                          )
 def test_render_tab_survives_none_sensor_values(tab_index):
     """Every tab must render without raising when sensor_data values are None.
@@ -148,7 +149,7 @@ def test_fleet_tab_survives_disconnected_and_empty_fleet():
 
 
 @pytest.mark.parametrize("tab_index",
-                         range(8),
+                         range(9),
                          ids=["fleet",
                               "device",
                               "system",
@@ -156,7 +157,8 @@ def test_fleet_tab_survives_disconnected_and_empty_fleet():
                               "hpwr",
                               "voltage",
                               "temperature",
-                              "fans"],
+                              "fans",
+                              "faults"],
                          )
 def test_render_tab_survives_disconnected(tab_index):
     """All tabs must render their disconnected state without raising."""
@@ -193,6 +195,53 @@ def test_fans_tab_survives_many_fans_on_small_terminal():
         curses.wrapper(_run)
     except curses.error:
         pytest.skip("curses screen unavailable in this environment")
+
+
+def test_faults_tab_shows_no_warning_when_no_faults_active():
+    """Device tab draws no fault warning line when FaultStatus is all-clear."""
+    bl2_info = {"VendorId": 0xEE, "ProductId": 0x11, "FwVersion": 0x07,
+                "variant": "BL2"}
+    sensor_data = dict(SENSOR_DATA_ALL_NONE)
+    sensor_data["FaultStatus"] = 0
+    sensor_data["FaultLog"] = 0
+    snapshot = _snapshot(device_info=bl2_info, sensor_data=sensor_data)
+    _render_tab(1, snapshot)  # Device tab
+    _render_tab(8, snapshot)  # Faults tab
+
+
+def test_faults_tab_decodes_active_and_logged_bits():
+    """Faults tab and Device tab warning must render without raising when
+    specific fault bits are set, for a BL2 fw05+ device."""
+    bl2_info = {"VendorId": 0xEE, "ProductId": 0x11, "FwVersion": 0x07,
+                "variant": "BL2"}
+    sensor_data = dict(SENSOR_DATA_ALL_NONE)
+    # Bit 9 = OCP_CPU1 (active), bit 32 = CURRENT_IMBALANCE_HPWR1 (logged only)
+    sensor_data["FaultStatus"] = 1 << 9
+    sensor_data["FaultLog"] = (1 << 9) | (1 << 32)
+    snapshot = _snapshot(device_info=bl2_info, sensor_data=sensor_data)
+    _render_tab(1, snapshot)  # Device tab warning line
+    _render_tab(8, snapshot)  # Faults tab full grid
+
+
+def test_faults_tab_handles_device_without_fault_data():
+    """ORIGINAL devices and pre-fw05 BL2 firmware have no FaultStatus key —
+    the Faults tab must show an explanatory message, not crash."""
+    original_info = {
+        "VendorId": 0x1234, "ProductId": 0x10, "FwVersion": 0x01,
+        "variant": "ORIGINAL"}
+    snapshot = _snapshot(device_info=original_info)  # no FaultStatus key
+    _render_tab(1, snapshot)  # Device tab
+    _render_tab(8, snapshot)  # Faults tab
+
+
+def test_decode_faults_helper():
+    from benchlab.tui.tui_core import _decode_faults
+
+    assert _decode_faults(None) == []
+    assert _decode_faults(0) == []
+    assert _decode_faults(1 << 9) == ["OCP_CPU1"]
+    decoded = _decode_faults((1 << 0) | (1 << 33))
+    assert set(decoded) == {"OTP_TCHIP", "CURRENT_IMBALANCE_HPWR2"}
 
 
 def test_help_modal_renders_without_stomping_main_refresh():
