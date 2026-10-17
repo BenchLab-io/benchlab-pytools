@@ -4,6 +4,23 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.3.1] - 2026-10-17
+
+### Fixed
+- Packaging: `benchlab-pytools[flash]` was missing `pydantic` and
+  `requests` (`flash_manager` imports `config_manager` -> `config.schema`
+  -> `pydantic`; `--source service_http` needs `requests`), so a clean
+  `[flash]`-only install crashed with `ModuleNotFoundError` on first use.
+  The launcher also reported `ModuleNotFoundError` as "Flash tool module
+  not available in this build" regardless of cause; it now prints the
+  real missing module and the install command. (#90)
+- `check_bootloader_supported()` only gated BENCHLAB1 firmware against
+  the CMD_BOOTLOADER version floor; a BENCHLAB2 unit on firmware below
+  `0x05` (which predates CMD_BOOTLOADER on BL2, per the firmware repo's
+  protocol contract freeze history) passed the check and then hit a 5s
+  timeout in `enter_dfu_mode()` instead of being told up front to use a
+  physical BOOT0/jumper bootloader entry. (#94)
+
 ## [3.3.0] - 2026-10-01
 
 ### Added
@@ -193,6 +210,7 @@ export, MQTT publisher, VU dials, WigiDash, and config import/export tools,
 sharing a common data-source layer (direct serial, FastAPI, MQTT, named
 pipe, service HTTP, service WebSocket).
 
+[3.3.1]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.3.0...v3.3.1
 [3.3.0]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.2.1...v3.3.0
 [3.2.1]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/BenchLab-io/benchlab-pytools/compare/v3.1.0...v3.2.0
