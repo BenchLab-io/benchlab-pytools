@@ -54,6 +54,12 @@ jobs:
         with:
           python-version: "3.13"
 
+      # Nightly runs the whole suite, so it installs every benchlab/*/requirements.txt
+      # that suite touches. The previous list stopped at vu, leaving flash, hwinfo,
+      # mqtt, restapi, tui and link to resolve transitively -- a missing pin there
+      # only showed up as a collection error (see #93).
+      # benchlab/vu/VU-Server/requirements.txt is deliberately not installed: its
+      # pyinstaller entry is only used when building the standalone VU server.
       - name: Install dependencies
         run: |
           pip install -r benchlab/requirements.txt
@@ -61,6 +67,12 @@ jobs:
           pip install -r benchlab/graph/requirements.txt
           pip install -r benchlab/wigidash/requirements.txt
           pip install -r benchlab/vu/requirements.txt
+          pip install -r benchlab/flash/requirements.txt
+          pip install -r benchlab/hwinfo/requirements.txt
+          pip install -r benchlab/mqtt/requirements.txt
+          pip install -r benchlab/restapi/requirements.txt
+          pip install -r benchlab/tui/requirements.txt
+          pip install -r benchlab/link/requirements.txt
           pip install pytest build
 
       - name: Run test suite

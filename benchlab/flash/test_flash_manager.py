@@ -108,11 +108,22 @@ def test_check_bootloader_supported_bl1_version_gate(
             info, BENCHLAB_ORIGINAL_PRODUCT_ID)
 
 
-def test_check_bootloader_supported_bl2_not_version_gated(manager):
-    # BL2's CMD_BOOTLOADER gating isn't modeled here (all shipped BL2
-    # firmware postdates it) -- should never raise regardless of fw value.
-    info = _device_info(product_id=BENCHLAB_BL2_PRODUCT_ID, fw=0x01)
-    manager.check_bootloader_supported(info, BENCHLAB_BL2_PRODUCT_ID)
+@pytest.mark.parametrize("fw,should_raise", [
+    (0x03, True),
+    (0x04, True),
+    (0x05, False),
+    (0x07, False),
+])
+def test_check_bootloader_supported_bl2_version_gate(
+        manager, fw, should_raise):
+    info = _device_info(product_id=BENCHLAB_BL2_PRODUCT_ID, fw=fw)
+    if should_raise:
+        with pytest.raises(UnsupportedFirmwareError):
+            manager.check_bootloader_supported(
+                info, BENCHLAB_BL2_PRODUCT_ID)
+    else:
+        manager.check_bootloader_supported(
+            info, BENCHLAB_BL2_PRODUCT_ID)
 
 
 # -- enter_dfu_mode / wait_for_dfu_device ----------------------------------

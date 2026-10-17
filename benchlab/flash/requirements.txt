@@ -5,3 +5,7 @@ pyelftools>=0.31
 tqdm>=4.66
 benchlab-pycore>=0.8.0
 libusb-package>=1.0.26.1; sys_platform == 'win32'
+# flash_manager -> config_manager -> config.schema (see #90)
+pydantic>=2.0.0
+# needed by --source service_http (see #90)
+requests>=2.33.1

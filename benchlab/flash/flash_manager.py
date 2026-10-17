@@ -32,6 +32,11 @@ logger = logging.getLogger("benchlab.flash.manager")
 # ignore the opcode).
 MIN_BOOTLOADER_FW_VERSION = 0x04
 
+# Same opcode, same commit (c722244), but BL2's frozen protocol contracts
+# show it landed between the fw04 and fw05 freezes -- benchlab2-fw03.json/
+# benchlab2-fw04.json have no BOOTLOADER entry, benchlab2-fw05.json does.
+MIN_BOOTLOADER_FW_VERSION_BL2 = 0x05
+
 _KNOWN_PRODUCT_IDS = (BENCHLAB_ORIGINAL_PRODUCT_ID, BENCHLAB_BL2_PRODUCT_ID)
 _BENCHLAB_VENDOR_ID = 0xEE
 
@@ -155,16 +160,20 @@ class FlashManager:
 
     def check_bootloader_supported(
             self, device_info: dict, product_id: int) -> None:
-        if (product_id == BENCHLAB_ORIGINAL_PRODUCT_ID
-                and device_info.get("FwVersion", 0)
-                < MIN_BOOTLOADER_FW_VERSION):
+        if product_id == BENCHLAB_ORIGINAL_PRODUCT_ID:
+            min_fw = MIN_BOOTLOADER_FW_VERSION
+        elif product_id == BENCHLAB_BL2_PRODUCT_ID:
+            min_fw = MIN_BOOTLOADER_FW_VERSION_BL2
+        else:
+            return
+
+        if device_info.get("FwVersion", 0) < min_fw:
             raise UnsupportedFirmwareError(
                 "This device's firmware "
                 f"(0x{device_info.get('FwVersion', 0):02X}) predates "
-                f"CMD_BOOTLOADER support (requires "
-                f"0x{MIN_BOOTLOADER_FW_VERSION:02X}+). It cannot be put "
-                "into DFU mode via software -- use a physical BOOT0/jumper "
-                "bootloader entry instead.")
+                f"CMD_BOOTLOADER support (requires 0x{min_fw:02X}+). It "
+                "cannot be put into DFU mode via software -- use a "
+                "physical BOOT0/jumper bootloader entry instead.")
 
     def enter_dfu_mode(
             self, identifier: str, port: Optional[str] = None,
