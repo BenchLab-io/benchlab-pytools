@@ -13,8 +13,20 @@ from typing import Dict, Any, List, Optional
 
 from .config import Config
 from benchlab.core.statistics import ChannelStats, StatsFormatter
+from benchlab_pycore.core import Fault
 
 logger = logging.getLogger("benchlab.tui.tui_core")
+
+
+def _decode_faults(bitmask: Optional[float]) -> List[str]:
+    """Decode a FaultStatus/FaultLog bitmask into a list of Fault names.
+
+    Returns an empty list for None/0/falsy bitmasks (no faults set).
+    """
+    if not bitmask:
+        return []
+    bitmask = int(bitmask)
+    return [f.name for f in Fault if bitmask & (1 << f.value)]
 
 
 class TUICore:
@@ -290,6 +302,8 @@ class TUICore:
                 self._render_temperature_tab(snapshot, stats)
             elif self.current_tab == 7:
                 self._render_fans_tab(snapshot, stats, height, width)
+            elif self.current_tab == 8:
+                self._render_faults_tab(snapshot)
         except curses.error:
             pass
 
@@ -603,9 +617,27 @@ class TUICore:
             self.stdscr.addstr(13, 4, f"{'Device UID':<22} {uid or 'N/A'}")
             self.stdscr.addstr(14, 4, f"{'Firmware Version':<22} {fw_str}")
 
-            self._draw_section(16, 2, "TUI")
+            # Quick-glance active-fault warning (BL2 fw05+ only; nothing is
+            # drawn for ORIGINAL devices or pre-fw05 BL2, where FaultStatus
+            # is simply absent from sensor_data). Full per-fault detail,
+            # including latched history, lives on the Faults tab.
+            sd = snapshot.get('sensor_data') or {}
+            if variant == 'BL2' and sd.get('FaultStatus') is not None:
+                active_faults = _decode_faults(sd.get('FaultStatus'))
+                if active_faults:
+                    names = ", ".join(active_faults)
+                    msg = f"⚠ Active Faults: {names}"
+                    width = self.stdscr.getmaxyx()[1]
+                    if len(msg) > width - 5:
+                        msg = (f"⚠ {len(active_faults)} active "
+                               f"fault(s) — see Faults tab")
+                    self.stdscr.addstr(
+                        16, 4, msg,
+                        curses.color_pair(Config.COLOR_PAIRS['error']))
+
+            self._draw_section(18, 2, "TUI")
             self.stdscr.addstr(
-                17, 4, f"{'Refresh Interval':<22} {refresh_interval} s")
+                19, 4, f"{'Refresh Interval':<22} {refresh_interval} s")
 
         except curses.error:
             pass
@@ -1213,6 +1245,83 @@ class TUICore:
                     f"Active: {active_count}/{num_fans} fans running",
                     curses.color_pair(
                         Config.COLOR_PAIRS['ok']))
+            except curses.error:
+                pass
+
+    def _render_faults_tab(self, snapshot: Dict[str, Any]):
+        """Render Faults tab — all 34 BL2 Fault enum members, live/latched."""
+        self._draw_section(4, 2, "Fault Monitoring (BL2)")
+
+        if not snapshot.get('connected'):
+            self._draw_disconnected("Fault")
+            return
+
+        sd = snapshot.get('sensor_data') or {}
+        device_info = snapshot.get('device_info') or {}
+        product_id = device_info.get('ProductId')
+        variant = device_info.get('variant')
+        if variant is None:
+            variant = 'BL2' if product_id == 0x11 else 'ORIGINAL'
+
+        if variant != 'BL2' or sd.get('FaultStatus') is None:
+            try:
+                self.stdscr.addstr(
+                    6, 4,
+                    "Fault data unavailable for this device "
+                    "(BL2 firmware 05+ required).",
+                    curses.color_pair(Config.COLOR_PAIRS['default']))
+            except curses.error:
+                pass
+            return
+
+        fault_status = int(sd.get('FaultStatus') or 0)
+        fault_log = int(sd.get('FaultLog') or 0)
+        cols = Config.Layout.FAULT_COLS
+        rows_per_col = Config.Layout.FAULT_ROWS_PER_COL
+
+        try:
+            hdr = f"{'Fault':<22} {'Active':<8} {'Logged':<8}"
+            self.stdscr.addstr(
+                5, cols['NAME'], hdr,
+                curses.A_UNDERLINE | curses.color_pair(
+                    Config.COLOR_PAIRS['default']))
+            self.stdscr.addstr(
+                5, cols['NAME2'], hdr,
+                curses.A_UNDERLINE | curses.color_pair(
+                    Config.COLOR_PAIRS['default']))
+        except curses.error:
+            pass
+
+        faults = list(Fault)
+        for i, fault in enumerate(faults):
+            col_idx = i // rows_per_col
+            row = 6 + (i % rows_per_col)
+            name_col = cols['NAME'] if col_idx == 0 else cols['NAME2']
+            active_col = cols['ACTIVE'] if col_idx == 0 else cols['ACTIVE2']
+            logged_col = cols['LOGGED'] if col_idx == 0 else cols['LOGGED2']
+
+            is_active = bool(fault_status & (1 << fault.value))
+            is_logged = bool(fault_log & (1 << fault.value))
+
+            active_str = "ACTIVE" if is_active else "OK"
+            active_color = (
+                Config.COLOR_PAIRS['error'] if is_active
+                else Config.COLOR_PAIRS['ok'])
+            logged_str = "YES" if is_logged else "-"
+            logged_color = (
+                Config.COLOR_PAIRS['caution'] if is_logged
+                else Config.COLOR_PAIRS['default'])
+
+            try:
+                self.stdscr.addstr(
+                    row, name_col, f"{fault.name:<22}",
+                    curses.color_pair(Config.COLOR_PAIRS['default']))
+                self.stdscr.addstr(
+                    row, active_col, f"{active_str:<8}",
+                    curses.color_pair(active_color))
+                self.stdscr.addstr(
+                    row, logged_col, f"{logged_str:<8}",
+                    curses.color_pair(logged_color))
             except curses.error:
                 pass
 
