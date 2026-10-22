@@ -29,7 +29,8 @@ TAB_NAMES = [
     "12VHPWR",
     "Voltage",
     "Temperature",
-    "Fans"]
+    "Fans",
+    "Faults"]
 
 # Statistics display width
 STAT_COLUMN_WIDTH = 10
@@ -322,6 +323,18 @@ class Layout:
         'BAR': 30,              # Progress bar column
         'STATS': 52,            # Statistics column
     }
+
+    # Faults tab column positions — two-column grid (17 rows each) so all
+    # 34 Fault enum members fit on one screen under MIN_TERMINAL_ROWS/COLS.
+    FAULT_COLS = {
+        'NAME': 2,              # Fault name column (left grid column)
+        'ACTIVE': 26,           # Active status column (left grid column)
+        'LOGGED': 36,           # Logged status column (left grid column)
+        'NAME2': 48,            # Fault name column (right grid column)
+        'ACTIVE2': 72,          # Active status column (right grid column)
+        'LOGGED2': 82,          # Logged status column (right grid column)
+    }
+    FAULT_ROWS_PER_COL = 17     # Rows per grid column (34 faults / 2)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
