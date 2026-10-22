@@ -324,9 +324,12 @@ class FlashManager:
             time.sleep(0.2)
 
         logger.warning(
-            "%s did not reappear within %.0fs after leaving DFU mode -- "
-            "this may just be slow re-enumeration, verify manually.",
-            port, timeout)
+            "%s did not reappear within %.0fs after leaving DFU mode. "
+            "The flash itself likely succeeded (erase/write/verify already "
+            "completed) -- the device just didn't re-enumerate as CDC on "
+            "its own. Unplug and replug the USB cable; it should then show "
+            "up as %s again.",
+            port, timeout, port)
         return None
 
     def _erase_verify_leave(
@@ -353,7 +356,11 @@ class FlashManager:
                 "Flash completed but verification failed")
 
         if port is not None:
-            self.leave_and_reboot(usb_dev, port)
+            reboot_info = self.leave_and_reboot(usb_dev, port)
+            if reboot_info is None and self.source == "direct":
+                message += (
+                    f" -- {port} did not come back on its own; unplug and "
+                    "replug the USB cable to reconnect it")
         else:
             # No CDC port to wait for -- just trigger the DfuSe leave
             # sequence so the device reboots into the newly-flashed app.

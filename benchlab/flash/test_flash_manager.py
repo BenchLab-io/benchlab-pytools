@@ -365,6 +365,33 @@ def test_flash_bare_dfu_flashes_without_cdc_round_trip(
     assert "Flashed and verified successfully" in result.message
 
 
+def test_erase_verify_leave_hints_replug_when_port_does_not_reappear(
+        manager, monkeypatch):
+    """leave_and_reboot() returning None for a 'direct' flash (the CDC
+    port never came back on its own) must not be silently swallowed --
+    append an actionable unplug/replug hint to the result message rather
+    than reporting a bare success. Confirmed against real hardware: the
+    flash+verify succeed but the device needs a manual USB replug to
+    re-enumerate as CDC (see PR discussion)."""
+    fake_usb_dev = MagicMock()
+    monkeypatch.setattr(
+        manager, "verify_image", lambda usb_dev, d, pid: True)
+    monkeypatch.setattr(
+        manager, "erase_and_flash",
+        lambda usb_dev, d, pid, progress_cb=None: None)
+    monkeypatch.setattr(
+        manager, "leave_and_reboot", lambda usb_dev, port: None)
+
+    ok, message = manager._erase_verify_leave(
+        fake_usb_dev, b"\x00" * 16, BENCHLAB_ORIGINAL_PRODUCT_ID,
+        "COM3", verify_only=False)
+
+    assert ok
+    assert "Flashed and verified successfully" in message
+    assert "unplug and replug" in message.lower()
+    assert "COM3" in message
+
+
 def test_flash_bare_dfu_catches_exceptions(manager, monkeypatch):
     monkeypatch.setattr(
         manager, "wait_for_dfu_device",
