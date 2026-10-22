@@ -626,10 +626,10 @@ class TUICore:
                 active_faults = _decode_faults(sd.get('FaultStatus'))
                 if active_faults:
                     names = ", ".join(active_faults)
-                    msg = f"⚠ Active Faults: {names}"
+                    msg = f"Active Faults: {names}"
                     width = self.stdscr.getmaxyx()[1]
                     if len(msg) > width - 5:
-                        msg = (f"⚠ {len(active_faults)} active "
+                        msg = (f"{len(active_faults)} active "
                                f"fault(s) — see Faults tab")
                     self.stdscr.addstr(
                         16, 4, msg,
