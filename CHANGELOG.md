@@ -4,7 +4,7 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [3.4.0] - 2026-10-22
 
 ### Added
 - TUI: BENCHLAB2 fault status is now surfaced. The Device tab shows a
@@ -12,6 +12,14 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
   tab lists all 34 known BL2 faults with their live (`FaultStatus`) and
   latched (`FaultLog`) state. Requires BL2 firmware 05+; ORIGINAL devices
   and earlier BL2 firmware show an explanatory message instead. (#95)
+
+### Fixed
+- `-flash`: confirmed against real hardware that a device doesn't always
+  re-enumerate as CDC on its own after leaving DFU mode, even though the
+  flash and verify already succeeded. The tool now says so plainly instead
+  of a vague "may just be slow re-enumeration" warning, and the
+  interactive flow prompts to replug the USB cable and re-checks the
+  device before exiting instead of leaving the user to guess. (#97)
 
 ## [3.3.1] - 2026-10-17
 
