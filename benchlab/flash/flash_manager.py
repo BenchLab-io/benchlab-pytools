@@ -324,12 +324,11 @@ class FlashManager:
             time.sleep(0.2)
 
         logger.warning(
-            "%s did not reappear within %.0fs after leaving DFU mode. "
-            "The flash itself likely succeeded (erase/write/verify already "
-            "completed) -- the device just didn't re-enumerate as CDC on "
-            "its own. Unplug and replug the USB cable; it should then show "
-            "up as %s again.",
-            port, timeout, port)
+            "%s did not reappear within %.0fs after leaving DFU mode -- "
+            "flash/verify already succeeded, but it didn't re-enumerate "
+            "as CDC on its own. Unplug and replug the USB cable to "
+            "reconnect it.",
+            port, timeout)
         return None
 
     def _erase_verify_leave(

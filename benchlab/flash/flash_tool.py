@@ -226,8 +226,9 @@ def cmd_flash(args):
 
     def progress_cb(port, written, total):
         pct = (written / total * 100) if total else 100
+        done = total and written >= total
         print(f"\r  {port}: {written}/{total} bytes ({pct:.0f}%)",
-              end="", flush=True)
+              end="\n" if done else "", flush=True)
 
     results = manager.flash_many(
         [port for port, _ in targets], args.file,
@@ -316,8 +317,9 @@ def cmd_flash_bare_dfu(args):
 
     def progress_cb(written, total):
         pct = (written / total * 100) if total else 100
+        done = total and written >= total
         print(f"\r  {written}/{total} bytes ({pct:.0f}%)",
-              end="", flush=True)
+              end="\n" if done else "", flush=True)
 
     result = manager.flash_bare_dfu(
         product_id, data, verify_only=args.verify_only,
@@ -453,24 +455,45 @@ def interactive_mode(args):
 
     def progress_cb(port, written, total):
         pct = (written / total * 100) if total else 100
+        done = total and written >= total
         print(f"\r  {port}: {written}/{total} bytes ({pct:.0f}%)",
-              end="", flush=True)
+              end="\n" if done else "", flush=True)
 
     print()
     results = manager.flash_many(
         [_device_identifier(args, device) for device in targets],
         file_path, progress_cb=progress_cb,
         on_unsupported_firmware=_make_boot0_fallback_prompt())
-    print()
 
     print()
     print("Results:")
     any_failed = False
+    needs_reconnect_check = []
     for result in results:
         status = "OK" if result.ok else "FAILED"
         if not result.ok:
             any_failed = True
         print(f"  {result.port}  [{status}]  {result.message}")
+        if result.ok and "unplug and replug" in result.message:
+            needs_reconnect_check.append(result.port)
+
+    for port in needs_reconnect_check:
+        print()
+        while True:
+            choice = input(
+                f"Replug {port}'s USB cable, then press Enter to check "
+                "it's back (or type 'skip' to continue without "
+                "checking): ").strip().lower()
+            if choice == "skip":
+                break
+            info = manager.identify_device(port)
+            if info is not None:
+                fw = info.get('FwVersion', 0)
+                print(f"  {port} is back (FW: 0x{fw:02X})")
+                break
+            print(f"  {port} not detected yet -- check the cable and try "
+                  "again.")
+
     print()
     input("Press Enter to exit...")
 
