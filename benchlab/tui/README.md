@@ -33,7 +33,7 @@ The BENCHLAB Enhanced TUI provides a modern, feature-rich curses-based interface
 
 ## 📊 Telemetry Tabs
 
-The TUI has 8 tabs: `Fleet`, `Device`, `System`, `Motherboard`, `12VHPWR`, `Voltage`, `Temperature`, `Fans` (in this order; see `Config.TAB_NAMES` in `benchlab/tui/config.py`). Tabs can also be jumped to directly with the number keys `0`-`7`.
+The TUI has 9 tabs: `Fleet`, `Device`, `System`, `Motherboard`, `12VHPWR`, `Voltage`, `Temperature`, `Fans`, `Faults` (in this order; see `Config.TAB_NAMES` in `benchlab/tui/config.py`). Tabs can also be jumped to directly with the number keys `0`-`8`.
 
 ### **Fleet Tab (Tab 0)**
 - Device list with connection status indicators
@@ -46,6 +46,7 @@ The TUI has 8 tabs: `Fleet`, `Device`, `System`, `Motherboard`, `12VHPWR`, `Volt
 - Device identification (Model, Vendor ID, Product ID, UID)
 - Firmware version display
 - TUI refresh interval
+- Quick-glance active-fault warning (BL2 fw05+ only); see the Faults tab for full detail
 
 ### **System / Motherboard / 12VHPWR Tabs (Tabs 2-4)**
 - Real-time power consumption with progress bars
@@ -76,12 +77,16 @@ The TUI has 8 tabs: `Fleet`, `Device`, `System`, `Motherboard`, `12VHPWR`, `Volt
 - External fan duty monitoring
 - Fan statistics (average duty, max RPM, active count)
 
+### **Faults Tab (Tab 8)**
+- Per-fault Active/Logged status for all BENCHLAB 2 fault conditions
+- BL2 firmware 05+ only; shows an unavailable message on ORIGINAL devices or older BL2 firmware
+
 ## 🎮 Keyboard Shortcuts
 
 ### **Navigation**
 - `h`, `←` - Move to previous tab
 - `l`, `→` - Move to next tab
-- `0`-`7` - Jump directly to a tab by index
+- `0`-`8` - Jump directly to a tab by index
 - `q`, `Q` - Quit application
 - `?` - Show/hide help modal
 
