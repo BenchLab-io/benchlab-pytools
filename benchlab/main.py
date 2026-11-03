@@ -55,6 +55,7 @@ def _check_pycore_version() -> None:
             file=sys.stderr)
         sys.exit(1)
 
+
 try:
     from .menu import interactive_loop
 except ImportError as e:
