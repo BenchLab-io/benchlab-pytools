@@ -372,7 +372,11 @@ class DataSourceManager:
                     time.sleep(2.0)
                     continue
 
-                # Update device list periodically
+                # Update device list periodically. list_devices() only
+                # returns a summary shape; merge in get_device_info()'s
+                # fuller dict (as connect() does) so fields it alone
+                # provides -- e.g. PatchVersion -- don't get dropped on
+                # every refresh.
                 try:
                     devices = self._datasource.list_devices()
                     with self._lock:
@@ -380,7 +384,16 @@ class DataSourceManager:
                         for device in devices:
                             uid = device.get('uid')
                             if uid:
-                                self._devices[uid] = device
+                                device_entry = device.copy()
+                                try:
+                                    full_info = (
+                                        self._datasource.get_device_info(
+                                            uid))
+                                    if full_info:
+                                        device_entry.update(full_info)
+                                except Exception:
+                                    pass
+                                self._devices[uid] = device_entry
                 except Exception as e:
                     logger.debug(f"Error updating device list: {e}")
 

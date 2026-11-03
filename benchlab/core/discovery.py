@@ -68,13 +68,15 @@ def discover_devices() -> List[Dict[str, Any]]:
             ser.close()
             if uid:
                 fw = info.get("FwVersion", "?")
+                patch = info.get("PatchVersion", 0xFF)
                 product_id = info.get(
                     "ProductId", BENCHLAB_ORIGINAL_PRODUCT_ID)
                 variant = (
                     "BL2" if product_id == BENCHLAB_BL2_PRODUCT_ID
                     else "ORIGINAL")
                 devices.append({"uid": uid, "port": port,
-                               "fw": fw, "variant": variant})
+                               "fw": fw, "PatchVersion": patch,
+                               "variant": variant})
                 logger.info(
                     "Discovered BenchLab device UID=%s on %s "
                     "(FW=%s, Variant=%s)",
