@@ -4,6 +4,27 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.5.0] - 2026-11-04
+
+### Added
+- BL1 (ORIGINAL, fw07+) fault status is now supported, matching BL2:
+  the TUI is variant-aware and decodes faults with the correct enum
+  for each device instead of always assuming BL2's (which previously
+  meant BL1 faults were silently never shown). (#100)
+- `PatchVersion` is now surfaced end-to-end (TUI Device tab, discovery,
+  FastAPI `/devices`, MQTT publisher), including a fix for a
+  worker-loop bug that dropped it on every periodic device-list
+  refresh. (#100)
+- A startup check now verifies the installed `benchlab-pycore` version
+  and fails with a clear message instead of an `ImportError` traceback
+  when it's missing or too old. (#100)
+
+### Changed
+- Raised the `benchlab-pycore` floor to `>=0.9.1` after finding and
+  reporting a `read_device()` short-read bug in 0.9.0
+  (benchlab-pycore#22), fixed upstream in 0.9.1 (benchlab-pycore#23).
+  (#100)
+
 ## [3.4.0] - 2026-10-22
 
 ### Added
