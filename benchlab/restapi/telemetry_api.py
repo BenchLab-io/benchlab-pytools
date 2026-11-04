@@ -606,6 +606,7 @@ def list_devices():
             "uid": uid,
             "port": info.get("port", "unknown"),
             "firmware": device_info.get("FwVersion", "?"),
+            "PatchVersion": device_info.get("PatchVersion", 0xFF),
             "variant": device_info.get("variant", "ORIGINAL"),
             "VendorId": device_info.get("VendorId", 0),
             "ProductId": device_info.get("ProductId", 0),

@@ -34,7 +34,7 @@ dependencies = [
     "packaging>=23.0,<26.0",
     "python-dotenv>=1.2.2,<2.0",
     "textual>=0.60,<9.0",
-    "benchlab-pycore>=0.8.0",
+    "benchlab-pycore>=0.9.1",
     # Import-time dependency of benchlab/config/schema.py, reached by -config,
     # -flash and the REST API (the #90 chain). -config has no extra of its own,
     # so pydantic cannot live in one.

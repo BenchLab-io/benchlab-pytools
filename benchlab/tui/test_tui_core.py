@@ -237,11 +237,14 @@ def test_faults_tab_handles_device_without_fault_data():
 def test_decode_faults_helper():
     from benchlab.tui.tui_core import _decode_faults
 
-    assert _decode_faults(None) == []
-    assert _decode_faults(0) == []
-    assert _decode_faults(1 << 9) == ["OCP_CPU1"]
-    decoded = _decode_faults((1 << 0) | (1 << 33))
+    assert _decode_faults(None, "BL2") == []
+    assert _decode_faults(0, "BL2") == []
+    assert _decode_faults(1 << 9, "BL2") == ["OCP_CPU1"]
+    decoded = _decode_faults((1 << 0) | (1 << 33), "BL2")
     assert set(decoded) == {"OTP_TCHIP", "CURRENT_IMBALANCE_HPWR2"}
+
+    decoded_original = _decode_faults((1 << 0) | (1 << 10), "ORIGINAL")
+    assert set(decoded_original) == {"OTP_TCHIP", "OCP_ATX12V"}
 
 
 def test_help_modal_renders_without_stomping_main_refresh():

@@ -13,12 +13,21 @@ from typing import Dict, Any, List, Optional
 
 from .config import Config
 from benchlab.core.statistics import ChannelStats, StatsFormatter
-from benchlab_pycore.core import Fault
+from benchlab_pycore.core import Fault, FaultBL2
 
 logger = logging.getLogger("benchlab.tui.tui_core")
 
 
-def _decode_faults(bitmask: Optional[float]) -> List[str]:
+def _fault_enum(variant: str):
+    """Return the Fault enum for the given device variant.
+
+    BL2 has its own 34-member enum (FaultBL2); ORIGINAL (fw07+) uses the
+    16-member Fault enum.
+    """
+    return FaultBL2 if variant == 'BL2' else Fault
+
+
+def _decode_faults(bitmask: Optional[float], variant: str) -> List[str]:
     """Decode a FaultStatus/FaultLog bitmask into a list of Fault names.
 
     Returns an empty list for None/0/falsy bitmasks (no faults set).
@@ -26,7 +35,7 @@ def _decode_faults(bitmask: Optional[float]) -> List[str]:
     if not bitmask:
         return []
     bitmask = int(bitmask)
-    return [f.name for f in Fault if bitmask & (1 << f.value)]
+    return [f.name for f in _fault_enum(variant) if bitmask & (1 << f.value)]
 
 
 class TUICore:
@@ -602,6 +611,10 @@ class TUICore:
             product_id = device_info.get('ProductId', 0)
             product_str = _hex_str(product_id)
             fw_str = _hex_str(device_info.get('FwVersion', 0))
+            patch = device_info.get('PatchVersion')
+            patch_str = (
+                "N/A" if patch is None or int(patch) == 0xFF
+                else str(int(patch)))
 
             variant = device_info.get('variant')
             if variant is None:
@@ -616,14 +629,15 @@ class TUICore:
             self.stdscr.addstr(12, 4, f"{'Product ID':<22} {product_str}")
             self.stdscr.addstr(13, 4, f"{'Device UID':<22} {uid or 'N/A'}")
             self.stdscr.addstr(14, 4, f"{'Firmware Version':<22} {fw_str}")
+            self.stdscr.addstr(15, 4, f"{'Firmware Patch':<22} {patch_str}")
 
-            # Quick-glance active-fault warning (BL2 fw05+ only; nothing is
-            # drawn for ORIGINAL devices or pre-fw05 BL2, where FaultStatus
-            # is simply absent from sensor_data). Full per-fault detail,
-            # including latched history, lives on the Faults tab.
+            # Quick-glance active-fault warning (BL2 fw05+ / ORIGINAL fw07+
+            # only; nothing is drawn where FaultStatus is simply absent from
+            # sensor_data). Full per-fault detail, including latched
+            # history, lives on the Faults tab.
             sd = snapshot.get('sensor_data') or {}
-            if variant == 'BL2' and sd.get('FaultStatus') is not None:
-                active_faults = _decode_faults(sd.get('FaultStatus'))
+            if sd.get('FaultStatus') is not None:
+                active_faults = _decode_faults(sd.get('FaultStatus'), variant)
                 if active_faults:
                     names = ", ".join(active_faults)
                     msg = f"Active Faults: {names}"
@@ -632,7 +646,7 @@ class TUICore:
                         msg = (f"{len(active_faults)} active "
                                f"fault(s) — see Faults tab")
                     self.stdscr.addstr(
-                        16, 4, msg,
+                        17, 4, msg,
                         curses.color_pair(Config.COLOR_PAIRS['error']))
 
             self._draw_section(18, 2, "TUI")
@@ -1249,13 +1263,9 @@ class TUICore:
                 pass
 
     def _render_faults_tab(self, snapshot: Dict[str, Any]):
-        """Render Faults tab — all 34 BL2 Fault enum members, live/latched."""
-        self._draw_section(4, 2, "Fault Monitoring (BL2)")
-
-        if not snapshot.get('connected'):
-            self._draw_disconnected("Fault")
-            return
-
+        """Render Faults tab — all Fault enum members for the connected
+        device's variant (34 for BL2, 16 for ORIGINAL fw07+), live/latched.
+        """
         sd = snapshot.get('sensor_data') or {}
         device_info = snapshot.get('device_info') or {}
         product_id = device_info.get('ProductId')
@@ -1263,12 +1273,18 @@ class TUICore:
         if variant is None:
             variant = 'BL2' if product_id == 0x11 else 'ORIGINAL'
 
-        if variant != 'BL2' or sd.get('FaultStatus') is None:
+        self._draw_section(4, 2, f"Fault Monitoring ({variant})")
+
+        if not snapshot.get('connected'):
+            self._draw_disconnected("Fault")
+            return
+
+        if sd.get('FaultStatus') is None:
             try:
                 self.stdscr.addstr(
                     6, 4,
                     "Fault data unavailable for this device "
-                    "(BL2 firmware 05+ required).",
+                    "(BL2 firmware 05+ or ORIGINAL firmware 07+ required).",
                     curses.color_pair(Config.COLOR_PAIRS['default']))
             except curses.error:
                 pass
@@ -1292,7 +1308,7 @@ class TUICore:
         except curses.error:
             pass
 
-        faults = list(Fault)
+        faults = list(_fault_enum(variant))
         for i, fault in enumerate(faults):
             col_idx = i // rows_per_col
             row = 6 + (i % rows_per_col)

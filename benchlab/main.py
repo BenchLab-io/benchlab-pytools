@@ -17,6 +17,9 @@ import logging
 import os
 import sys
 import traceback
+from importlib.metadata import PackageNotFoundError, version
+
+from packaging.version import Version
 
 from .tools import CONSUMER_TOOLS, LAUNCH_PROFILES  # noqa: F401
 # CONSUMER_TOOLS re-exported for benchlab.main.CONSUMER_TOOLS consumers
@@ -24,6 +27,34 @@ from .sources import check_and_setup_source, cleanup_all_services
 from .launcher import launch_tools_concurrent
 
 logger = logging.getLogger("benchlab.launcher")
+
+# Keep in sync with the "benchlab-pycore>=X.Y.Z" pin in pyproject.toml --
+# this is pytools' own belt-and-suspenders check so a stale pycore install
+# (e.g. an env pip never upgraded) fails with a clear message instead of an
+# ImportError traceback deep in a tool module.
+MIN_PYCORE_VERSION = "0.9.1"
+
+
+def _check_pycore_version() -> None:
+    try:
+        installed = version("benchlab-pycore")
+    except PackageNotFoundError:
+        print(
+            "ERROR: benchlab-pycore is not installed.\n"
+            "Install it with: pip install "
+            f"\"benchlab-pycore>={MIN_PYCORE_VERSION}\"",
+            file=sys.stderr)
+        sys.exit(1)
+
+    if Version(installed) < Version(MIN_PYCORE_VERSION):
+        print(
+            f"ERROR: benchlab-pycore {installed} is installed, but "
+            f"pytools requires >={MIN_PYCORE_VERSION}.\n"
+            "Upgrade it with: pip install "
+            f"\"benchlab-pycore>={MIN_PYCORE_VERSION}\"",
+            file=sys.stderr)
+        sys.exit(1)
+
 
 try:
     from .menu import interactive_loop
@@ -511,6 +542,8 @@ def launch_mode() -> None:
 
 def main() -> None:
     """Entry point."""
+    if not ({"-h", "--help", "--version"} & set(sys.argv[1:])):
+        _check_pycore_version()
     launch_mode()
 
 

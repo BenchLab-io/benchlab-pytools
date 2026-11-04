@@ -325,7 +325,8 @@ class Layout:
     }
 
     # Faults tab column positions — two-column grid (17 rows each) so all
-    # 34 Fault enum members fit on one screen under MIN_TERMINAL_ROWS/COLS.
+    # 34 BL2 Fault enum members (or 16 for ORIGINAL fw07+) fit on one
+    # screen under MIN_TERMINAL_ROWS/COLS.
     FAULT_COLS = {
         'NAME': 2,              # Fault name column (left grid column)
         'ACTIVE': 26,           # Active status column (left grid column)

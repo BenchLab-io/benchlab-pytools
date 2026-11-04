@@ -351,6 +351,7 @@ def device_thread(device, cfg, publish_interval=1):
                 vendor_id = 0
                 product_id = BENCHLAB_ORIGINAL_PRODUCT_ID
                 fw_version = device.get("firmware")
+                patch_version = 0xFF
                 try:
                     dev_info = read_device(ser)
                     if dev_info:
@@ -358,6 +359,7 @@ def device_thread(device, cfg, publish_interval=1):
                         product_id = dev_info.get(
                             'ProductId', BENCHLAB_ORIGINAL_PRODUCT_ID)
                         fw_version = dev_info.get('FwVersion', fw_version)
+                        patch_version = dev_info.get('PatchVersion', 0xFF)
                 except Exception:
                     pass
                 variant = (
@@ -373,6 +375,7 @@ def device_thread(device, cfg, publish_interval=1):
                     "VendorId": vendor_id,
                     "ProductId": product_id,
                     "FwVersion": fw_version,
+                    "PatchVersion": patch_version,
                     "variant": variant,
                 }
                 topic_info = f"{cfg['topic_prefix']}/{uid}/info"
