@@ -4,6 +4,15 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- `-flash`: when Windows has no WinUSB driver bound to the device's DFU
+  bootloader interface, the tool now prints clear Zadig setup steps
+  instead of a raw `NotImplementedError` traceback. This is a one-time
+  per-machine/USB-port driver binding gap, not a code bug or a failed
+  flash -- the device's original firmware is untouched when it happens.
+
 ## [3.5.1] - 2026-11-08
 
 ### Fixed

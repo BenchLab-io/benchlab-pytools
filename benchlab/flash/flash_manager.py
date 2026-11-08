@@ -26,6 +26,39 @@ from benchlab.flash import dfu, image
 
 logger = logging.getLogger("benchlab.flash.manager")
 
+# libusb1's LIBUSB_ERROR_NOT_SUPPORTED surfaces as this bare message via
+# pyusb on Windows when no WinUSB-compatible driver is bound to the DFU
+# device yet -- this is NOT the brief re-enumeration race DfuDevice already
+# retries through (see its docstring); it is a persistent, one-time,
+# per-machine/per-USB-port driver binding gap, fixed with Zadig. Matched by
+# exact string since pyusb/libusb1 raise a bare NotImplementedError here
+# with no error code to key off instead.
+_NO_WINUSB_DRIVER_MESSAGE = (
+    "Operation not supported or unimplemented on this platform")
+
+_WINUSB_DRIVER_HELP = (
+    "Windows has no WinUSB driver bound to this device's DFU bootloader "
+    "interface (VID 0483 PID DF11), so it can't be opened for flashing. "
+    "This is a one-time setup per machine/USB port:\n"
+    "  1. Open Zadig (https://zadig.akeo.ie/) as Administrator.\n"
+    "  2. Find the device listed as 'STM32  BOOTLOADER' (enable "
+    "'List All Devices' if it's not shown).\n"
+    "  3. Confirm its USB ID reads 0483 DF11, then select the WinUSB "
+    "driver and click 'Install Driver' / 'Replace Driver'.\n"
+    "  4. Re-run this flash command.\n"
+    "See benchlab/flash/README.md for details."
+)
+
+
+def _friendly_flash_error(e: Exception) -> str:
+    """Turn a known, actionable flashing exception into guidance; fall
+    back to the raw exception message for anything else."""
+    if isinstance(e, NotImplementedError) and str(e) == (
+            _NO_WINUSB_DRIVER_MESSAGE):
+        return _WINUSB_DRIVER_HELP
+    return str(e)
+
+
 # CMD_BOOTLOADER has no working handler on BL1 firmware below this version
 # (confirmed via firmware git history, commit c722244 "BENCHLAB 2
 # bring-up..." -- versions 0x02/0x03 predate it entirely and silently
@@ -438,9 +471,15 @@ class FlashManager:
             return FlashResult(
                 port=identifier, uid=uid, ok=ok, message=message)
         except Exception as e:
-            logger.exception("Flashing %s failed", identifier)
+            message = _friendly_flash_error(e)
+            if message == _WINUSB_DRIVER_HELP:
+                logger.error("Flashing %s failed: no WinUSB driver bound "
+                             "to the DFU device", identifier)
+                logger.debug("Full traceback:", exc_info=True)
+            else:
+                logger.exception("Flashing %s failed", identifier)
             return FlashResult(
-                port=identifier, uid=uid, ok=False, message=str(e))
+                port=identifier, uid=uid, ok=False, message=message)
 
     def flash_bare_dfu(
             self, product_id: int, data: bytes, verify_only: bool = False,
@@ -470,9 +509,15 @@ class FlashManager:
             return FlashResult(
                 port="<bare DFU>", uid=None, ok=ok, message=message)
         except Exception as e:
-            logger.exception("Flashing bare DFU device failed")
+            message = _friendly_flash_error(e)
+            if message == _WINUSB_DRIVER_HELP:
+                logger.error("Flashing bare DFU device failed: no WinUSB "
+                             "driver bound to the DFU device")
+                logger.debug("Full traceback:", exc_info=True)
+            else:
+                logger.exception("Flashing bare DFU device failed")
             return FlashResult(
-                port="<bare DFU>", uid=None, ok=False, message=str(e))
+                port="<bare DFU>", uid=None, ok=False, message=message)
 
     def flash_many(
             self, identifiers: List[str], image_path: Path,

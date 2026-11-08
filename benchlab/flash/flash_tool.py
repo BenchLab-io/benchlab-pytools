@@ -243,7 +243,8 @@ def cmd_flash(args):
         status = "OK" if result.ok else "FAILED"
         if not result.ok:
             any_failed = True
-        print(f"  {result.port}  [{status}]  {result.message}")
+        message = result.message.replace("\n", "\n      ")
+        print(f"  {result.port}  [{status}]  {message}")
 
     return 1 if any_failed else 0
 
@@ -327,7 +328,8 @@ def cmd_flash_bare_dfu(args):
     print()
     print()
     status = "OK" if result.ok else "FAILED"
-    print(f"[{status}]  {result.message}")
+    message = result.message.replace("\n", "\n  ")
+    print(f"[{status}]  {message}")
 
     if result.ok and not args.verify_only:
         print()
@@ -473,7 +475,8 @@ def interactive_mode(args):
         status = "OK" if result.ok else "FAILED"
         if not result.ok:
             any_failed = True
-        print(f"  {result.port}  [{status}]  {result.message}")
+        message = result.message.replace("\n", "\n      ")
+        print(f"  {result.port}  [{status}]  {message}")
         if result.ok and "unplug and replug" in result.message:
             needs_reconnect_check.append(result.port)
 
