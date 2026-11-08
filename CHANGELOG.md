@@ -4,6 +4,22 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
+## [3.5.1] - 2026-11-08
+
+### Fixed
+- TUI: Firmware Patch showed "N/A" when connected via the `named_pipe` or
+  `service_http` data sources (the C# BenchLab Windows service), even
+  though it displayed correctly via `pycore`/direct USB. `PatchVersion`
+  is now mapped from the service's responses on both paths. (#103)
+
+### Added
+- TUI: a new "Source Version" row on the Device tab shows which version
+  of the connected backend is in use — the installed `benchlab_pycore`
+  version for `direct`, or the C# service's reported version for
+  `service_http`/`service_ws`. Not yet available for `named_pipe`,
+  since the service's discovery pipe doesn't report a version
+  (tracked upstream in BENCHLAB_Service#122). (#103)
+
 ## [3.5.0] - 2026-11-04
 
 ### Added
