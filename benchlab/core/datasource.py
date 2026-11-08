@@ -99,6 +99,14 @@ class DataSource(ABC):
         'mqtt')."""
         pass
 
+    @property
+    def source_version(self) -> Optional[str]:
+        """Return the version of the backend this source talks to, if
+        known (e.g. the installed ``benchlab_pycore`` version, or the C#
+        BenchLab service's reported version). ``None`` when unavailable.
+        """
+        return None
+
 
 class DirectDataSource(DataSource):
     """Data source that connects directly to serial port via pycore.
@@ -297,6 +305,14 @@ class DirectDataSource(DataSource):
     @property
     def source_type(self) -> str:
         return "direct"
+
+    @property
+    def source_version(self) -> Optional[str]:
+        try:
+            import benchlab_pycore
+            return getattr(benchlab_pycore, "__version__", None)
+        except ImportError:
+            return None
 
     def _worker_loop(self):
         while not self._stop_event.is_set():
@@ -804,9 +820,11 @@ def _normalise_cs_device_info(d: Dict[str, Any]) -> Dict[str, Any]:
     product_id = d.get("ProductId", d.get("productId", 0))
     vendor_id = d.get("VendorId", d.get("vendorId", 0))
     fw_version = d.get("FwVersion", d.get("firmwareVersion", 0))
+    patch_version = d.get("PatchVersion", d.get("patchVersion", -1))
     result["ProductId"] = product_id
     result["VendorId"] = vendor_id
     result["FwVersion"] = fw_version
+    result["PatchVersion"] = patch_version if patch_version >= 0 else 0xFF
     result.setdefault("firmware", d.get("firmware", fw_version))
     # 0x11 = BENCHLAB_BL2_PRODUCT_ID (see DirectDataSource/tui_core.py).
     result.setdefault(
@@ -902,6 +920,9 @@ class NamedPipeDataSource(DataSource):
                     "VendorId": vendor_id,
                     "ProductId": product_id,
                     "FwVersion": fw_version,
+                    "PatchVersion": (
+                        d.get("patchVersion", 0xFF)
+                        if d.get("patchVersion", -1) >= 0 else 0xFF),
                 }
                 self._pipe_names[uid] = d.get("pipeName", "")
 
@@ -1093,6 +1114,7 @@ class ServiceHttpDataSource(DataSource):
         self._lock = threading.Lock()
         self._devices: Dict[str, Dict[str, Any]] = {}
         self._telemetry: Dict[str, Dict[str, Any]] = {}
+        self._service_version: Optional[str] = None
         self._worker_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
 
@@ -1129,6 +1151,15 @@ class ServiceHttpDataSource(DataSource):
                 f"BenchLab service health check failed "
                 f"(HTTP {resp.status_code}) at {self.base_url}/health")
             return False
+
+        # /health doesn't carry a version — fetch it from /status instead.
+        try:
+            status_resp = self._session.get(
+                f"{self.base_url}/status", timeout=self.timeout)
+            if status_resp.status_code == 200:
+                self._service_version = status_resp.json().get("version")
+        except Exception as e:
+            logger.debug(f"Failed to fetch service version: {e}")
 
         # Fetch initial device list
         devices = self._fetch_devices()
@@ -1198,6 +1229,10 @@ class ServiceHttpDataSource(DataSource):
     @property
     def source_type(self) -> str:
         return "service_http"
+
+    @property
+    def source_version(self) -> Optional[str]:
+        return self._service_version
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -1402,6 +1437,10 @@ class ServiceWsDataSource(DataSource):
     @property
     def source_type(self) -> str:
         return "service_ws"
+
+    @property
+    def source_version(self) -> Optional[str]:
+        return self._service_version
 
     # ------------------------------------------------------------------
     # Internal — background event loop

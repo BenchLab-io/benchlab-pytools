@@ -226,10 +226,18 @@ class DataSourceManager:
             selected_telemetry = self._telemetry.get(
                 self._selected_uid) if self._selected_uid else None
 
+            source_version = None
+            if self._datasource is not None:
+                try:
+                    source_version = self._datasource.source_version
+                except Exception as e:
+                    logger.debug(f"Failed to get source version: {e}")
+
             return {
                 'connected': self._connected,
                 'source_type': self.source_type,
                 'source_desc': self._get_source_description(),
+                'source_version': source_version,
                 'port': selected_device.get(
                     'port',
                     'unknown') if selected_device else None,
