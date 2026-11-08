@@ -804,9 +804,11 @@ def _normalise_cs_device_info(d: Dict[str, Any]) -> Dict[str, Any]:
     product_id = d.get("ProductId", d.get("productId", 0))
     vendor_id = d.get("VendorId", d.get("vendorId", 0))
     fw_version = d.get("FwVersion", d.get("firmwareVersion", 0))
+    patch_version = d.get("PatchVersion", d.get("patchVersion", -1))
     result["ProductId"] = product_id
     result["VendorId"] = vendor_id
     result["FwVersion"] = fw_version
+    result["PatchVersion"] = patch_version if patch_version >= 0 else 0xFF
     result.setdefault("firmware", d.get("firmware", fw_version))
     # 0x11 = BENCHLAB_BL2_PRODUCT_ID (see DirectDataSource/tui_core.py).
     result.setdefault(
@@ -902,6 +904,9 @@ class NamedPipeDataSource(DataSource):
                     "VendorId": vendor_id,
                     "ProductId": product_id,
                     "FwVersion": fw_version,
+                    "PatchVersion": (
+                        d.get("patchVersion", 0xFF)
+                        if d.get("patchVersion", -1) >= 0 else 0xFF),
                 }
                 self._pipe_names[uid] = d.get("pipeName", "")
 
