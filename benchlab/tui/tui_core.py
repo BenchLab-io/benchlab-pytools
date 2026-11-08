@@ -595,7 +595,8 @@ class TUICore:
             self.stdscr.addstr(5, 4, f"{'Data Source':<22} {source_type}")
             self.stdscr.addstr(6, 4, f"{'Connection':<22} {source_desc}")
             self.stdscr.addstr(7, 4, f"{'Device Port':<22} {port_str}")
-            self.stdscr.addstr(8, 4, f"{'Source Version':<22} {source_version}")
+            self.stdscr.addstr(
+                8, 4, f"{'Source Version':<22} {source_version}")
 
             if not snapshot.get('connected'):
                 self.stdscr.addstr(
