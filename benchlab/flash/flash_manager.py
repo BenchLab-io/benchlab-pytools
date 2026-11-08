@@ -59,6 +59,16 @@ def _friendly_flash_error(e: Exception) -> str:
     return str(e)
 
 
+def _is_known_driver_issue(e: Exception) -> bool:
+    """True for exceptions `_friendly_flash_error` already turns into
+    actionable guidance, plus wait_for_dfu_device's own TimeoutError --
+    its message is already a clear Zadig pointer (no driver bound at all,
+    so the device never enumerates), not a crash. Both cases should log a
+    one-liner instead of a full traceback."""
+    return isinstance(e, TimeoutError) or _friendly_flash_error(e) == (
+        _WINUSB_DRIVER_HELP)
+
+
 # CMD_BOOTLOADER has no working handler on BL1 firmware below this version
 # (confirmed via firmware git history, commit c722244 "BENCHLAB 2
 # bring-up..." -- versions 0x02/0x03 predate it entirely and silently
@@ -472,9 +482,8 @@ class FlashManager:
                 port=identifier, uid=uid, ok=ok, message=message)
         except Exception as e:
             message = _friendly_flash_error(e)
-            if message == _WINUSB_DRIVER_HELP:
-                logger.error("Flashing %s failed: no WinUSB driver bound "
-                             "to the DFU device", identifier)
+            if _is_known_driver_issue(e):
+                logger.error("Flashing %s failed: %s", identifier, message)
                 logger.debug("Full traceback:", exc_info=True)
             else:
                 logger.exception("Flashing %s failed", identifier)
@@ -510,9 +519,8 @@ class FlashManager:
                 port="<bare DFU>", uid=None, ok=ok, message=message)
         except Exception as e:
             message = _friendly_flash_error(e)
-            if message == _WINUSB_DRIVER_HELP:
-                logger.error("Flashing bare DFU device failed: no WinUSB "
-                             "driver bound to the DFU device")
+            if _is_known_driver_issue(e):
+                logger.error("Flashing bare DFU device failed: %s", message)
                 logger.debug("Full traceback:", exc_info=True)
             else:
                 logger.exception("Flashing bare DFU device failed")
