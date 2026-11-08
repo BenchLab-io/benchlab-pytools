@@ -589,14 +589,17 @@ class TUICore:
         port_str = snapshot.get('port', 'Unknown')
 
         try:
+            source_version = snapshot.get('source_version') or 'N/A'
+
             self._draw_section(4, 2, "Connection")
             self.stdscr.addstr(5, 4, f"{'Data Source':<22} {source_type}")
             self.stdscr.addstr(6, 4, f"{'Connection':<22} {source_desc}")
             self.stdscr.addstr(7, 4, f"{'Device Port':<22} {port_str}")
+            self.stdscr.addstr(8, 4, f"{'Source Version':<22} {source_version}")
 
             if not snapshot.get('connected'):
                 self.stdscr.addstr(
-                    10, 4, "Not connected to device.", curses.color_pair(
+                    11, 4, "Not connected to device.", curses.color_pair(
                         Config.COLOR_PAIRS['error']))
                 return
 
@@ -623,13 +626,13 @@ class TUICore:
                 "BENCHLAB 2 (BL2)" if variant == 'BL2'
                 else "BENCHLAB 1 (Original)")
 
-            self._draw_section(9, 2, "Device")
-            self.stdscr.addstr(10, 4, f"{'Model':<22} {model_str}")
-            self.stdscr.addstr(11, 4, f"{'Vendor ID':<22} {vendor_str}")
-            self.stdscr.addstr(12, 4, f"{'Product ID':<22} {product_str}")
-            self.stdscr.addstr(13, 4, f"{'Device UID':<22} {uid or 'N/A'}")
-            self.stdscr.addstr(14, 4, f"{'Firmware Version':<22} {fw_str}")
-            self.stdscr.addstr(15, 4, f"{'Firmware Patch':<22} {patch_str}")
+            self._draw_section(10, 2, "Device")
+            self.stdscr.addstr(11, 4, f"{'Model':<22} {model_str}")
+            self.stdscr.addstr(12, 4, f"{'Vendor ID':<22} {vendor_str}")
+            self.stdscr.addstr(13, 4, f"{'Product ID':<22} {product_str}")
+            self.stdscr.addstr(14, 4, f"{'Device UID':<22} {uid or 'N/A'}")
+            self.stdscr.addstr(15, 4, f"{'Firmware Version':<22} {fw_str}")
+            self.stdscr.addstr(16, 4, f"{'Firmware Patch':<22} {patch_str}")
 
             # Quick-glance active-fault warning (BL2 fw05+ / ORIGINAL fw07+
             # only; nothing is drawn where FaultStatus is simply absent from
@@ -646,12 +649,12 @@ class TUICore:
                         msg = (f"{len(active_faults)} active "
                                f"fault(s) — see Faults tab")
                     self.stdscr.addstr(
-                        17, 4, msg,
+                        18, 4, msg,
                         curses.color_pair(Config.COLOR_PAIRS['error']))
 
-            self._draw_section(18, 2, "TUI")
+            self._draw_section(19, 2, "TUI")
             self.stdscr.addstr(
-                19, 4, f"{'Refresh Interval':<22} {refresh_interval} s")
+                20, 4, f"{'Refresh Interval':<22} {refresh_interval} s")
 
         except curses.error:
             pass
