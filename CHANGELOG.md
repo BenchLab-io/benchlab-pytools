@@ -4,7 +4,7 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [3.5.2] - 2026-11-08
 
 ### Fixed
 - `-flash`: when Windows has no WinUSB driver bound to the device's DFU
@@ -12,6 +12,12 @@ All notable changes to BENCHLAB PyTools are documented here. Format follows
   instead of a raw `NotImplementedError` traceback. This is a one-time
   per-machine/USB-port driver binding gap, not a code bug or a failed
   flash -- the device's original firmware is untouched when it happens.
+  (#105)
+- `-flash`: the same clean, actionable message now also applies when
+  Windows has no driver bound to the DFU device at all (not just the
+  wrong kind) -- previously this case still printed a full traceback
+  despite its `TimeoutError` message already being an actionable Zadig
+  pointer. (#107)
 
 ## [3.5.1] - 2026-11-08
 
