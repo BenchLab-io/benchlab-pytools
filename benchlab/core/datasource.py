@@ -871,6 +871,7 @@ class NamedPipeDataSource(DataSource):
         self._telemetry: Dict[str, Dict[str, Any]] = {}
         self._worker_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
+        self._service_version: Optional[str] = None
 
     def connect(self) -> bool:
         """Connect by querying the discovery pipe for available devices."""
@@ -926,6 +927,13 @@ class NamedPipeDataSource(DataSource):
                 }
                 self._pipe_names[uid] = d.get("pipeName", "")
 
+        try:
+            info = self._query_discovery_pipe("GetServiceInfo")
+            if isinstance(info, dict):
+                self._service_version = info.get("serviceVersion")
+        except Exception as e:
+            logger.debug(f"Failed to query GetServiceInfo: {e}")
+
         self._connected = True
         self._stop_event.clear()
         self._worker_thread = threading.Thread(
@@ -965,6 +973,10 @@ class NamedPipeDataSource(DataSource):
     @property
     def source_type(self) -> str:
         return "named_pipe"
+
+    @property
+    def source_version(self) -> Optional[str]:
+        return self._service_version
 
     # ------------------------------------------------------------------
     # Internal helpers

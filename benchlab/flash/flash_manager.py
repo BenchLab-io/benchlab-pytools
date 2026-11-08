@@ -134,9 +134,10 @@ class FlashManager:
         port nor a named pipe).
 
         Always returns the same shape regardless of source --
-        {VendorId, ProductId, FwVersion, uid} -- normalizing named_pipe/
-        service_http's camelCase ConfigClient fields to match direct
-        mode's, so every other FlashManager method stays source-agnostic.
+        {VendorId, ProductId, FwVersion, PatchVersion, uid} -- normalizing
+        named_pipe/service_http's camelCase ConfigClient fields to match
+        direct mode's, so every other FlashManager method stays
+        source-agnostic.
         """
         if self.source == "direct":
             return self._identify_direct(identifier)
@@ -183,6 +184,7 @@ class FlashManager:
             "VendorId": info.get("vendorId"),
             "ProductId": product_id,
             "FwVersion": info.get("firmwareVersion"),
+            "PatchVersion": info.get("patchVersion"),
             "uid": info.get("guid") or info.get("uid"),
             "port": info.get("port"),
         }

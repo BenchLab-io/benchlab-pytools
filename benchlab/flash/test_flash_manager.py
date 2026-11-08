@@ -497,12 +497,13 @@ def test_flash_bare_dfu_catches_exceptions(manager, monkeypatch):
 # -- named_pipe / service_http sources: the C# service owns the port -------
 
 def _fake_client_info(product_id=BENCHLAB_ORIGINAL_PRODUCT_ID, fw=6,
-                      guid="U1", port="COM9", vendor_id=0xEE):
+                      guid="U1", port="COM9", vendor_id=0xEE, patch=3):
     """Shape returned by ConfigClient.get_device_info() for named_pipe/
     service_http -- camelCase keys, unlike DirectConfigClient's PascalCase."""
     return {
         "vendorId": vendor_id, "productId": product_id,
-        "firmwareVersion": fw, "guid": guid, "port": port,
+        "firmwareVersion": fw, "patchVersion": patch, "guid": guid,
+        "port": port,
     }
 
 
@@ -529,7 +530,7 @@ def test_identify_device_normalizes_named_pipe_shape(
 
     assert info == {
         "VendorId": 0xEE, "ProductId": BENCHLAB_ORIGINAL_PRODUCT_ID,
-        "FwVersion": 6, "uid": "U1", "port": "COM9",
+        "FwVersion": 6, "PatchVersion": 3, "uid": "U1", "port": "COM9",
     }
     fake_client.close.assert_called_once()
 

@@ -64,6 +64,16 @@ def _device_fw(device: dict) -> str:
     return f"0x{fw:02X}" if isinstance(fw, int) else str(fw)
 
 
+def _device_patch(info: dict) -> str:
+    """Patch version display string for an identify_device()/discover_
+    devices() result -- 'N/A' when the field is missing or the firmware
+    predates PatchVersion support (None/0xFF)."""
+    patch = info.get("PatchVersion")
+    if patch is None or patch == 0xFF:
+        return "N/A"
+    return str(patch)
+
+
 def _device_product_id(device: dict) -> Optional[int]:
     """The device's BENCHLAB product_id -- direct's discover_devices()
     only reports a 'variant' string ('ORIGINAL'/'BL2'), while named_pipe/
@@ -212,6 +222,7 @@ def cmd_flash(args):
           f"{len(targets)} device(s):")
     for port, info in targets:
         print(f"  {port}  FW: 0x{info.get('FwVersion', 0):02X}  "
+              f"Patch: {_device_patch(info)}  "
               f"UID: {info.get('uid', 'N/A')}")
     print()
 
@@ -492,7 +503,8 @@ def interactive_mode(args):
             info = manager.identify_device(port)
             if info is not None:
                 fw = info.get('FwVersion', 0)
-                print(f"  {port} is back (FW: 0x{fw:02X})")
+                print(f"  {port} is back "
+                      f"(FW: 0x{fw:02X}, Patch: {_device_patch(info)})")
                 break
             print(f"  {port} not detected yet -- check the cable and try "
                   "again.")
