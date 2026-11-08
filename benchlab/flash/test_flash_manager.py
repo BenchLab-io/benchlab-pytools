@@ -13,6 +13,8 @@ from benchlab.flash.flash_manager import (
     FlashManager,
     FlashResult,
     UnsupportedFirmwareError,
+    _NO_WINUSB_DRIVER_MESSAGE,
+    _WINUSB_DRIVER_HELP,
 )
 
 
@@ -52,6 +54,93 @@ def test_verify_image_aborts_before_uploading(manager, monkeypatch):
 @pytest.fixture
 def manager():
     return FlashManager()
+
+
+# -- missing WinUSB driver on the DFU bootloader interface (Windows) -----
+
+def test_flash_bare_dfu_reports_zadig_help_when_no_winusb_driver(
+        manager, monkeypatch):
+    """Simulates the exact failure a user hits when Zadig hasn't bound
+    WinUSB to the DFU bootloader interface yet: libusb1/pyusb raise a
+    bare NotImplementedError with this specific message on Windows. The
+    flash tool should recognize it and print Zadig setup steps instead of
+    a raw traceback."""
+    monkeypatch.setattr(
+        manager, "wait_for_dfu_device", lambda **kwargs: [MagicMock()])
+    monkeypatch.setattr(
+        fm_module.dfu, "DfuDevice",
+        lambda usb_dev: (_ for _ in ()).throw(
+            NotImplementedError(_NO_WINUSB_DRIVER_MESSAGE)))
+
+    result = manager.flash_bare_dfu(
+        BENCHLAB_ORIGINAL_PRODUCT_ID, b"\x01\x02\x03\x04")
+
+    assert not result.ok
+    assert result.message == _WINUSB_DRIVER_HELP
+
+
+def test_flash_one_reports_zadig_help_when_no_winusb_driver(
+        manager, monkeypatch):
+    monkeypatch.setattr(fm_module, "open_serial_connection",
+                        lambda port: MagicMock())
+    monkeypatch.setattr(fm_module, "read_device",
+                        lambda ser: _device_info())
+    monkeypatch.setattr(manager, "enter_dfu_mode", lambda *a, **k: None)
+    monkeypatch.setattr(
+        manager, "wait_for_dfu_device", lambda **kwargs: [MagicMock()])
+    monkeypatch.setattr(
+        fm_module.dfu, "DfuDevice",
+        lambda usb_dev: (_ for _ in ()).throw(
+            NotImplementedError(_NO_WINUSB_DRIVER_MESSAGE)))
+
+    result = manager.flash_one(
+        "COM5", b"\x01\x02\x03\x04", BENCHLAB_ORIGINAL_PRODUCT_ID)
+
+    assert not result.ok
+    assert result.message == _WINUSB_DRIVER_HELP
+
+
+def test_unrelated_not_implemented_error_is_not_mistaken_for_driver_gap(
+        manager, monkeypatch):
+    """Only the exact libusb1 message should trigger Zadig guidance --
+    anything else should fall through to the raw exception message."""
+    monkeypatch.setattr(
+        manager, "wait_for_dfu_device", lambda **kwargs: [MagicMock()])
+    monkeypatch.setattr(
+        fm_module.dfu, "DfuDevice",
+        lambda usb_dev: (_ for _ in ()).throw(
+            NotImplementedError("some other unrelated failure")))
+
+    result = manager.flash_bare_dfu(
+        BENCHLAB_ORIGINAL_PRODUCT_ID, b"\x01\x02\x03\x04")
+
+    assert not result.ok
+    assert result.message == "some other unrelated failure"
+
+
+def test_flash_bare_dfu_timeout_logs_one_liner_not_traceback(
+        manager, monkeypatch, caplog):
+    """wait_for_dfu_device's TimeoutError already carries a clear Zadig
+    pointer (the device never enumerated at all -- no driver bound,
+    confirmed on real hardware via Device Manager showing
+    ConfigManagerErrorCode 28). It should log as a one-liner, not get
+    wrapped in a full traceback dump that reads as a crash."""
+    def _timeout(**kwargs):
+        raise TimeoutError(
+            "Timed out waiting for 1 DFU device(s) to appear. On "
+            "Windows, check Device Manager: the DFU device may need a "
+            "WinUSB driver bound via Zadig before pyusb can see it.")
+    monkeypatch.setattr(manager, "wait_for_dfu_device", _timeout)
+
+    with caplog.at_level("DEBUG"):
+        result = manager.flash_bare_dfu(
+            BENCHLAB_ORIGINAL_PRODUCT_ID, b"\x01\x02\x03\x04")
+
+    assert not result.ok
+    assert "Timed out waiting" in result.message
+    error_records = [r for r in caplog.records if r.levelname == "ERROR"]
+    assert len(error_records) == 1
+    assert error_records[0].exc_info is None
 
 
 # -- identify_device / assert_cdc_mode -----------------------------------
